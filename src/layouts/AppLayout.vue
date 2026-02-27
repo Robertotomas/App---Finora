@@ -15,6 +15,7 @@ function logout() {
       <RouterLink to="/" class="logo">Finora</RouterLink>
       <nav class="nav">
         <RouterLink v-if="authStore.isAuthenticated" to="/dashboard">Dashboard</RouterLink>
+        <RouterLink v-if="authStore.isAuthenticated" to="/accounts">Contas</RouterLink>
         <RouterLink v-if="authStore.isAuthenticated" to="/household">Household</RouterLink>
         <template v-if="authStore.isAuthenticated">
           <span class="user">{{ authStore.user?.firstName }}</span>
