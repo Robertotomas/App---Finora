@@ -95,6 +95,9 @@ function logout() {
 }
 .main {
   flex: 1;
+  min-height: 200px;
+  overflow-y: auto;
   background: #f8fafc;
+  padding: 0 1rem;
 }
 </style>
