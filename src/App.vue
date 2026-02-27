@@ -2,10 +2,5 @@
 </script>
 
 <template>
-  <div>
-    <h1>Finora App</h1>
-  </div>
+  <RouterView />
 </template>
-
-<style scoped>
-</style>
