@@ -15,6 +15,7 @@ function logout() {
       <RouterLink to="/" class="logo">Finora</RouterLink>
       <nav class="nav">
         <RouterLink v-if="authStore.isAuthenticated" to="/dashboard">Dashboard</RouterLink>
+        <RouterLink v-if="authStore.isAuthenticated" to="/monthly">Plano Mensal</RouterLink>
         <RouterLink v-if="authStore.isAuthenticated" to="/accounts">Contas</RouterLink>
         <RouterLink v-if="authStore.isAuthenticated" to="/transactions">Transações</RouterLink>
         <RouterLink v-if="authStore.isAuthenticated" to="/household">Household</RouterLink>

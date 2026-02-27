@@ -33,6 +33,12 @@ const router = createRouter({
           meta: { requiresAuth: true },
         },
         {
+          path: 'monthly',
+          name: 'monthly-finance',
+          component: () => import('@/views/MonthlyFinanceView.vue'),
+          meta: { requiresAuth: true },
+        },
+        {
           path: 'household',
           name: 'household-settings',
           component: () => import('@/views/HouseholdSettingsView.vue'),

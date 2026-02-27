@@ -70,7 +70,7 @@ export function useDashboard() {
         trendMonths: 6,
       })
       // Axios wraps response in { data: ... }
-      const res = (response.data ?? response) as Record<string, unknown>
+      const res = (response.data ?? response) as unknown as Record<string, unknown>
 
       // Handle both camelCase and PascalCase from API
       const raw = res
