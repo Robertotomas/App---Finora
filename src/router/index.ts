@@ -32,6 +32,12 @@ const router = createRouter({
           component: () => import('@/views/DashboardView.vue'),
           meta: { requiresAuth: true },
         },
+        {
+          path: 'household',
+          name: 'household-settings',
+          component: () => import('@/views/HouseholdSettingsView.vue'),
+          meta: { requiresAuth: true },
+        },
       ],
     },
   ],
