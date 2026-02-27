@@ -9,6 +9,13 @@ export interface Household {
   name: string
 }
 
+export interface HouseholdMember {
+  id: string
+  firstName: string
+  lastName: string
+  email: string
+}
+
 export interface UpdateHouseholdRequest {
   type: HouseholdType
   name: string
