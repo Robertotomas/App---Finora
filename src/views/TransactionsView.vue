@@ -33,6 +33,16 @@ const filterAccountId = ref<string>('')
 const filterFrom = ref('')
 const filterTo = ref('')
 
+const MONTH_NAMES = ['', 'Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
+const now = new Date()
+const filterMonth = ref<number>(now.getMonth() + 1)
+const filterYear = ref<number>(now.getFullYear())
+
+const yearOptions = computed(() => {
+  const y = now.getFullYear()
+  return [y, y - 1, y - 2, y - 3]
+})
+
 const page = ref(1)
 const pageSize = 20
 
@@ -72,6 +82,11 @@ async function loadMembers() {
 }
 
 onMounted(async () => {
+  const range = getDateRangeFromMonth()
+  if (range) {
+    filterFrom.value = range.from
+    filterTo.value = range.to
+  }
   try {
     await householdStore.fetchHousehold()
     if (householdStore.household) {
@@ -84,11 +99,29 @@ onMounted(async () => {
   }
 })
 
+function getDateRangeFromMonth(): { from: string; to: string } | null {
+  if (filterMonth.value < 1 || filterMonth.value > 12) return null
+  const y = filterYear.value
+  const m = filterMonth.value
+  const firstDay = `${y}-${String(m).padStart(2, '0')}-01`
+  const lastDate = new Date(y, m, 0)
+  const toStr = `${lastDate.getFullYear()}-${String(lastDate.getMonth() + 1).padStart(2, '0')}-${String(lastDate.getDate()).padStart(2, '0')}`
+  return { from: firstDay, to: toStr }
+}
+
 async function fetchWithFilters() {
   const params: { accountId?: string; from?: string; to?: string } = {}
   if (filterAccountId.value) params.accountId = filterAccountId.value
-  if (filterFrom.value) params.from = filterFrom.value
-  if (filterTo.value) params.to = filterTo.value
+
+  const monthRange = getDateRangeFromMonth()
+  if (monthRange) {
+    params.from = monthRange.from
+    params.to = monthRange.to
+  } else if (filterFrom.value || filterTo.value) {
+    if (filterFrom.value) params.from = filterFrom.value
+    if (filterTo.value) params.to = filterTo.value
+  }
+
   try {
     await transactionsStore.fetchTransactions(params)
     page.value = 1
@@ -97,7 +130,18 @@ async function fetchWithFilters() {
   }
 }
 
-watch([filterAccountId, filterFrom, filterTo], () => {
+watch([filterMonth, filterYear], () => {
+  const range = getDateRangeFromMonth()
+  if (range) {
+    filterFrom.value = range.from
+    filterTo.value = range.to
+  } else {
+    filterFrom.value = ''
+    filterTo.value = ''
+  }
+})
+
+watch([filterAccountId, filterFrom, filterTo, filterMonth, filterYear], () => {
   fetchWithFilters()
 })
 
@@ -242,18 +286,29 @@ function getSplitsDisplay(tx: Transaction): string {
               {{ a.name }}
             </option>
           </select>
-          <input
-            v-model="filterFrom"
-            type="date"
-            class="filter-input"
-            placeholder="De"
-          />
-          <input
-            v-model="filterTo"
-            type="date"
-            class="filter-input"
-            placeholder="Até"
-          />
+          <select v-model.number="filterMonth" class="filter-select" title="Mês">
+            <option :value="0">Todos os meses</option>
+            <option v-for="m in 12" :key="m" :value="m">{{ MONTH_NAMES[m] }}</option>
+          </select>
+          <select v-model.number="filterYear" class="filter-select" title="Ano">
+            <option v-for="y in yearOptions" :key="y" :value="y">{{ y }}</option>
+          </select>
+          <template v-if="filterMonth === 0">
+            <input
+              v-model="filterFrom"
+              type="date"
+              class="filter-input"
+              placeholder="De"
+              title="Data inicial"
+            />
+            <input
+              v-model="filterTo"
+              type="date"
+              class="filter-input"
+              placeholder="Até"
+              title="Data final"
+            />
+          </template>
         </div>
         <button type="button" class="btn-add" @click="openCreateModal">
           + Nova transação
