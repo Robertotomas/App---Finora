@@ -1,6 +1,6 @@
 import { ref, computed, shallowRef } from 'vue'
 import { dashboardApi } from '@/api/dashboard'
-import type { Dashboard } from '@/types/dashboard'
+import type { Dashboard, ExpenseByCategory, MonthlyTrend } from '@/types/dashboard'
 
 const CACHE_TTL_MS = 60_000 // 1 minute
 
@@ -51,8 +51,46 @@ export function useDashboard() {
     )
   })
 
-  const hasExpenses = computed(() => expensesByCategory.value.length > 0)
-  const hasTrend = computed(() => monthlyTrend.value.length > 0)
+  /** Chart data: use API data or synthetic fallback when we have income/expenses but API returned empty arrays */
+  const expensesForChart = computed<ExpenseByCategory[]>(() => {
+    const cat = expensesByCategory.value
+    if (cat.length > 0) return cat
+    const exp = monthlyExpenses.value
+    if (exp > 0) {
+      return [{ category: 0, categoryName: 'Despesas', amount: exp, percentage: 100 }]
+    }
+    return []
+  })
+
+  const trendForChart = computed<MonthlyTrend[]>(() => {
+    const trend = monthlyTrend.value
+    if (trend.length > 0) return trend
+    const inc = monthlyIncome.value
+    const exp = monthlyExpenses.value
+    if (inc > 0 || exp > 0) {
+      const d = data.value
+      const monthNames = ['', 'Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
+      const y = d?.year ?? new Date().getFullYear()
+      const m = d?.month ?? new Date().getMonth() + 1
+      return [{
+        year: y,
+        month: m,
+        label: `${monthNames[m]} ${y}`,
+        income: inc,
+        expenses: exp,
+        savings: inc - exp,
+      }]
+    }
+    return []
+  })
+
+  const hasExpenses = computed(() => expensesForChart.value.length > 0)
+  const hasTrend = computed(() => trendForChart.value.length > 0)
+
+  /** True when the selected month has no income and no expenses (uses same values as cards) */
+  const monthHasNoStats = computed(
+    () => monthlyIncome.value === 0 && monthlyExpenses.value === 0
+  )
 
   async function fetch(force = false) {
     const key = getCacheKey(year.value, month.value)
@@ -149,11 +187,14 @@ export function useDashboard() {
     monthlySavings,
     expensesByCategory,
     monthlyTrend,
+    expensesForChart,
+    trendForChart,
     currency,
     periodLabel,
     isEmpty,
     hasExpenses,
     hasTrend,
+    monthHasNoStats,
     fetch,
     setPeriod,
     invalidateCache,

@@ -15,6 +15,23 @@ const mounted = ref(false)
 const loadError = ref<string | null>(null)
 const isDev = import.meta.env.DEV
 
+const MONTH_NAMES = ['', 'Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
+
+const now = new Date()
+const selectedYear = ref(now.getFullYear())
+const selectedMonth = ref(now.getMonth() + 1)
+
+const yearOptions = computed(() => {
+  const y = now.getFullYear()
+  return [y, y - 1, y - 2, y - 3]
+})
+
+async function onPeriodChange() {
+  dashboard.setPeriod(selectedYear.value, selectedMonth.value)
+  dashboard.invalidateCache()
+  await dashboard.fetch(true)
+}
+
 onMounted(async () => {
   try {
     const timeout = (ms: number) =>
@@ -26,6 +43,7 @@ onMounted(async () => {
       (async () => {
         await householdStore.fetchHousehold()
         if (householdStore.household) {
+          dashboard.setPeriod(selectedYear.value, selectedMonth.value)
           dashboard.invalidateCache()
           await dashboard.fetch(true)
         }
@@ -61,9 +79,14 @@ const formattedIncome = computed(() => formatCurrency(dashboard.monthlyIncome.va
 const formattedExpenses = computed(() => formatCurrency(dashboard.monthlyExpenses.value, dashboard.currency.value))
 const formattedSavings = computed(() => formatCurrency(dashboard.monthlySavings.value, dashboard.currency.value))
 
-const expensesForChart = computed<ExpenseByCategory[]>(() => dashboard.expensesByCategory.value)
-const trendForChart = computed<MonthlyTrend[]>(() => dashboard.monthlyTrend.value)
+const expensesForChart = computed<ExpenseByCategory[]>(() => dashboard.expensesForChart?.value ?? [])
+const trendForChart = computed<MonthlyTrend[]>(() => dashboard.trendForChart?.value ?? [])
 const periodLabel = computed(() => dashboard.periodLabel.value)
+
+const hasChartData = computed(
+  () => dashboard.monthlyIncome.value > 0 || dashboard.monthlyExpenses.value > 0
+)
+const hasExpensesForChart = computed(() => dashboard.monthlyExpenses.value > 0)
 
 const showContent = computed(() =>
   mounted.value &&
@@ -113,8 +136,16 @@ const showContent = computed(() =>
     </div>
 
     <div v-else-if="dashboard.data && dashboard.isEmpty" class="empty-state empty-state-card">
+      <div class="period-selector period-selector-center">
+        <select v-model.number="selectedMonth" @change="onPeriodChange" class="period-select" title="Mês">
+          <option v-for="m in 12" :key="m" :value="m">{{ MONTH_NAMES[m] }}</option>
+        </select>
+        <select v-model.number="selectedYear" @change="onPeriodChange" class="period-select" title="Ano">
+          <option v-for="y in yearOptions" :key="y" :value="y">{{ y }}</option>
+        </select>
+      </div>
       <div class="empty-icon">📊</div>
-      <p class="empty-title">Nenhum dado ainda.</p>
+      <p class="empty-title">Nenhum dado para {{ periodLabel || 'este mês' }}.</p>
       <p class="empty-hint">Cria contas e transações para veres o teu dashboard.</p>
       <div class="empty-links">
         <router-link to="/accounts" class="link">Contas</router-link>
@@ -129,7 +160,17 @@ const showContent = computed(() =>
 
     <div v-if="showContent" class="dashboard-content">
       <div class="summary-section">
-        <h2 class="section-title">{{ periodLabel || 'Resumo' }}</h2>
+        <div class="section-header">
+          <h2 class="section-title">{{ periodLabel || 'Resumo' }}</h2>
+          <div class="period-selector">
+            <select v-model.number="selectedMonth" @change="onPeriodChange" class="period-select" title="Mês">
+              <option v-for="m in 12" :key="m" :value="m">{{ MONTH_NAMES[m] }}</option>
+            </select>
+            <select v-model.number="selectedYear" @change="onPeriodChange" class="period-select" title="Ano">
+              <option v-for="y in yearOptions" :key="y" :value="y">{{ y }}</option>
+            </select>
+          </div>
+        </div>
         <div class="summary-cards summary-cards-fallback">
           <div class="card">
             <p class="card-title">Saldo total</p>
@@ -154,19 +195,27 @@ const showContent = computed(() =>
         </div>
       </div>
 
-      <div class="charts-section">
-        <div v-if="dashboard.hasExpenses" class="chart-card">
+      <div v-if="hasChartData" class="charts-section">
+        <div v-if="hasExpensesForChart" class="chart-card">
           <h3 class="chart-title">Despesas por categoria</h3>
           <ExpensesPieChart :data="expensesForChart" />
         </div>
-        <div v-if="dashboard.hasTrend" class="chart-card">
+        <div class="chart-card">
           <h3 class="chart-title">Evolução mensal</h3>
           <MonthlyLineChart :data="trendForChart" />
         </div>
       </div>
 
       <div
-        v-if="!dashboard.hasExpenses && !dashboard.hasTrend && dashboard.data"
+        v-else-if="dashboard.monthHasNoStats"
+        class="no-stats-message"
+      >
+        <p>Não há dados estatísticos para {{ periodLabel }}.</p>
+        <p class="no-stats-hint">Seleciona outro mês para ver receitas, despesas e gráficos.</p>
+      </div>
+
+      <div
+        v-else
         class="charts-empty"
       >
         <p>Adiciona transações para veres gráficos.</p>
@@ -301,11 +350,51 @@ const showContent = computed(() =>
   margin-bottom: 0.5rem;
 }
 
+.section-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
 .section-title {
   font-size: 1rem;
   font-weight: 600;
   color: #475569;
-  margin: 0 0 1rem 0;
+  margin: 0;
+}
+
+.period-selector {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.period-select {
+  padding: 0.4rem 0.75rem;
+  font-size: 0.875rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: white;
+  color: #334155;
+  cursor: pointer;
+}
+
+.period-select:hover {
+  border-color: #2563eb;
+}
+
+.period-select:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+}
+
+.period-selector-center {
+  justify-content: center;
+  margin-bottom: 1rem;
 }
 
 .summary-cards {
@@ -345,6 +434,29 @@ const showContent = computed(() =>
 .summary-cards-fallback .card-income .card-value { color: #059669; }
 .summary-cards-fallback .card-expense .card-value { color: #dc2626; }
 .summary-cards-fallback .card-savings .card-value { color: #2563eb; }
+
+.no-stats-message {
+  text-align: center;
+  padding: 2rem;
+  background: #f8fafc;
+  border-radius: 12px;
+  border: 1px dashed #e2e8f0;
+  color: #64748b;
+}
+
+.no-stats-message p {
+  margin: 0 0 0.25rem 0;
+}
+
+.no-stats-message p:first-child {
+  font-weight: 600;
+  color: #475569;
+}
+
+.no-stats-hint {
+  font-size: 0.875rem;
+  color: #94a3b8 !important;
+}
 
 .charts-section {
   display: grid;
