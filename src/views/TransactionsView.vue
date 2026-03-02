@@ -1,13 +1,17 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
 import { useTransactionsStore } from '@/stores/transactions'
+import { useRecurringTransactionsStore } from '@/stores/recurringTransactions'
 import { useAccountsStore } from '@/stores/accounts'
 import { useHouseholdStore } from '@/stores/household'
 import { useAuthStore } from '@/stores/auth'
 import { householdApi } from '@/api/household'
 import TransactionFormModal from '@/components/TransactionFormModal.vue'
+import RecurringFormModal from '@/components/RecurringFormModal.vue'
+import RemoveRecurringModal from '@/components/RemoveRecurringModal.vue'
 import ConfirmDeleteModal from '@/components/ConfirmDeleteModal.vue'
 import type { Transaction, CreateTransactionRequest } from '@/types/transaction'
+import type { RecurringTransaction, CreateRecurringTransactionRequest } from '@/types/recurringTransaction'
 import {
   TRANSACTION_TYPE_LABELS,
   TRANSACTION_CATEGORY_LABELS,
@@ -16,15 +20,24 @@ import {
 import type { HouseholdMember } from '@/types/household'
 
 const transactionsStore = useTransactionsStore()
+const recurringStore = useRecurringTransactionsStore()
 const accountsStore = useAccountsStore()
 const householdStore = useHouseholdStore()
 const authStore = useAuthStore()
+
+const activeTab = ref<'transactions' | 'recurring'>('transactions')
 
 const createModalOpen = ref(false)
 const editModalOpen = ref(false)
 const deleteModalOpen = ref(false)
 const transactionToEdit = ref<Transaction | null>(null)
 const transactionToDelete = ref<Transaction | null>(null)
+
+const recurringCreateModalOpen = ref(false)
+const recurringEditModalOpen = ref(false)
+const recurringRemoveModalOpen = ref(false)
+const recurringToEdit = ref<RecurringTransaction | null>(null)
+const recurringToRemove = ref<RecurringTransaction | null>(null)
 
 const members = ref<HouseholdMember[]>([])
 const membersLoading = ref(false)
@@ -53,6 +66,17 @@ const paginatedTransactions = computed(() => {
   const start = (page.value - 1) * pageSize
   return list.slice(start, start + pageSize)
 })
+
+const currentYear = now.getFullYear()
+const currentMonth = now.getMonth() + 1
+const activeRecurring = computed(() =>
+  recurringStore.recurring.filter((r) => {
+    if (!r.endMonth || !r.endYear) return true
+    if (r.endYear > currentYear) return true
+    if (r.endYear === currentYear && r.endMonth > currentMonth) return true
+    return false
+  })
+)
 
 const totalPages = computed(() =>
   Math.max(1, Math.ceil(transactionsStore.transactions.length / pageSize))
@@ -93,6 +117,7 @@ onMounted(async () => {
       await accountsStore.fetchAccounts()
       await loadMembers()
       await fetchWithFilters()
+      await recurringStore.fetchRecurring()
     }
   } catch {
     // Handled in stores
@@ -250,6 +275,97 @@ function getSplitsDisplay(tx: Transaction): string {
   if (tx.splits.length <= 1) return '-'
   return tx.splits.map((s) => `${s.percentage}%`).join(' / ')
 }
+
+function openRecurringCreateModal() {
+  recurringStore.clearError()
+  recurringCreateModalOpen.value = true
+}
+
+function closeRecurringCreateModal() {
+  recurringCreateModalOpen.value = false
+}
+
+function openRecurringEditModal(r: RecurringTransaction) {
+  recurringStore.clearError()
+  recurringToEdit.value = r
+  recurringEditModalOpen.value = true
+}
+
+function closeRecurringEditModal() {
+  recurringEditModalOpen.value = false
+  recurringToEdit.value = null
+}
+
+function openRecurringRemoveModal(r: RecurringTransaction) {
+  recurringToRemove.value = r
+  recurringRemoveModalOpen.value = true
+}
+
+function closeRecurringRemoveModal() {
+  recurringRemoveModalOpen.value = false
+  recurringToRemove.value = null
+}
+
+async function handleRecurringCreate(payload: CreateRecurringTransactionRequest) {
+  actionLoading.value = true
+  try {
+    await recurringStore.createRecurring(payload)
+    closeRecurringCreateModal()
+  } catch {
+    // Error shown in store
+  } finally {
+    actionLoading.value = false
+  }
+}
+
+async function handleRecurringEdit(payload: CreateRecurringTransactionRequest) {
+  if (!recurringToEdit.value) return
+  actionLoading.value = true
+  try {
+    await recurringStore.updateRecurring(recurringToEdit.value.id, payload)
+    closeRecurringEditModal()
+  } catch {
+    // Error shown in store
+  } finally {
+    actionLoading.value = false
+  }
+}
+
+async function handleRecurringRemoveFromCurrentMonth() {
+  if (!recurringToRemove.value) return
+  actionLoading.value = true
+  try {
+    await recurringStore.removeRecurring(recurringToRemove.value.id, currentYear, currentMonth)
+    closeRecurringRemoveModal()
+  } catch {
+    // Error shown in store
+  } finally {
+    actionLoading.value = false
+  }
+}
+
+async function handleRecurringRemoveFromNextMonth() {
+  if (!recurringToRemove.value) return
+  actionLoading.value = true
+  try {
+    let y = currentYear
+    let m = currentMonth + 1
+    if (m > 12) {
+      m = 1
+      y++
+    }
+    await recurringStore.removeRecurring(recurringToRemove.value.id, y, m)
+    closeRecurringRemoveModal()
+  } catch {
+    // Error shown in store
+  } finally {
+    actionLoading.value = false
+  }
+}
+
+function getAccountName(accountId: string): string {
+  return accountsStore.accounts.find((a) => a.id === accountId)?.name ?? '-'
+}
 </script>
 
 <template>
@@ -274,10 +390,31 @@ function getSplitsDisplay(tx: Transaction): string {
     </div>
 
     <div v-else class="content">
-      <div v-if="transactionsStore.error" class="global-error">
-        {{ transactionsStore.error }}
+      <div class="tabs">
+        <button
+          type="button"
+          :class="['tab', { active: activeTab === 'transactions' }]"
+          @click="activeTab = 'transactions'"
+        >
+          Transações
+        </button>
+        <button
+          type="button"
+          :class="['tab', { active: activeTab === 'recurring' }]"
+          @click="activeTab = 'recurring'"
+        >
+          Transações Recorrentes
+        </button>
       </div>
 
+      <div v-if="activeTab === 'transactions' && transactionsStore.error" class="global-error">
+        {{ transactionsStore.error }}
+      </div>
+      <div v-if="activeTab === 'recurring' && recurringStore.error" class="global-error">
+        {{ recurringStore.error }}
+      </div>
+
+      <div v-show="activeTab === 'transactions'" class="tab-content">
       <div class="toolbar">
         <div class="filters">
           <select v-model="filterAccountId" class="filter-select">
@@ -392,6 +529,67 @@ function getSplitsDisplay(tx: Transaction): string {
           </button>
         </div>
       </div>
+      </div>
+
+      <div v-show="activeTab === 'recurring'" class="tab-content">
+        <div class="toolbar">
+          <p class="recurring-hint">Receitas e despesas que se repetem mensalmente. São contabilizadas a partir do mês atual.</p>
+          <button type="button" class="btn-add" @click="openRecurringCreateModal">
+            + Nova transação recorrente
+          </button>
+        </div>
+        <div v-if="recurringStore.loading && activeRecurring.length === 0" class="loading-state">
+          <div class="spinner"></div>
+          <p>A carregar contas recorrentes...</p>
+        </div>
+        <div v-else-if="activeRecurring.length === 0" class="empty-state">
+          <p>Nenhuma conta recorrente. Adiciona uma receita ou despesa mensal.</p>
+          <button type="button" class="btn-add" @click="openRecurringCreateModal">
+            + Nova transação recorrente
+          </button>
+        </div>
+        <div v-else class="table-container">
+          <table class="transactions-table">
+            <thead>
+              <tr>
+                <th>Conta</th>
+                <th>Categoria</th>
+                <th>Tipo</th>
+                <th class="amount-col">Valor</th>
+                <th>Início</th>
+                <th class="actions-col"></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="r in activeRecurring"
+                :key="r.id"
+                class="table-row"
+              >
+                <td>{{ getAccountName(r.accountId) }}</td>
+                <td>{{ TRANSACTION_CATEGORY_LABELS[r.category] }}</td>
+                <td>
+                  <span :class="['type-badge', r.type === TransactionType.Income ? 'type-income' : 'type-expense']">
+                    {{ TRANSACTION_TYPE_LABELS[r.type] }}
+                  </span>
+                </td>
+                <td class="amount-col" :class="{ 'amount-income': r.type === TransactionType.Income, 'amount-expense': r.type === TransactionType.Expense }">
+                  {{ formatAmount(r.amount, r.type) }}
+                </td>
+                <td>{{ MONTH_NAMES[r.startMonth] }} {{ r.startYear }}</td>
+                <td class="actions-col">
+                  <button type="button" class="btn-icon" @click="openRecurringEditModal(r)">
+                    Editar
+                  </button>
+                  <button type="button" class="btn-icon btn-delete" @click="openRecurringRemoveModal(r)">
+                    Retirar
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
 
     <TransactionFormModal
@@ -426,6 +624,32 @@ function getSplitsDisplay(tx: Transaction): string {
       :loading="actionLoading"
       @close="closeDeleteModal"
       @confirm="handleDelete"
+    />
+
+    <RecurringFormModal
+      :open="recurringCreateModalOpen"
+      :accounts="accountsStore.accounts"
+      :loading="actionLoading"
+      @close="closeRecurringCreateModal"
+      @submit="handleRecurringCreate"
+    />
+
+    <RecurringFormModal
+      :open="recurringEditModalOpen"
+      :recurring="recurringToEdit"
+      :accounts="accountsStore.accounts"
+      :loading="actionLoading"
+      @close="closeRecurringEditModal"
+      @submit="handleRecurringEdit"
+    />
+
+    <RemoveRecurringModal
+      :open="recurringRemoveModalOpen"
+      :recurring="recurringToRemove"
+      :loading="actionLoading"
+      @close="closeRecurringRemoveModal"
+      @remove-from-current-month="handleRecurringRemoveFromCurrentMonth"
+      @remove-from-next-month="handleRecurringRemoveFromNextMonth"
     />
   </div>
 </template>
@@ -494,6 +718,45 @@ function getSplitsDisplay(tx: Transaction): string {
 
 .link:hover {
   border-bottom-color: #2563eb;
+}
+
+.tabs {
+  display: flex;
+  gap: 0.25rem;
+  margin-bottom: 1.5rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.tab {
+  padding: 0.625rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #64748b;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  margin-bottom: -1px;
+}
+
+.tab:hover {
+  color: #334155;
+}
+
+.tab.active {
+  color: #2563eb;
+  border-bottom-color: #2563eb;
+}
+
+.tab-content {
+  margin-top: 0;
+}
+
+.recurring-hint {
+  font-size: 0.8125rem;
+  color: #64748b;
+  margin: 0;
+  flex: 1;
 }
 
 .global-error {
