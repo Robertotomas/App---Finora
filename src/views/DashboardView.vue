@@ -4,6 +4,7 @@ import type { ExpenseByCategory, MonthlyTrend } from '@/types/dashboard'
 import { useAuthStore } from '@/stores/auth'
 import { useHouseholdStore } from '@/stores/household'
 import { useDashboard } from '@/composables/useDashboard'
+import { useMonthlyBudget } from '@/composables/useMonthlyBudget'
 import DashboardSkeleton from '@/components/DashboardSkeleton.vue'
 import ExpensesPieChart from '@/components/charts/ExpensesPieChart.vue'
 import MonthlyLineChart from '@/components/charts/MonthlyLineChart.vue'
@@ -11,6 +12,7 @@ import MonthlyLineChart from '@/components/charts/MonthlyLineChart.vue'
 const authStore = useAuthStore()
 const householdStore = useHouseholdStore()
 const dashboard = useDashboard()
+const budget = useMonthlyBudget()
 const mounted = ref(false)
 const loadError = ref<string | null>(null)
 const isDev = import.meta.env.DEV
@@ -87,6 +89,27 @@ const hasChartData = computed(
   () => dashboard.monthlyIncome.value > 0 || dashboard.monthlyExpenses.value > 0
 )
 const hasExpensesForChart = computed(() => dashboard.monthlyExpenses.value > 0)
+
+const budgetForPeriod = computed(() => {
+  budget.budgetStore.value // reactive dependency
+  return budget.getBudget(householdStore.household?.id, selectedYear.value, selectedMonth.value)
+})
+
+const hasBudgetForPeriod = computed(() => {
+  budget.budgetStore.value
+  return budget.hasBudget(householdStore.household?.id, selectedYear.value, selectedMonth.value)
+})
+
+const finalBalance = computed(() => dashboard.monthlyIncome.value - dashboard.monthlyExpenses.value)
+const savingsRate = computed(() => {
+  const inc = dashboard.monthlyIncome.value
+  const sav = dashboard.monthlySavings.value
+  return inc > 0 ? Math.round((sav / inc) * 100) : 0
+})
+
+function formatPercent(value: number): string {
+  return `${value > 0 ? '+' : ''}${value}%`
+}
 
 const showContent = computed(() =>
   mounted.value &&
@@ -191,6 +214,79 @@ const showContent = computed(() =>
             <p class="card-title">Poupança</p>
             <p class="card-value">{{ formattedSavings }}</p>
             <p class="card-subtitle">{{ periodLabel }}</p>
+          </div>
+        </div>
+      </div>
+
+      <div v-if="hasChartData" class="resumo-section">
+        <h2 class="section-title">Resumo</h2>
+        <div class="summary-cards summary-cards-fallback">
+          <div class="card card-balance">
+            <p class="card-title">Saldo final</p>
+            <p class="card-value">{{ formatCurrency(finalBalance, dashboard.currency.value) }}</p>
+            <p class="card-subtitle">Receitas − Despesas reais</p>
+          </div>
+          <div class="card card-income">
+            <p class="card-title">Taxa de poupança</p>
+            <p class="card-value">{{ formatPercent(savingsRate) }}</p>
+            <p class="card-subtitle">% da receita real poupada</p>
+          </div>
+        </div>
+      </div>
+
+      <div v-if="hasChartData && hasBudgetForPeriod" class="comparison-section">
+        <h2 class="section-title">Esperado vs Real</h2>
+        <div class="comparison-grid">
+          <div class="comparison-card">
+            <h3 class="comparison-title">Receitas</h3>
+            <div class="comparison-row">
+              <span class="comparison-label">Esperado</span>
+              <span class="comparison-value expected">{{ formatCurrency(budgetForPeriod.expectedIncome, dashboard.currency.value) }}</span>
+            </div>
+            <div class="comparison-row">
+              <span class="comparison-label">Real</span>
+              <span class="comparison-value" :class="{ 'above': dashboard.monthlyIncome.value > budgetForPeriod.expectedIncome, 'below': dashboard.monthlyIncome.value < budgetForPeriod.expectedIncome }">
+                {{ formattedIncome }}
+              </span>
+            </div>
+            <div v-if="budgetForPeriod.expectedIncome > 0" class="comparison-diff">
+              {{ dashboard.monthlyIncome.value >= budgetForPeriod.expectedIncome ? '✓' : '' }}
+              {{ formatCurrency(dashboard.monthlyIncome.value - budgetForPeriod.expectedIncome, dashboard.currency.value) }}
+              {{ dashboard.monthlyIncome.value >= budgetForPeriod.expectedIncome ? 'acima' : 'abaixo' }}
+            </div>
+          </div>
+          <div class="comparison-card">
+            <h3 class="comparison-title">Despesas</h3>
+            <div class="comparison-row">
+              <span class="comparison-label">Esperado</span>
+              <span class="comparison-value expected">{{ formatCurrency(budgetForPeriod.expectedExpenses, dashboard.currency.value) }}</span>
+            </div>
+            <div class="comparison-row">
+              <span class="comparison-label">Real</span>
+              <span class="comparison-value" :class="{ 'above': dashboard.monthlyExpenses.value < budgetForPeriod.expectedExpenses, 'below': dashboard.monthlyExpenses.value > budgetForPeriod.expectedExpenses }">
+                {{ formattedExpenses }}
+              </span>
+            </div>
+            <div v-if="budgetForPeriod.expectedExpenses > 0" class="comparison-diff">
+              {{ dashboard.monthlyExpenses.value <= budgetForPeriod.expectedExpenses ? '✓' : '' }}
+              {{ formatCurrency(dashboard.monthlyExpenses.value - budgetForPeriod.expectedExpenses, dashboard.currency.value) }}
+              {{ dashboard.monthlyExpenses.value <= budgetForPeriod.expectedExpenses ? 'abaixo do orçamento' : 'acima do orçamento' }}
+            </div>
+          </div>
+          <div class="comparison-card">
+            <h3 class="comparison-title">Poupança</h3>
+            <div class="comparison-row">
+              <span class="comparison-label">Esperado</span>
+              <span class="comparison-value" :class="(budgetForPeriod.expectedIncome - budgetForPeriod.expectedExpenses) >= 0 ? 'income' : 'expense'">
+                {{ formatCurrency(budgetForPeriod.expectedIncome - budgetForPeriod.expectedExpenses, dashboard.currency.value) }}
+              </span>
+            </div>
+            <div class="comparison-row">
+              <span class="comparison-label">Real</span>
+              <span class="comparison-value" :class="dashboard.monthlySavings.value >= 0 ? 'income' : 'expense'">
+                {{ formattedSavings }}
+              </span>
+            </div>
           </div>
         </div>
       </div>
@@ -434,6 +530,73 @@ const showContent = computed(() =>
 .summary-cards-fallback .card-income .card-value { color: #059669; }
 .summary-cards-fallback .card-expense .card-value { color: #dc2626; }
 .summary-cards-fallback .card-savings .card-value { color: #2563eb; }
+.summary-cards-fallback .card-balance .card-value { color: #0f172a; }
+
+.resumo-section {
+  margin-top: 0.5rem;
+}
+
+.comparison-section {
+  margin-top: 0.5rem;
+}
+
+.comparison-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1.25rem;
+}
+
+.comparison-card {
+  background: white;
+  border-radius: 12px;
+  padding: 1.25rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  border: 1px solid #f1f5f9;
+}
+
+.comparison-title {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: #334155;
+  margin: 0 0 1rem 0;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.comparison-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.comparison-label {
+  font-size: 0.8125rem;
+  color: #64748b;
+}
+
+.comparison-value {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.comparison-value.expected {
+  color: #64748b;
+}
+
+.comparison-value.income { color: #059669; }
+.comparison-value.expense { color: #dc2626; }
+.comparison-value.above { color: #059669; }
+.comparison-value.below { color: #dc2626; }
+
+.comparison-diff {
+  font-size: 0.8125rem;
+  color: #64748b;
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px dashed #e2e8f0;
+}
 
 .no-stats-message {
   text-align: center;
