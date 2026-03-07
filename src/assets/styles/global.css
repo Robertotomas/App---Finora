@@ -1,0 +1,1863 @@
+/* Finora - Base & Dark Mode */
+:root {
+  --color-bg: #f8fafc;
+  --color-bg-card: #ffffff;
+  --color-text: #334155;
+  --color-text-muted: #64748b;
+  --color-border: #e2e8f0;
+  --color-header-bg: #ffffff;
+  --color-header-border: #e2e8f0;
+  --color-logo: #1e293b;
+  --color-link: #64748b;
+  --color-link-hover: #2563eb;
+  --color-input-bg: #ffffff;
+  --color-input-border: #e2e8f0;
+  --color-btn-secondary-bg: transparent;
+  --color-btn-secondary-border: #e2e8f0;
+  --color-btn-secondary-hover: #f1f5f9;
+  --color-table-header-bg: #f8fafc;
+  --color-table-row-hover: #f8fafc;
+  --color-empty-state: #64748b;
+  --color-error: #dc2626;
+  --color-success: #059669;
+  --color-income: #059669;
+  --color-expense: #dc2626;
+  --color-type-income-bg: #d1fae5;
+  --color-type-income-text: #047857;
+  --color-type-expense-bg: #fee2e2;
+  --color-type-expense-text: #b91c1c;
+  --color-modal-overlay: rgba(0, 0, 0, 0.5);
+}
+
+html.dark {
+  --color-bg: #0f172a;
+  --color-bg-card: #1e293b;
+  --color-text: #e2e8f0;
+  --color-text-muted: #94a3b8;
+  --color-border: #334155;
+  --color-header-bg: #1e293b;
+  --color-header-border: #334155;
+  --color-logo: #f1f5f9;
+  --color-link: #94a3b8;
+  --color-link-hover: #60a5fa;
+  --color-input-bg: #334155;
+  --color-input-border: #475569;
+  --color-btn-secondary-bg: transparent;
+  --color-btn-secondary-border: #475569;
+  --color-btn-secondary-hover: #334155;
+  --color-table-header-bg: #1e293b;
+  --color-table-row-hover: #334155;
+  --color-empty-state: #94a3b8;
+  --color-error: #f87171;
+  --color-success: #34d399;
+  --color-income: #34d399;
+  --color-expense: #f87171;
+  --color-type-income-bg: #064e3b;
+  --color-type-income-text: #6ee7b7;
+  --color-type-expense-bg: #7f1d1d;
+  --color-type-expense-text: #fca5a5;
+  --color-modal-overlay: rgba(0, 0, 0, 0.7);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+#app {
+  min-height: 100vh;
+}
+
+/* Dark mode overrides for views (override scoped component styles) */
+html.dark .transactions-view,
+html.dark .dashboard,
+html.dark .accounts-view,
+html.dark .monthly-finance,
+html.dark .household-settings,
+html.dark .home-view {
+  color: var(--color-text);
+  background: var(--color-bg) !important;
+}
+
+html.dark .page-header h1 {
+  color: var(--color-text) !important;
+}
+
+html.dark .page-header .subtitle,
+html.dark .page-header .greeting,
+html.dark .page-header .email {
+  color: var(--color-text-muted) !important;
+}
+
+html.dark .table-container,
+html.dark .transactions-table {
+  background: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+}
+
+html.dark .transactions-table th {
+  background: var(--color-table-header-bg) !important;
+  color: var(--color-text-muted) !important;
+  border-color: var(--color-border) !important;
+}
+
+html.dark .transactions-table td {
+  color: var(--color-text) !important;
+  border-color: var(--color-border) !important;
+}
+
+html.dark .table-row:hover {
+  background: var(--color-table-row-hover) !important;
+}
+
+html.dark .filter-select,
+html.dark .filter-input {
+  background: var(--color-input-bg) !important;
+  border-color: var(--color-input-border) !important;
+  color: var(--color-text) !important;
+}
+
+html.dark .empty-state,
+html.dark .loading-state {
+  color: var(--color-empty-state) !important;
+}
+
+html.dark .type-income {
+  background: var(--color-type-income-bg) !important;
+  color: var(--color-type-income-text) !important;
+}
+
+html.dark .type-expense {
+  background: var(--color-type-expense-bg) !important;
+  color: var(--color-type-expense-text) !important;
+}
+
+html.dark .amount-income {
+  color: var(--color-income) !important;
+}
+
+html.dark .amount-expense {
+  color: var(--color-expense) !important;
+}
+
+html.dark .btn-icon {
+  color: var(--color-text-muted) !important;
+  border-color: var(--color-border) !important;
+}
+
+html.dark .btn-icon:hover {
+  background: var(--color-table-row-hover) !important;
+  color: var(--color-text) !important;
+}
+
+html.dark .btn-page {
+  background: var(--color-table-row-hover) !important;
+  color: var(--color-text) !important;
+}
+
+html.dark .page-info {
+  color: var(--color-text-muted) !important;
+}
+
+html.dark .tabs .tab {
+  color: var(--color-text-muted) !important;
+}
+
+html.dark .tabs .tab.active {
+  color: var(--color-link-hover) !important;
+}
+
+html.dark .recurring-hint {
+  color: var(--color-text-muted) !important;
+}
+
+/* Modals */
+html.dark [class*="modal"] {
+  background: var(--color-bg-card) !important;
+  color: var(--color-text) !important;
+}
+
+html.dark .input,
+html.dark input,
+html.dark select {
+  background: var(--color-input-bg) !important;
+  border-color: var(--color-input-border) !important;
+  color: var(--color-text) !important;
+}
+
+/* Dashboard cards */
+html.dark .summary-card,
+html.dark .card {
+  background: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+  color: var(--color-text) !important;
+}
+
+/* Dashboard - cards, comparison, charts */
+html.dark .card-title,
+html.dark .card-value,
+html.dark .card-subtitle {
+  color: var(--color-text) !important;
+}
+html.dark .card-title { color: var(--color-text-muted) !important; }
+html.dark .card-subtitle { color: var(--color-text-muted) !important; }
+html.dark .card-income .card-value { color: var(--color-income) !important; }
+html.dark .card-expense .card-value { color: var(--color-expense) !important; }
+html.dark .card-savings .card-value { color: var(--color-link-hover) !important; }
+html.dark .card-balance .card-value { color: var(--color-text) !important; }
+
+html.dark .comparison-card {
+  background: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+}
+html.dark .comparison-title {
+  color: var(--color-text) !important;
+  border-color: var(--color-border) !important;
+}
+html.dark .comparison-label,
+html.dark .comparison-value.expected,
+html.dark .comparison-diff {
+  color: var(--color-text-muted) !important;
+}
+html.dark .comparison-value { color: var(--color-text) !important; }
+html.dark .comparison-value.income { color: var(--color-income) !important; }
+html.dark .comparison-value.expense { color: var(--color-expense) !important; }
+html.dark .comparison-value.above { color: var(--color-income) !important; }
+html.dark .comparison-value.below { color: var(--color-expense) !important; }
+html.dark .comparison-row { border-color: transparent; }
+
+html.dark .chart-card {
+  background: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+}
+html.dark .chart-title { color: var(--color-text) !important; }
+
+html.dark .section-title { color: var(--color-text-muted) !important; }
+html.dark .period-select {
+  background: var(--color-input-bg) !important;
+  border-color: var(--color-input-border) !important;
+  color: var(--color-text) !important;
+}
+html.dark .empty-state-card,
+html.dark .no-stats-message,
+html.dark .charts-empty {
+  background: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+  color: var(--color-text-muted) !important;
+}
+html.dark .empty-title,
+html.dark .no-stats-message p:first-child {
+  color: var(--color-text) !important;
+}
+html.dark .error-state p { color: var(--color-error) !important; }
+html.dark .error-hint { color: var(--color-text-muted) !important; }
+html.dark .link { color: var(--color-link-hover) !important; }
+
+/* Plano Mensal */
+html.dark .expected-section {
+  background: linear-gradient(135deg, #0c4a6e 0%, #075985 100%) !important;
+  border-color: var(--color-border) !important;
+}
+html.dark .expected-label { color: #7dd3fc !important; }
+html.dark .expected-input {
+  background: var(--color-input-bg) !important;
+  border-color: var(--color-input-border) !important;
+  color: var(--color-text) !important;
+}
+html.dark .submitted-section {
+  background: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+}
+html.dark .submitted-label { color: var(--color-text-muted) !important; }
+html.dark .submitted-value { color: var(--color-text) !important; }
+html.dark .submitted-row { border-color: var(--color-border) !important; }
+html.dark .btn-edit {
+  background: var(--color-table-row-hover) !important;
+  color: var(--color-text) !important;
+  border-color: var(--color-border) !important;
+}
+html.dark .btn-edit:hover { background: var(--color-border) !important; }
+html.dark .btn-delete {
+  background: rgba(127, 29, 29, 0.3) !important;
+  border-color: var(--color-expense) !important;
+  color: var(--color-expense) !important;
+}
+html.dark .btn-delete:hover { background: rgba(127, 29, 29, 0.5) !important; }
+html.dark .filter-select {
+  background: var(--color-input-bg) !important;
+  border-color: var(--color-input-border) !important;
+  color: var(--color-text) !important;
+}
+
+/* Accounts, Household, Home */
+html.dark .account-card,
+html.dark .plan-card {
+  background: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+}
+html.dark .global-error {
+  background: rgba(248, 113, 113, 0.15) !important;
+  color: var(--color-error) !important;
+  border-color: var(--color-expense) !important;
+}
+
+/* Dashboard - cards text, comparison, charts */
+html.dark .card-title,
+html.dark .card-subtitle {
+  color: var(--color-text-muted) !important;
+}
+html.dark .card-value {
+  color: var(--color-text) !important;
+}
+html.dark .summary-cards-fallback .card-income .card-value { color: var(--color-income) !important; }
+html.dark .summary-cards-fallback .card-expense .card-value { color: var(--color-expense) !important; }
+html.dark .summary-cards-fallback .card-savings .card-value { color: var(--color-link-hover) !important; }
+html.dark .section-title {
+  color: var(--color-text-muted) !important;
+}
+html.dark .period-select {
+  background: var(--color-input-bg) !important;
+  border-color: var(--color-input-border) !important;
+  color: var(--color-text) !important;
+}
+html.dark .comparison-card {
+  background: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+}
+html.dark .comparison-title {
+  color: var(--color-text) !important;
+  border-color: var(--color-border) !important;
+}
+html.dark .comparison-label,
+html.dark .comparison-value.expected,
+html.dark .comparison-diff {
+  color: var(--color-text-muted) !important;
+}
+html.dark .comparison-value {
+  color: var(--color-text) !important;
+}
+html.dark .comparison-value.income { color: var(--color-income) !important; }
+html.dark .comparison-value.expense,
+html.dark .comparison-value.below { color: var(--color-expense) !important; }
+html.dark .comparison-value.above { color: var(--color-income) !important; }
+html.dark .comparison-row {
+  border-color: var(--color-border) !important;
+}
+html.dark .chart-card {
+  background: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+}
+html.dark .chart-title {
+  color: var(--color-text) !important;
+}
+html.dark .empty-state-card {
+  background: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+}
+html.dark .empty-title {
+  color: var(--color-text) !important;
+}
+html.dark .empty-hint {
+  color: var(--color-text-muted) !important;
+}
+html.dark .no-stats-message {
+  background: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+  color: var(--color-text-muted) !important;
+}
+html.dark .no-stats-message p:first-child {
+  color: var(--color-text) !important;
+}
+html.dark .charts-empty {
+  background: var(--color-bg-card) !important;
+  color: var(--color-text-muted) !important;
+}
+html.dark .link {
+  color: var(--color-link-hover) !important;
+}
+html.dark .error-state p {
+  color: var(--color-error) !important;
+}
+html.dark .error-hint {
+  color: var(--color-text-muted) !important;
+}
+
+/* Plano Mensal */
+html.dark .expected-section {
+  background: linear-gradient(135deg, #1e3a5f 0%, #0f172a 100%) !important;
+  border-color: var(--color-border) !important;
+}
+html.dark .expected-label {
+  color: var(--color-text-muted) !important;
+}
+html.dark .expected-input {
+  background: var(--color-input-bg) !important;
+  border-color: var(--color-input-border) !important;
+  color: var(--color-text) !important;
+}
+html.dark .submitted-section {
+  background: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+}
+html.dark .submitted-row {
+  border-color: var(--color-border) !important;
+}
+html.dark .submitted-label {
+  color: var(--color-text-muted) !important;
+}
+html.dark .submitted-value {
+  color: var(--color-text) !important;
+}
+html.dark .btn-edit {
+  background: var(--color-table-row-hover) !important;
+  color: var(--color-text) !important;
+  border-color: var(--color-border) !important;
+}
+html.dark .btn-edit:hover {
+  background: var(--color-border) !important;
+}
+html.dark .btn-delete {
+  background: rgba(127, 29, 29, 0.5) !important;
+  color: var(--color-expense) !important;
+  border-color: var(--color-expense) !important;
+}
+html.dark .btn-delete:hover {
+  background: rgba(127, 29, 29, 0.7) !important;
+}
+html.dark .filter-select {
+  background: var(--color-input-bg) !important;
+  border-color: var(--color-input-border) !important;
+  color: var(--color-text) !important;
+}
+
+/* Accounts, Household - cards */
+html.dark .account-card,
+html.dark .plan-card {
+  background: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+}
+html.dark .card-header h2,
+html.dark .account-name {
+  color: var(--color-text) !important;
+}
+html.dark .account-balance,
+html.dark .account-currency {
+  color: var(--color-text-muted) !important;
+}
+html.dark .global-error {
+  background: rgba(248, 113, 113, 0.15) !important;
+  color: var(--color-error) !important;
+  border-color: var(--color-expense) !important;
+}
+
+/* Dashboard - cards text, comparison, charts */
+html.dark .card-title,
+html.dark .card-subtitle {
+  color: var(--color-text-muted) !important;
+}
+html.dark .card-value {
+  color: var(--color-text) !important;
+}
+html.dark .summary-cards-fallback .card-income .card-value { color: var(--color-income) !important; }
+html.dark .summary-cards-fallback .card-expense .card-value { color: var(--color-expense) !important; }
+html.dark .summary-cards-fallback .card-savings .card-value { color: var(--color-link-hover) !important; }
+html.dark .summary-cards-fallback .card-balance .card-value { color: var(--color-text) !important; }
+
+html.dark .section-title {
+  color: var(--color-text-muted) !important;
+}
+
+html.dark .period-select,
+html.dark .period-select option {
+  background: var(--color-input-bg) !important;
+  border-color: var(--color-input-border) !important;
+  color: var(--color-text) !important;
+}
+
+html.dark .comparison-card {
+  background: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+}
+html.dark .comparison-title {
+  color: var(--color-text) !important;
+  border-color: var(--color-border) !important;
+}
+html.dark .comparison-label,
+html.dark .comparison-value.expected,
+html.dark .comparison-diff {
+  color: var(--color-text-muted) !important;
+}
+html.dark .comparison-value {
+  color: var(--color-text) !important;
+}
+html.dark .comparison-value.income { color: var(--color-income) !important; }
+html.dark .comparison-value.expense { color: var(--color-expense) !important; }
+html.dark .comparison-value.above { color: var(--color-income) !important; }
+html.dark .comparison-value.below { color: var(--color-expense) !important; }
+html.dark .comparison-row {
+  border-color: transparent;
+}
+
+html.dark .chart-card {
+  background: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+}
+html.dark .chart-title {
+  color: var(--color-text) !important;
+}
+
+html.dark .empty-state-card,
+html.dark .no-stats-message,
+html.dark .charts-empty {
+  background: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+  color: var(--color-text-muted) !important;
+}
+html.dark .empty-title,
+html.dark .no-stats-message p:first-child {
+  color: var(--color-text) !important;
+}
+html.dark .link {
+  color: var(--color-link-hover) !important;
+}
+html.dark .error-state p {
+  color: var(--color-error) !important;
+}
+html.dark .error-hint {
+  color: var(--color-text-muted) !important;
+}
+
+/* Plano Mensal (MonthlyFinance) */
+html.dark .expected-section {
+  background: linear-gradient(135deg, #1e3a5f 0%, #0f172a 100%) !important;
+  border-color: var(--color-border) !important;
+}
+html.dark .expected-label {
+  color: var(--color-text-muted) !important;
+}
+html.dark .expected-input {
+  background: var(--color-input-bg) !important;
+  border-color: var(--color-input-border) !important;
+  color: var(--color-text) !important;
+}
+
+html.dark .submitted-section {
+  background: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+}
+html.dark .submitted-row {
+  border-color: var(--color-border) !important;
+}
+html.dark .submitted-label {
+  color: var(--color-text-muted) !important;
+}
+html.dark .submitted-value {
+  color: var(--color-text) !important;
+}
+html.dark .btn-edit {
+  background: var(--color-table-row-hover) !important;
+  color: var(--color-text) !important;
+  border-color: var(--color-border) !important;
+}
+html.dark .btn-edit:hover {
+  background: var(--color-border) !important;
+}
+html.dark .btn-delete {
+  background: transparent !important;
+  color: var(--color-expense) !important;
+  border-color: var(--color-expense) !important;
+}
+html.dark .btn-delete:hover {
+  background: rgba(248, 113, 113, 0.15) !important;
+}
+
+/* Chart.js legend in dark mode */
+html.dark .chart-container canvas {
+  filter: brightness(0.95);
+}
+
+/* Dashboard - cards text, comparison, charts */
+html.dark .card-title,
+html.dark .card-subtitle {
+  color: var(--color-text-muted) !important;
+}
+html.dark .card-value {
+  color: var(--color-text) !important;
+}
+html.dark .summary-cards-fallback .card-income .card-value { color: var(--color-income) !important; }
+html.dark .summary-cards-fallback .card-expense .card-value { color: var(--color-expense) !important; }
+html.dark .summary-cards-fallback .card-savings .card-value { color: var(--color-link-hover) !important; }
+html.dark .summary-cards-fallback .card-balance .card-value { color: var(--color-text) !important; }
+
+html.dark .section-title {
+  color: var(--color-text-muted) !important;
+}
+
+html.dark .comparison-card {
+  background: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+}
+html.dark .comparison-title {
+  color: var(--color-text) !important;
+  border-color: var(--color-border) !important;
+}
+html.dark .comparison-label {
+  color: var(--color-text-muted) !important;
+}
+html.dark .comparison-value {
+  color: var(--color-text) !important;
+}
+html.dark .comparison-value.expected {
+  color: var(--color-text-muted) !important;
+}
+html.dark .comparison-value.income { color: var(--color-income) !important; }
+html.dark .comparison-value.expense { color: var(--color-expense) !important; }
+html.dark .comparison-value.above { color: var(--color-income) !important; }
+html.dark .comparison-value.below { color: var(--color-expense) !important; }
+html.dark .comparison-diff {
+  color: var(--color-text-muted) !important;
+  border-color: var(--color-border) !important;
+}
+html.dark .comparison-row {
+  border-color: var(--color-border) !important;
+}
+
+html.dark .chart-card {
+  background: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+}
+html.dark .chart-title {
+  color: var(--color-text) !important;
+}
+
+html.dark .empty-state-card {
+  background: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+}
+html.dark .empty-title {
+  color: var(--color-text) !important;
+}
+html.dark .empty-hint {
+  color: var(--color-text-muted) !important;
+}
+html.dark .no-stats-message {
+  background: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+  color: var(--color-text-muted) !important;
+}
+html.dark .no-stats-message p:first-child {
+  color: var(--color-text) !important;
+}
+html.dark .charts-empty {
+  background: var(--color-bg-card) !important;
+  color: var(--color-text-muted) !important;
+}
+
+html.dark .period-select {
+  background: var(--color-input-bg) !important;
+  border-color: var(--color-input-border) !important;
+  color: var(--color-text) !important;
+}
+
+html.dark .link {
+  color: var(--color-link-hover) !important;
+}
+html.dark .error-state p {
+  color: var(--color-expense) !important;
+}
+html.dark .error-hint {
+  color: var(--color-text-muted) !important;
+}
+
+/* Plano Mensal (MonthlyFinance) */
+html.dark .expected-section {
+  background: linear-gradient(135deg, #1e3a5f 0%, #0f172a 100%) !important;
+  border-color: var(--color-border) !important;
+}
+html.dark .expected-label {
+  color: var(--color-text-muted) !important;
+}
+html.dark .expected-input {
+  background: var(--color-input-bg) !important;
+  border-color: var(--color-input-border) !important;
+  color: var(--color-text) !important;
+}
+
+html.dark .submitted-section {
+  background: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+}
+html.dark .submitted-row {
+  border-color: var(--color-border) !important;
+}
+html.dark .submitted-label {
+  color: var(--color-text-muted) !important;
+}
+html.dark .submitted-value {
+  color: var(--color-text) !important;
+}
+html.dark .btn-edit {
+  background: var(--color-table-row-hover) !important;
+  color: var(--color-text) !important;
+  border-color: var(--color-border) !important;
+}
+html.dark .btn-edit:hover {
+  background: var(--color-border) !important;
+}
+html.dark .btn-delete {
+  background: transparent !important;
+  color: var(--color-expense) !important;
+  border-color: var(--color-expense) !important;
+}
+html.dark .btn-delete:hover {
+  background: rgba(248, 113, 113, 0.15) !important;
+}
+
+/* Accounts, Household - cards */
+html.dark .account-card,
+html.dark .plan-card {
+  background: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+}
+html.dark .account-card h3,
+html.dark .plan-card h2,
+html.dark .card-header h2 {
+  color: var(--color-text) !important;
+}
+html.dark .global-error {
+  background: rgba(248, 113, 113, 0.15) !important;
+  color: var(--color-expense) !important;
+  border-color: var(--color-expense) !important;
+}
+
+/* Dashboard - cards text, comparison, charts */
+html.dark .card-title,
+html.dark .card-subtitle {
+  color: var(--color-text-muted) !important;
+}
+html.dark .card-value {
+  color: var(--color-text) !important;
+}
+html.dark .summary-cards-fallback .card-income .card-value { color: var(--color-income) !important; }
+html.dark .summary-cards-fallback .card-expense .card-value { color: var(--color-expense) !important; }
+html.dark .summary-cards-fallback .card-savings .card-value { color: var(--color-link-hover) !important; }
+html.dark .summary-cards-fallback .card-balance .card-value { color: var(--color-text) !important; }
+
+html.dark .section-title {
+  color: var(--color-text-muted) !important;
+}
+
+html.dark .period-select {
+  background: var(--color-input-bg) !important;
+  border-color: var(--color-input-border) !important;
+  color: var(--color-text) !important;
+}
+
+html.dark .comparison-card {
+  background: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+}
+html.dark .comparison-title {
+  color: var(--color-text) !important;
+  border-color: var(--color-border) !important;
+}
+html.dark .comparison-label {
+  color: var(--color-text-muted) !important;
+}
+html.dark .comparison-value {
+  color: var(--color-text) !important;
+}
+html.dark .comparison-value.expected {
+  color: var(--color-text-muted) !important;
+}
+html.dark .comparison-value.income { color: var(--color-income) !important; }
+html.dark .comparison-value.expense { color: var(--color-expense) !important; }
+html.dark .comparison-value.above { color: var(--color-income) !important; }
+html.dark .comparison-value.below { color: var(--color-expense) !important; }
+html.dark .comparison-diff {
+  color: var(--color-text-muted) !important;
+  border-color: var(--color-border) !important;
+}
+
+html.dark .chart-card {
+  background: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+}
+html.dark .chart-title {
+  color: var(--color-text) !important;
+}
+
+html.dark .empty-state-card {
+  background: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+}
+html.dark .empty-title {
+  color: var(--color-text) !important;
+}
+html.dark .empty-hint,
+html.dark .no-stats-hint {
+  color: var(--color-text-muted) !important;
+}
+html.dark .no-stats-message {
+  background: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+  color: var(--color-text-muted) !important;
+}
+html.dark .no-stats-message p:first-child {
+  color: var(--color-text) !important;
+}
+html.dark .charts-empty {
+  background: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+  color: var(--color-text-muted) !important;
+}
+
+html.dark .link {
+  color: var(--color-link-hover) !important;
+}
+html.dark .error-state p {
+  color: var(--color-error) !important;
+}
+html.dark .error-hint {
+  color: var(--color-text-muted) !important;
+}
+
+/* Plano Mensal (MonthlyFinanceView) */
+html.dark .expected-section {
+  background: linear-gradient(135deg, #1e3a5f 0%, #0f172a 100%) !important;
+  border-color: var(--color-border) !important;
+}
+html.dark .expected-label {
+  color: var(--color-text-muted) !important;
+}
+html.dark .expected-input {
+  background: var(--color-input-bg) !important;
+  border-color: var(--color-input-border) !important;
+  color: var(--color-text) !important;
+}
+
+html.dark .submitted-section {
+  background: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+}
+html.dark .submitted-row {
+  border-color: var(--color-border) !important;
+}
+html.dark .submitted-label {
+  color: var(--color-text-muted) !important;
+}
+html.dark .submitted-value {
+  color: var(--color-text) !important;
+}
+html.dark .btn-edit {
+  background: var(--color-table-row-hover) !important;
+  color: var(--color-text) !important;
+  border-color: var(--color-border) !important;
+}
+html.dark .btn-edit:hover {
+  background: var(--color-border) !important;
+}
+html.dark .btn-delete {
+  background: transparent !important;
+  color: var(--color-expense) !important;
+  border-color: var(--color-expense) !important;
+}
+html.dark .btn-delete:hover {
+  background: rgba(248, 113, 113, 0.15) !important;
+}
+
+/* Accounts view */
+html.dark .account-card {
+  background: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+}
+html.dark .account-card .account-name,
+html.dark .account-card .account-balance {
+  color: var(--color-text) !important;
+}
+html.dark .account-card .account-type {
+  color: var(--color-text-muted) !important;
+}
+
+/* Household settings */
+html.dark .plan-card,
+html.dark .plan-card .card-header h2 {
+  background: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+  color: var(--color-text) !important;
+}
+html.dark .plan-card p,
+html.dark .invite-section label,
+html.dark .invite-section p {
+  color: var(--color-text-muted) !important;
+}
+
+/* Chart.js legend text (canvas parent) */
+html.dark .chart-container + * {
+  color: var(--color-text) !important;
+}
+
+/* Dashboard - cards text, comparison, charts */
+html.dark .card-title,
+html.dark .card-subtitle {
+  color: var(--color-text-muted) !important;
+}
+html.dark .card-value {
+  color: var(--color-text) !important;
+}
+html.dark .summary-cards-fallback .card-income .card-value { color: var(--color-income) !important; }
+html.dark .summary-cards-fallback .card-expense .card-value { color: var(--color-expense) !important; }
+html.dark .summary-cards-fallback .card-savings .card-value { color: var(--color-link-hover) !important; }
+html.dark .summary-cards-fallback .card-balance .card-value { color: var(--color-text) !important; }
+
+html.dark .section-title {
+  color: var(--color-text-muted) !important;
+}
+
+html.dark .period-select,
+html.dark .period-select option {
+  background: var(--color-input-bg) !important;
+  border-color: var(--color-input-border) !important;
+  color: var(--color-text) !important;
+}
+
+html.dark .comparison-card {
+  background: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+}
+html.dark .comparison-title {
+  color: var(--color-text) !important;
+  border-color: var(--color-border) !important;
+}
+html.dark .comparison-label {
+  color: var(--color-text-muted) !important;
+}
+html.dark .comparison-value {
+  color: var(--color-text) !important;
+}
+html.dark .comparison-value.expected {
+  color: var(--color-text-muted) !important;
+}
+html.dark .comparison-value.income { color: var(--color-income) !important; }
+html.dark .comparison-value.expense { color: var(--color-expense) !important; }
+html.dark .comparison-value.above { color: var(--color-income) !important; }
+html.dark .comparison-value.below { color: var(--color-expense) !important; }
+html.dark .comparison-diff {
+  color: var(--color-text-muted) !important;
+  border-color: var(--color-border) !important;
+}
+
+html.dark .chart-card {
+  background: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+}
+html.dark .chart-title {
+  color: var(--color-text) !important;
+}
+
+html.dark .empty-state-card {
+  background: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+}
+html.dark .empty-title {
+  color: var(--color-text) !important;
+}
+html.dark .empty-hint {
+  color: var(--color-text-muted) !important;
+}
+html.dark .no-stats-message {
+  background: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+  color: var(--color-text-muted) !important;
+}
+html.dark .no-stats-message p:first-child {
+  color: var(--color-text) !important;
+}
+html.dark .charts-empty {
+  background: var(--color-bg-card) !important;
+  color: var(--color-text-muted) !important;
+}
+html.dark .error-state p {
+  color: var(--color-error) !important;
+}
+html.dark .error-hint {
+  color: var(--color-text-muted) !important;
+}
+
+/* Links */
+html.dark .link {
+  color: var(--color-link-hover) !important;
+}
+
+/* Plano Mensal - expected & submitted sections */
+html.dark .expected-section {
+  background: linear-gradient(135deg, #1e3a5f 0%, #0f172a 100%) !important;
+  border-color: var(--color-border) !important;
+}
+html.dark .expected-label {
+  color: var(--color-text-muted) !important;
+}
+html.dark .expected-input {
+  background: var(--color-input-bg) !important;
+  border-color: var(--color-input-border) !important;
+  color: var(--color-text) !important;
+}
+
+html.dark .submitted-section {
+  background: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+}
+html.dark .submitted-row {
+  border-color: var(--color-border) !important;
+}
+html.dark .submitted-label {
+  color: var(--color-text-muted) !important;
+}
+html.dark .submitted-value {
+  color: var(--color-text) !important;
+}
+html.dark .btn-edit {
+  background: var(--color-table-row-hover) !important;
+  color: var(--color-text) !important;
+  border-color: var(--color-border) !important;
+}
+html.dark .btn-edit:hover {
+  background: var(--color-border) !important;
+}
+html.dark .btn-delete {
+  background: transparent !important;
+  color: var(--color-expense) !important;
+  border-color: var(--color-expense) !important;
+}
+html.dark .btn-delete:hover {
+  background: rgba(248, 113, 113, 0.15) !important;
+}
+
+/* Accounts view - account cards */
+html.dark .account-card {
+  background: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+}
+html.dark .account-card .account-name,
+html.dark .account-card .account-balance {
+  color: var(--color-text) !important;
+}
+html.dark .account-card .account-type {
+  color: var(--color-text-muted) !important;
+}
+
+/* Household settings */
+html.dark .plan-card,
+html.dark .plan-card .card-header h2 {
+  background: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+  color: var(--color-text) !important;
+}
+html.dark .plan-card p,
+html.dark .plan-card .plan-name {
+  color: var(--color-text-muted) !important;
+}
+html.dark .global-error {
+  background: rgba(248, 113, 113, 0.15) !important;
+  color: var(--color-error) !important;
+  border-color: var(--color-expense) !important;
+}
+
+/* Dashboard - cards text, comparison, charts */
+html.dark .card-title,
+html.dark .section-title {
+  color: var(--color-text-muted) !important;
+}
+
+html.dark .card-value {
+  color: var(--color-text) !important;
+}
+
+html.dark .card-subtitle {
+  color: var(--color-text-muted) !important;
+}
+
+html.dark .summary-cards-fallback .card-income .card-value { color: var(--color-income) !important; }
+html.dark .summary-cards-fallback .card-expense .card-value { color: var(--color-expense) !important; }
+html.dark .summary-cards-fallback .card-savings .card-value { color: var(--color-link-hover) !important; }
+
+html.dark .comparison-card {
+  background: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+}
+
+html.dark .comparison-title {
+  color: var(--color-text) !important;
+  border-color: var(--color-border) !important;
+}
+
+html.dark .comparison-label {
+  color: var(--color-text-muted) !important;
+}
+
+html.dark .comparison-value {
+  color: var(--color-text) !important;
+}
+
+html.dark .comparison-value.expected {
+  color: var(--color-text-muted) !important;
+}
+
+html.dark .comparison-value.income { color: var(--color-income) !important; }
+html.dark .comparison-value.expense { color: var(--color-expense) !important; }
+html.dark .comparison-value.above { color: var(--color-income) !important; }
+html.dark .comparison-value.below { color: var(--color-expense) !important; }
+
+html.dark .comparison-diff {
+  color: var(--color-text-muted) !important;
+  border-color: var(--color-border) !important;
+}
+
+html.dark .chart-card {
+  background: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+}
+
+html.dark .chart-title {
+  color: var(--color-text) !important;
+}
+
+html.dark .empty-state-card {
+  background: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+}
+
+html.dark .empty-title {
+  color: var(--color-text) !important;
+}
+
+html.dark .empty-hint {
+  color: var(--color-text-muted) !important;
+}
+
+html.dark .no-stats-message {
+  background: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+  color: var(--color-text-muted) !important;
+}
+
+html.dark .no-stats-message p:first-child {
+  color: var(--color-text) !important;
+}
+
+html.dark .charts-empty {
+  background: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+  color: var(--color-text-muted) !important;
+}
+
+html.dark .period-select {
+  background: var(--color-input-bg) !important;
+  border-color: var(--color-input-border) !important;
+  color: var(--color-text) !important;
+}
+
+html.dark .link {
+  color: var(--color-link-hover) !important;
+}
+
+html.dark .error-state p {
+  color: var(--color-error) !important;
+}
+
+html.dark .error-hint {
+  color: var(--color-text-muted) !important;
+}
+
+/* Plano Mensal (MonthlyFinance) */
+html.dark .expected-section {
+  background: linear-gradient(135deg, #1e3a5f 0%, #0f172a 100%) !important;
+  border-color: var(--color-border) !important;
+}
+
+html.dark .expected-label {
+  color: var(--color-text-muted) !important;
+}
+
+html.dark .expected-input {
+  background: var(--color-input-bg) !important;
+  border-color: var(--color-input-border) !important;
+  color: var(--color-text) !important;
+}
+
+html.dark .submitted-section {
+  background: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+}
+
+html.dark .submitted-row {
+  border-color: var(--color-border) !important;
+}
+
+html.dark .submitted-label {
+  color: var(--color-text-muted) !important;
+}
+
+html.dark .submitted-value {
+  color: var(--color-text) !important;
+}
+
+html.dark .btn-edit {
+  background: var(--color-table-row-hover) !important;
+  color: var(--color-text) !important;
+  border-color: var(--color-border) !important;
+}
+
+html.dark .btn-edit:hover {
+  background: var(--color-border) !important;
+}
+
+html.dark .btn-delete {
+  background: transparent !important;
+  color: var(--color-expense) !important;
+  border-color: var(--color-expense) !important;
+}
+
+html.dark .btn-delete:hover {
+  background: rgba(248, 113, 113, 0.15) !important;
+}
+
+html.dark .filter-select {
+  background: var(--color-input-bg) !important;
+  border-color: var(--color-input-border) !important;
+  color: var(--color-text) !important;
+}
+
+/* Accounts view */
+html.dark .account-card {
+  background: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+}
+
+html.dark .account-card .account-name,
+html.dark .account-card .account-balance {
+  color: var(--color-text) !important;
+}
+
+html.dark .account-card .account-type {
+  color: var(--color-text-muted) !important;
+}
+
+/* Household settings */
+html.dark .plan-card,
+html.dark .household-settings .card {
+  background: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+}
+
+html.dark .card-header h2,
+html.dark .plan-name {
+  color: var(--color-text) !important;
+}
+
+html.dark .plan-desc,
+html.dark .form-group label {
+  color: var(--color-text-muted) !important;
+}
+
+/* Chart.js legend text (canvas is inside chart-container) */
+html.dark .chart-container + *,
+html.dark [id^="chartjs"] {
+  color: var(--color-text) !important;
+}
+
+/* Dashboard - cards text, period select, sections */
+html.dark .card-title,
+html.dark .section-title {
+  color: var(--color-text-muted) !important;
+}
+
+html.dark .card-value,
+html.dark .card-subtitle {
+  color: var(--color-text) !important;
+}
+
+html.dark .summary-cards-fallback .card-income .card-value { color: var(--color-income) !important; }
+html.dark .summary-cards-fallback .card-expense .card-value { color: var(--color-expense) !important; }
+html.dark .summary-cards-fallback .card-savings .card-value { color: var(--color-link-hover) !important; }
+html.dark .summary-cards-fallback .card-balance .card-value { color: var(--color-text) !important; }
+
+html.dark .period-select {
+  background: var(--color-input-bg) !important;
+  border-color: var(--color-input-border) !important;
+  color: var(--color-text) !important;
+}
+
+/* Dashboard - comparison cards */
+html.dark .comparison-card {
+  background: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+}
+
+html.dark .comparison-title {
+  color: var(--color-text) !important;
+  border-color: var(--color-border) !important;
+}
+
+html.dark .comparison-label {
+  color: var(--color-text-muted) !important;
+}
+
+html.dark .comparison-value {
+  color: var(--color-text) !important;
+}
+
+html.dark .comparison-value.expected {
+  color: var(--color-text-muted) !important;
+}
+
+html.dark .comparison-value.income { color: var(--color-income) !important; }
+html.dark .comparison-value.expense { color: var(--color-expense) !important; }
+html.dark .comparison-value.above { color: var(--color-income) !important; }
+html.dark .comparison-value.below { color: var(--color-expense) !important; }
+
+html.dark .comparison-diff {
+  color: var(--color-text-muted) !important;
+  border-color: var(--color-border) !important;
+}
+
+/* Dashboard - chart cards, empty states */
+html.dark .chart-card {
+  background: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+}
+
+html.dark .chart-title {
+  color: var(--color-text) !important;
+}
+
+html.dark .empty-state-card {
+  background: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+}
+
+html.dark .empty-title {
+  color: var(--color-text) !important;
+}
+
+html.dark .empty-hint {
+  color: var(--color-text-muted) !important;
+}
+
+html.dark .no-stats-message {
+  background: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+  color: var(--color-text-muted) !important;
+}
+
+html.dark .no-stats-message p:first-child {
+  color: var(--color-text) !important;
+}
+
+html.dark .charts-empty {
+  background: var(--color-bg-card) !important;
+  color: var(--color-text-muted) !important;
+}
+
+html.dark .link {
+  color: var(--color-link-hover) !important;
+}
+
+html.dark .error-state p {
+  color: var(--color-error) !important;
+}
+
+html.dark .error-hint {
+  color: var(--color-text-muted) !important;
+}
+
+/* Plano Mensal - expected section, submitted section */
+html.dark .expected-section {
+  background: linear-gradient(135deg, #1e3a5f 0%, #0f172a 100%) !important;
+  border-color: var(--color-border) !important;
+}
+
+html.dark .expected-label {
+  color: var(--color-text-muted) !important;
+}
+
+html.dark .expected-input {
+  background: var(--color-input-bg) !important;
+  border-color: var(--color-input-border) !important;
+  color: var(--color-text) !important;
+}
+
+html.dark .submitted-section {
+  background: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+}
+
+html.dark .submitted-row {
+  border-color: var(--color-border) !important;
+}
+
+html.dark .submitted-label {
+  color: var(--color-text-muted) !important;
+}
+
+html.dark .submitted-value {
+  color: var(--color-text) !important;
+}
+
+html.dark .btn-edit {
+  background: var(--color-table-row-hover) !important;
+  color: var(--color-text) !important;
+  border-color: var(--color-border) !important;
+}
+
+html.dark .btn-edit:hover {
+  background: var(--color-border) !important;
+}
+
+html.dark .btn-delete {
+  background: transparent !important;
+  color: var(--color-expense) !important;
+  border-color: var(--color-expense) !important;
+}
+
+html.dark .btn-delete:hover {
+  background: rgba(248, 113, 113, 0.15) !important;
+}
+
+/* Accounts view - account cards */
+html.dark .account-card {
+  background: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+}
+
+html.dark .account-card .account-name,
+html.dark .account-card .account-balance {
+  color: var(--color-text) !important;
+}
+
+html.dark .account-card .account-type {
+  color: var(--color-text-muted) !important;
+}
+
+/* Household settings */
+html.dark .plan-card,
+html.dark .household-settings .card {
+  background: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+}
+
+html.dark .card-header h2,
+html.dark .plan-name {
+  color: var(--color-text) !important;
+}
+
+html.dark .plan-description,
+html.dark .danger-text {
+  color: var(--color-text-muted) !important;
+}
+
+/* Chart.js legend text (canvas parent) */
+html.dark .chart-container + *,
+html.dark [id^="chartjs"] {
+  color: var(--color-text) !important;
+}
+
+/* Dashboard - cards text */
+html.dark .card-title,
+html.dark .card-subtitle {
+  color: var(--color-text-muted) !important;
+}
+
+html.dark .card-value {
+  color: var(--color-text) !important;
+}
+
+html.dark .card-income .card-value { color: var(--color-income) !important; }
+html.dark .card-expense .card-value { color: var(--color-expense) !important; }
+html.dark .card-savings .card-value { color: var(--color-link-hover) !important; }
+html.dark .card-balance .card-value { color: var(--color-text) !important; }
+
+/* Dashboard - comparison cards */
+html.dark .comparison-card {
+  background: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+}
+
+html.dark .comparison-title {
+  color: var(--color-text) !important;
+  border-color: var(--color-border) !important;
+}
+
+html.dark .comparison-label {
+  color: var(--color-text-muted) !important;
+}
+
+html.dark .comparison-value {
+  color: var(--color-text) !important;
+}
+
+html.dark .comparison-value.expected {
+  color: var(--color-text-muted) !important;
+}
+
+html.dark .comparison-value.income { color: var(--color-income) !important; }
+html.dark .comparison-value.expense { color: var(--color-expense) !important; }
+html.dark .comparison-value.above { color: var(--color-income) !important; }
+html.dark .comparison-value.below { color: var(--color-expense) !important; }
+
+html.dark .comparison-diff {
+  color: var(--color-text-muted) !important;
+  border-color: var(--color-border) !important;
+}
+
+/* Dashboard - chart cards */
+html.dark .chart-card {
+  background: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+}
+
+html.dark .chart-title {
+  color: var(--color-text) !important;
+}
+
+/* Dashboard - empty/loading/error states */
+html.dark .empty-state-card {
+  background: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+}
+
+html.dark .empty-title {
+  color: var(--color-text) !important;
+}
+
+html.dark .empty-hint {
+  color: var(--color-text-muted) !important;
+}
+
+html.dark .no-stats-message {
+  background: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+  color: var(--color-text-muted) !important;
+}
+
+html.dark .no-stats-message p:first-child {
+  color: var(--color-text) !important;
+}
+
+html.dark .charts-empty {
+  background: var(--color-bg-card) !important;
+  color: var(--color-text-muted) !important;
+}
+
+html.dark .error-state p {
+  color: var(--color-expense) !important;
+}
+
+html.dark .error-hint {
+  color: var(--color-text-muted) !important;
+}
+
+/* Period select (Dashboard, etc.) */
+html.dark .period-select {
+  background: var(--color-input-bg) !important;
+  border-color: var(--color-input-border) !important;
+  color: var(--color-text) !important;
+}
+
+html.dark .section-title {
+  color: var(--color-text-muted) !important;
+}
+
+/* Links */
+html.dark .link {
+  color: var(--color-link-hover) !important;
+}
+
+/* Plano Mensal - expected section */
+html.dark .expected-section {
+  background: linear-gradient(135deg, #1e3a5f 0%, #0f172a 100%) !important;
+  border-color: var(--color-border) !important;
+}
+
+html.dark .expected-label {
+  color: #93c5fd !important;
+}
+
+html.dark .expected-input {
+  background: var(--color-input-bg) !important;
+  border-color: var(--color-input-border) !important;
+  color: var(--color-text) !important;
+}
+
+/* Plano Mensal - submitted section */
+html.dark .submitted-section {
+  background: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+}
+
+html.dark .submitted-row {
+  border-color: var(--color-border) !important;
+}
+
+html.dark .submitted-label {
+  color: var(--color-text-muted) !important;
+}
+
+html.dark .submitted-value {
+  color: var(--color-text) !important;
+}
+
+html.dark .btn-edit {
+  background: var(--color-table-row-hover) !important;
+  color: var(--color-text) !important;
+  border-color: var(--color-border) !important;
+}
+
+html.dark .btn-edit:hover {
+  background: var(--color-border) !important;
+}
+
+html.dark .btn-delete {
+  background: rgba(127, 29, 29, 0.3) !important;
+  color: var(--color-expense) !important;
+  border-color: var(--color-expense) !important;
+}
+
+html.dark .btn-delete:hover {
+  background: rgba(127, 29, 29, 0.5) !important;
+}
+
+/* Accounts view - account cards */
+html.dark .account-card {
+  background: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+}
+
+html.dark .account-card .account-name,
+html.dark .account-card .account-balance {
+  color: var(--color-text) !important;
+}
+
+html.dark .account-card .account-type {
+  color: var(--color-text-muted) !important;
+}
+
+/* Household settings */
+html.dark .plan-card,
+html.dark .plan-card .card-header h2 {
+  background: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+  color: var(--color-text) !important;
+}
+
+html.dark .global-error {
+  background: rgba(248, 113, 113, 0.15) !important;
+  color: var(--color-expense) !important;
+  border-color: var(--color-expense) !important;
+}
+
+/* Dashboard - cards text */
+html.dark .card-title {
+  color: var(--color-text-muted) !important;
+}
+
+html.dark .card-value {
+  color: var(--color-text) !important;
+}
+
+html.dark .card-subtitle {
+  color: var(--color-text-muted) !important;
+}
+
+html.dark .card-income .card-value { color: var(--color-income) !important; }
+html.dark .card-expense .card-value { color: var(--color-expense) !important; }
+html.dark .card-savings .card-value { color: var(--color-link-hover) !important; }
+html.dark .card-balance .card-value { color: var(--color-text) !important; }
+
+/* Dashboard - section titles, period select */
+html.dark .section-title {
+  color: var(--color-text-muted) !important;
+}
+
+html.dark .period-select {
+  background: var(--color-input-bg) !important;
+  border-color: var(--color-input-border) !important;
+  color: var(--color-text) !important;
+}
+
+/* Dashboard - comparison cards */
+html.dark .comparison-card {
+  background: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+}
+
+html.dark .comparison-title {
+  color: var(--color-text) !important;
+  border-color: var(--color-border) !important;
+}
+
+html.dark .comparison-label {
+  color: var(--color-text-muted) !important;
+}
+
+html.dark .comparison-value {
+  color: var(--color-text) !important;
+}
+
+html.dark .comparison-value.expected {
+  color: var(--color-text-muted) !important;
+}
+
+html.dark .comparison-value.income { color: var(--color-income) !important; }
+html.dark .comparison-value.expense { color: var(--color-expense) !important; }
+html.dark .comparison-value.above { color: var(--color-income) !important; }
+html.dark .comparison-value.below { color: var(--color-expense) !important; }
+
+html.dark .comparison-diff {
+  color: var(--color-text-muted) !important;
+  border-color: var(--color-border) !important;
+}
+
+/* Dashboard - chart cards */
+html.dark .chart-card {
+  background: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+}
+
+html.dark .chart-title {
+  color: var(--color-text) !important;
+}
+
+/* Dashboard - empty states */
+html.dark .empty-state-card {
+  background: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+}
+
+html.dark .empty-title {
+  color: var(--color-text) !important;
+}
+
+html.dark .empty-hint {
+  color: var(--color-text-muted) !important;
+}
+
+html.dark .no-stats-message {
+  background: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+  color: var(--color-text-muted) !important;
+}
+
+html.dark .no-stats-message p:first-child {
+  color: var(--color-text) !important;
+}
+
+html.dark .charts-empty {
+  background: var(--color-bg-card) !important;
+  color: var(--color-text-muted) !important;
+}
+
+html.dark .error-state p {
+  color: var(--color-error) !important;
+}
+
+/* Links */
+html.dark .link {
+  color: var(--color-link-hover) !important;
+}
+
+/* Plano Mensal - expected section */
+html.dark .expected-section {
+  background: linear-gradient(135deg, #0c4a6e 0%, #075985 100%) !important;
+  border-color: var(--color-border) !important;
+}
+
+html.dark .expected-label {
+  color: #7dd3fc !important;
+}
+
+html.dark .expected-input {
+  background: var(--color-input-bg) !important;
+  border-color: var(--color-input-border) !important;
+  color: var(--color-text) !important;
+}
+
+/* Plano Mensal - submitted section */
+html.dark .submitted-section {
+  background: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+}
+
+html.dark .submitted-row {
+  border-color: var(--color-border) !important;
+}
+
+html.dark .submitted-label {
+  color: var(--color-text-muted) !important;
+}
+
+html.dark .submitted-value {
+  color: var(--color-text) !important;
+}
+
+html.dark .btn-edit {
+  background: var(--color-table-row-hover) !important;
+  color: var(--color-text) !important;
+  border-color: var(--color-border) !important;
+}
+
+html.dark .btn-edit:hover {
+  background: var(--color-border) !important;
+}
+
+html.dark .btn-delete {
+  background: transparent !important;
+  color: var(--color-expense) !important;
+  border-color: rgba(248, 113, 113, 0.5) !important;
+}
+
+html.dark .btn-delete:hover {
+  background: rgba(127, 29, 29, 0.5) !important;
+}
+
+/* Accounts view - account cards */
+html.dark .account-card {
+  background: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+}
+
+html.dark .account-card .account-name,
+html.dark .account-card .account-balance {
+  color: var(--color-text) !important;
+}
+
+html.dark .account-card .account-type {
+  color: var(--color-text-muted) !important;
+}
+
+/* Household settings */
+html.dark .plan-card,
+html.dark .household-settings .card {
+  background: var(--color-bg-card) !important;
+  border-color: var(--color-border) !important;
+}
+
+html.dark .card-header h2,
+html.dark .plan-name {
+  color: var(--color-text) !important;
+}
+
+html.dark .plan-desc {
+  color: var(--color-text-muted) !important;
+}
+
+/* Chart.js legend - dark mode text */
+html.dark .chart-container canvas {
+  filter: brightness(1.1);
+}

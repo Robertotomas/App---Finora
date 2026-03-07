@@ -172,7 +172,7 @@ onMounted(() => {
   margin: 0 auto;
   padding: 2rem 1rem;
   min-height: 400px;
-  background: #fff;
+  background: var(--color-bg);
 }
 
 .page-header {
@@ -182,13 +182,13 @@ onMounted(() => {
 .page-header h1 {
   font-size: 1.75rem;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--color-text);
   margin: 0 0 0.25rem 0;
 }
 
 .subtitle {
   font-size: 0.9375rem;
-  color: #64748b;
+  color: var(--color-text-muted);
   margin: 0;
 }
 
@@ -196,7 +196,7 @@ onMounted(() => {
 .empty-state {
   text-align: center;
   padding: 3rem;
-  color: #64748b;
+  color: var(--color-text-muted);
 }
 
 .spinner {
@@ -214,7 +214,7 @@ onMounted(() => {
 }
 
 .link {
-  color: #2563eb;
+  color: var(--color-link-hover);
   text-decoration: none;
   font-size: 0.875rem;
 }
@@ -235,10 +235,11 @@ onMounted(() => {
 
 .filter-select {
   padding: 0.5rem 0.75rem;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--color-input-border);
   border-radius: 8px;
   font-size: 0.875rem;
-  background: white;
+  background: var(--color-input-bg);
+  color: var(--color-text);
   cursor: pointer;
 }
 
@@ -251,7 +252,7 @@ onMounted(() => {
 .section-title {
   font-size: 1rem;
   font-weight: 600;
-  color: #475569;
+  color: var(--color-text-muted);
   margin: 0 0 1rem 0;
 }
 
@@ -260,6 +261,11 @@ onMounted(() => {
   background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
   border-radius: 12px;
   border: 1px solid #bae6fd;
+}
+
+html.dark .expected-section {
+  background: linear-gradient(135deg, #1e3a5f 0%, #0f172a 100%) !important;
+  border-color: var(--color-border) !important;
 }
 
 .expected-grid {
@@ -281,14 +287,22 @@ onMounted(() => {
   color: #0c4a6e;
 }
 
+html.dark .expected-label {
+  color: var(--color-text-muted);
+}
+
 .expected-input {
   padding: 0.75rem 1rem;
   font-size: 1.125rem;
   font-weight: 600;
-  color: #0f172a;
-  background: white;
+  color: var(--color-text);
+  background: var(--color-input-bg);
   border: 1px solid #7dd3fc;
   border-radius: 8px;
+}
+
+html.dark .expected-input {
+  border-color: var(--color-input-border);
 }
 
 .expected-input:focus {
@@ -314,9 +328,9 @@ onMounted(() => {
 
 .submitted-section {
   padding: 1.5rem;
-  background: #f8fafc;
+  background: var(--color-bg-card);
   border-radius: 12px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--color-border);
 }
 
 .submitted-values {
@@ -328,7 +342,7 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
   padding: 0.5rem 0;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid var(--color-border);
 }
 
 .submitted-row:last-child {
@@ -337,13 +351,13 @@ onMounted(() => {
 
 .submitted-label {
   font-size: 0.875rem;
-  color: #64748b;
+  color: var(--color-text-muted);
 }
 
 .submitted-value {
   font-size: 1rem;
   font-weight: 600;
-  color: #0f172a;
+  color: var(--color-text);
 }
 
 .submitted-actions {
@@ -354,9 +368,9 @@ onMounted(() => {
 
 .btn-edit {
   padding: 0.5rem 1rem;
-  background: #f1f5f9;
-  color: #334155;
-  border: 1px solid #e2e8f0;
+  background: var(--color-btn-secondary-hover);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   font-size: 0.875rem;
   font-weight: 500;
@@ -364,14 +378,14 @@ onMounted(() => {
 }
 
 .btn-edit:hover {
-  background: #e2e8f0;
+  background: var(--color-border);
 }
 
 .btn-delete {
   padding: 0.5rem 1rem;
-  background: white;
-  color: #dc2626;
-  border: 1px solid #fecaca;
+  background: transparent;
+  color: var(--color-expense);
+  border: 1px solid var(--color-expense);
   border-radius: 8px;
   font-size: 0.875rem;
   font-weight: 500;
@@ -379,7 +393,7 @@ onMounted(() => {
 }
 
 .btn-delete:hover {
-  background: #fef2f2;
+  background: rgba(248, 113, 113, 0.15);
 }
 
 @media (max-width: 640px) {

@@ -327,7 +327,7 @@ const showContent = computed(() =>
   margin: 0 auto;
   padding: 2rem 1rem;
   min-height: 400px;
-  background: #fff;
+  background: var(--color-bg);
 }
 
 .page-header {
@@ -337,18 +337,18 @@ const showContent = computed(() =>
 .page-header h1 {
   font-size: 1.75rem;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--color-text);
   margin: 0 0 0.25rem 0;
 }
 
 .greeting {
   font-size: 1rem;
-  color: #334155;
+  color: var(--color-text);
   margin: 0 0 0.25rem 0;
 }
 
 .email {
-  color: #64748b;
+  color: var(--color-text-muted);
   font-size: 0.875rem;
   margin: 0;
 }
@@ -358,7 +358,7 @@ const showContent = computed(() =>
 .empty-state {
   text-align: center;
   padding: 3rem;
-  color: #64748b;
+  color: var(--color-text-muted);
 }
 
 .spinner {
@@ -376,12 +376,12 @@ const showContent = computed(() =>
 }
 
 .error-state p {
-  color: #dc2626;
+  color: var(--color-error);
 }
 
 .error-hint {
   font-size: 0.875rem;
-  color: #64748b !important;
+  color: var(--color-text-muted) !important;
   margin-top: 1rem;
 }
 
@@ -393,8 +393,8 @@ const showContent = computed(() =>
 }
 
 .empty-state-card {
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
   border-radius: 12px;
   padding: 3rem 2rem;
   margin-top: 1rem;
@@ -403,7 +403,7 @@ const showContent = computed(() =>
 .empty-title {
   font-size: 1.125rem;
   font-weight: 600;
-  color: #334155;
+  color: var(--color-text);
   margin: 0;
 }
 
@@ -414,7 +414,7 @@ const showContent = computed(() =>
 
 .empty-hint {
   font-size: 0.875rem;
-  color: #64748b;
+  color: var(--color-text-muted);
   margin: 0;
 }
 
@@ -425,7 +425,7 @@ const showContent = computed(() =>
 }
 
 .link {
-  color: #2563eb;
+  color: var(--color-link-hover);
   text-decoration: none;
   font-size: 0.875rem;
 }
@@ -471,10 +471,10 @@ const showContent = computed(() =>
 .period-select {
   padding: 0.4rem 0.75rem;
   font-size: 0.875rem;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--color-input-border);
   border-radius: 8px;
-  background: white;
-  color: #334155;
+  background: var(--color-input-bg);
+  color: var(--color-text);
   cursor: pointer;
 }
 
@@ -500,11 +500,11 @@ const showContent = computed(() =>
 }
 
 .summary-cards-fallback .card {
-  background: white;
+  background: var(--color-bg-card);
   border-radius: 12px;
   padding: 1.25rem;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
-  border: 1px solid #f1f5f9;
+  border: 1px solid var(--color-border);
 }
 
 .summary-cards-fallback .card-title {
@@ -547,11 +547,11 @@ const showContent = computed(() =>
 }
 
 .comparison-card {
-  background: white;
+  background: var(--color-bg-card);
   border-radius: 12px;
   padding: 1.25rem;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
-  border: 1px solid #f1f5f9;
+  border: 1px solid var(--color-border);
 }
 
 .comparison-title {
@@ -601,10 +601,10 @@ const showContent = computed(() =>
 .no-stats-message {
   text-align: center;
   padding: 2rem;
-  background: #f8fafc;
+  background: var(--color-bg-card);
   border-radius: 12px;
-  border: 1px dashed #e2e8f0;
-  color: #64748b;
+  border: 1px dashed var(--color-border);
+  color: var(--color-text-muted);
 }
 
 .no-stats-message p {
@@ -628,11 +628,11 @@ const showContent = computed(() =>
 }
 
 .chart-card {
-  background: white;
+  background: var(--color-bg-card);
   border-radius: 12px;
   padding: 1.25rem;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
-  border: 1px solid #f1f5f9;
+  border: 1px solid var(--color-border);
 }
 
 .chart-title {
@@ -645,9 +645,9 @@ const showContent = computed(() =>
 .charts-empty {
   text-align: center;
   padding: 2rem;
-  background: #f8fafc;
+  background: var(--color-bg-card);
   border-radius: 12px;
-  color: #64748b;
+  color: var(--color-text-muted);
 }
 
 .charts-empty p {
