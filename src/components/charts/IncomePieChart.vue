@@ -12,8 +12,8 @@ import type { IncomeByCategory } from '@/types/dashboard'
 ChartJS.register(ArcElement, Tooltip, Legend)
 
 const COLORS = [
-  '#059669', '#10b981', '#34d399', '#6ee7b7', '#a7f3d0',
-  '#14b8a6', '#2dd4bf', '#5eead4', '#99f6e4', '#ccfbf1',
+  '#2563eb', '#059669', '#7c3aed', '#0891b2', '#d97706',
+  '#4f46e5', '#0d9488', '#a855f7', '#0ea5e9', '#f59e0b',
 ]
 
 const props = defineProps<{

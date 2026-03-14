@@ -14,6 +14,6 @@ export const dashboardApi = {
     if (params?.month != null) searchParams.set('month', String(params.month))
     searchParams.set('trendMonths', String(params?.trendMonths ?? 6))
     const query = searchParams.toString()
-    return api.get<Dashboard>(`/api/dashboard${query ? `?${query}` : ''}`)
+    return api.get<Dashboard>(`/api/dashboard${query ? `?${query}` : ''}`, { timeout: 15000 })
   },
 }

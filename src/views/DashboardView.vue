@@ -9,6 +9,7 @@ import DashboardSkeleton from '@/components/DashboardSkeleton.vue'
 import ExpensesPieChart from '@/components/charts/ExpensesPieChart.vue'
 import IncomePieChart from '@/components/charts/IncomePieChart.vue'
 import MonthlyLineChart from '@/components/charts/MonthlyLineChart.vue'
+import BudgetProgressChart from '@/components/charts/BudgetProgressChart.vue'
 
 const authStore = useAuthStore()
 const householdStore = useHouseholdStore()
@@ -102,6 +103,10 @@ const hasBudgetForPeriod = computed(() => {
   budget.budgetStore.value
   return budget.hasBudget(householdStore.household?.id, selectedYear.value, selectedMonth.value)
 })
+
+const hasExpectedValuesForProgress = computed(() =>
+  budgetForPeriod.value.expectedIncome > 0 || budgetForPeriod.value.expectedExpenses > 0
+)
 
 const finalBalance = computed(() => dashboard.monthlyIncome.value - dashboard.monthlyExpenses.value)
 const savingsRate = computed(() => {
@@ -221,22 +226,6 @@ const showContent = computed(() =>
         </div>
       </div>
 
-      <div v-if="hasChartData" class="resumo-section">
-        <h2 class="section-title">Resumo</h2>
-        <div class="summary-cards summary-cards-fallback">
-          <div class="card card-balance">
-            <p class="card-title">Saldo final</p>
-            <p class="card-value">{{ formatCurrency(finalBalance, dashboard.currency.value) }}</p>
-            <p class="card-subtitle">Receitas − Despesas reais</p>
-          </div>
-          <div class="card card-income">
-            <p class="card-title">Taxa de poupança</p>
-            <p class="card-value">{{ formatPercent(savingsRate) }}</p>
-            <p class="card-subtitle">% da receita real poupada</p>
-          </div>
-        </div>
-      </div>
-
       <div v-if="hasChartData && hasBudgetForPeriod" class="comparison-section">
         <h2 class="section-title">Esperado vs Real</h2>
         <div class="comparison-grid">
@@ -295,6 +284,16 @@ const showContent = computed(() =>
       </div>
 
       <div v-if="hasChartData" class="charts-section">
+        <div v-if="hasBudgetForPeriod && hasExpectedValuesForProgress" class="chart-card chart-card-full">
+          <h3 class="chart-title">Progresso até ao esperado</h3>
+          <BudgetProgressChart
+            :real-income="dashboard.monthlyIncome.value"
+            :expected-income="budgetForPeriod.expectedIncome"
+            :real-expenses="dashboard.monthlyExpenses.value"
+            :expected-expenses="budgetForPeriod.expectedExpenses"
+            :format-currency="(v) => formatCurrency(v, dashboard.currency.value)"
+          />
+        </div>
         <div v-if="hasExpensesForChart" class="chart-card">
           <h3 class="chart-title">Despesas por categoria</h3>
           <ExpensesPieChart :data="expensesForChart" />
@@ -306,6 +305,22 @@ const showContent = computed(() =>
         <div class="chart-card">
           <h3 class="chart-title">Evolução mensal</h3>
           <MonthlyLineChart :data="trendForChart" />
+        </div>
+      </div>
+
+      <div v-if="hasChartData" class="resumo-section">
+        <h2 class="section-title">Resumo</h2>
+        <div class="summary-cards summary-cards-fallback">
+          <div class="card card-balance">
+            <p class="card-title">Saldo final</p>
+            <p class="card-value">{{ formatCurrency(finalBalance, dashboard.currency.value) }}</p>
+            <p class="card-subtitle">Receitas − Despesas reais</p>
+          </div>
+          <div class="card card-income">
+            <p class="card-title">Taxa de poupança</p>
+            <p class="card-value">{{ formatPercent(savingsRate) }}</p>
+            <p class="card-subtitle">% da receita real poupada</p>
+          </div>
         </div>
       </div>
 
@@ -647,6 +662,10 @@ const showContent = computed(() =>
   font-weight: 600;
   color: #334155;
   margin: 0 0 1rem 0;
+}
+
+.chart-card-full {
+  grid-column: 1 / -1;
 }
 
 .charts-empty {
