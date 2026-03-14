@@ -133,19 +133,20 @@ export function useMonthlyFinance(getHouseholdId: () => string | undefined) {
       const get = (key: string) =>
         res[key] ?? res[key.charAt(0).toUpperCase() + key.slice(1)]
 
+      const monthlyIncome = Number(get('monthlyIncome')) || 0
+      const monthlyExpenses = Number(get('monthlyExpenses')) || 0
       data.value = {
         totalBalance: Number(get('totalBalance')) || 0,
         currency: String(get('currency') || 'EUR'),
         year: Number(get('year')) || year.value,
         month: Number(get('month')) || month.value,
-        monthlyIncome: Number(get('monthlyIncome')) || 0,
-        monthlyExpenses: Number(get('monthlyExpenses')) || 0,
-        monthlySavings: 0,
+        monthlyIncome,
+        monthlyExpenses,
+        monthlySavings: monthlyIncome - monthlyExpenses,
         expensesByCategory: [],
+        incomeByCategory: [],
         monthlyTrend: [],
       }
-      data.value.monthlySavings =
-        data.value.monthlyIncome - data.value.monthlyExpenses
 
       const budget = getBudgetForPeriod()
       expectedIncome.value = budget.expectedIncome

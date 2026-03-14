@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { onMounted, computed, ref } from 'vue'
-import type { ExpenseByCategory, MonthlyTrend } from '@/types/dashboard'
+import type { ExpenseByCategory, IncomeByCategory, MonthlyTrend } from '@/types/dashboard'
 import { useAuthStore } from '@/stores/auth'
 import { useHouseholdStore } from '@/stores/household'
 import { useDashboard } from '@/composables/useDashboard'
 import { useMonthlyBudget } from '@/composables/useMonthlyBudget'
 import DashboardSkeleton from '@/components/DashboardSkeleton.vue'
 import ExpensesPieChart from '@/components/charts/ExpensesPieChart.vue'
+import IncomePieChart from '@/components/charts/IncomePieChart.vue'
 import MonthlyLineChart from '@/components/charts/MonthlyLineChart.vue'
 
 const authStore = useAuthStore()
@@ -82,6 +83,7 @@ const formattedExpenses = computed(() => formatCurrency(dashboard.monthlyExpense
 const formattedSavings = computed(() => formatCurrency(dashboard.monthlySavings.value, dashboard.currency.value))
 
 const expensesForChart = computed<ExpenseByCategory[]>(() => dashboard.expensesForChart?.value ?? [])
+const incomeForChart = computed<IncomeByCategory[]>(() => dashboard.incomeForChart?.value ?? [])
 const trendForChart = computed<MonthlyTrend[]>(() => dashboard.trendForChart?.value ?? [])
 const periodLabel = computed(() => dashboard.periodLabel.value)
 
@@ -89,6 +91,7 @@ const hasChartData = computed(
   () => dashboard.monthlyIncome.value > 0 || dashboard.monthlyExpenses.value > 0
 )
 const hasExpensesForChart = computed(() => dashboard.monthlyExpenses.value > 0)
+const hasIncomeForChart = computed(() => dashboard.monthlyIncome.value > 0)
 
 const budgetForPeriod = computed(() => {
   budget.budgetStore.value // reactive dependency
@@ -295,6 +298,10 @@ const showContent = computed(() =>
         <div v-if="hasExpensesForChart" class="chart-card">
           <h3 class="chart-title">Despesas por categoria</h3>
           <ExpensesPieChart :data="expensesForChart" />
+        </div>
+        <div v-if="hasIncomeForChart" class="chart-card">
+          <h3 class="chart-title">Receitas por categoria</h3>
+          <IncomePieChart :data="incomeForChart" />
         </div>
         <div class="chart-card">
           <h3 class="chart-title">Evolução mensal</h3>

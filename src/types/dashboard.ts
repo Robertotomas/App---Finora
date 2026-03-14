@@ -5,6 +5,13 @@ export interface ExpenseByCategory {
   percentage: number
 }
 
+export interface IncomeByCategory {
+  category: number
+  categoryName: string
+  amount: number
+  percentage: number
+}
+
 export interface MonthlyTrend {
   year: number
   month: number
@@ -23,5 +30,6 @@ export interface Dashboard {
   monthlyExpenses: number
   monthlySavings: number
   expensesByCategory: ExpenseByCategory[]
+  incomeByCategory: IncomeByCategory[]
   monthlyTrend: MonthlyTrend[]
 }

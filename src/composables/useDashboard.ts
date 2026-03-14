@@ -1,6 +1,6 @@
 import { ref, computed, shallowRef } from 'vue'
 import { dashboardApi } from '@/api/dashboard'
-import type { Dashboard, ExpenseByCategory, MonthlyTrend } from '@/types/dashboard'
+import type { Dashboard, ExpenseByCategory, IncomeByCategory, MonthlyTrend } from '@/types/dashboard'
 
 const CACHE_TTL_MS = 60_000 // 1 minute
 
@@ -32,6 +32,7 @@ export function useDashboard() {
   const monthlyExpenses = computed(() => data.value?.monthlyExpenses ?? 0)
   const monthlySavings = computed(() => data.value?.monthlySavings ?? 0)
   const expensesByCategory = computed(() => data.value?.expensesByCategory ?? [])
+  const incomeByCategory = computed(() => data.value?.incomeByCategory ?? [])
   const monthlyTrend = computed(() => data.value?.monthlyTrend ?? [])
   const currency = computed(() => data.value?.currency ?? 'EUR')
   const periodLabel = computed(() => {
@@ -47,6 +48,7 @@ export function useDashboard() {
       data.value.monthlyIncome === 0 &&
       data.value.monthlyExpenses === 0 &&
       data.value.expensesByCategory.length === 0 &&
+      data.value.incomeByCategory.length === 0 &&
       data.value.monthlyTrend.length === 0
     )
   })
@@ -58,6 +60,16 @@ export function useDashboard() {
     const exp = monthlyExpenses.value
     if (exp > 0) {
       return [{ category: 0, categoryName: 'Despesas', amount: exp, percentage: 100 }]
+    }
+    return []
+  })
+
+  const incomeForChart = computed<IncomeByCategory[]>(() => {
+    const cat = incomeByCategory.value
+    if (cat.length > 0) return cat
+    const inc = monthlyIncome.value
+    if (inc > 0) {
+      return [{ category: 0, categoryName: 'Receitas', amount: inc, percentage: 100 }]
     }
     return []
   })
@@ -85,6 +97,7 @@ export function useDashboard() {
   })
 
   const hasExpenses = computed(() => expensesForChart.value.length > 0)
+  const hasIncome = computed(() => incomeForChart.value.length > 0)
   const hasTrend = computed(() => trendForChart.value.length > 0)
 
   /** True when the selected month has no income and no expenses (uses same values as cards) */
@@ -130,6 +143,12 @@ export function useDashboard() {
         monthlyExpenses,
         monthlySavings: Number(get('monthlySavings')) || monthlyIncome - monthlyExpenses,
         expensesByCategory: arr('expensesByCategory').map((x: Record<string, unknown>) => ({
+          category: Number(x.category ?? x.Category) || 0,
+          categoryName: String(x.categoryName ?? x.CategoryName ?? ''),
+          amount: Number(x.amount ?? x.Amount) || 0,
+          percentage: Number(x.percentage ?? x.Percentage) || 0,
+        })),
+        incomeByCategory: arr('incomeByCategory').map((x: Record<string, unknown>) => ({
           category: Number(x.category ?? x.Category) || 0,
           categoryName: String(x.categoryName ?? x.CategoryName ?? ''),
           amount: Number(x.amount ?? x.Amount) || 0,
@@ -186,13 +205,16 @@ export function useDashboard() {
     monthlyExpenses,
     monthlySavings,
     expensesByCategory,
+    incomeByCategory,
     monthlyTrend,
     expensesForChart,
+    incomeForChart,
     trendForChart,
     currency,
     periodLabel,
     isEmpty,
     hasExpenses,
+    hasIncome,
     hasTrend,
     monthHasNoStats,
     fetch,
