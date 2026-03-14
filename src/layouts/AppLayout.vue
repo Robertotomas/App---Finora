@@ -1,10 +1,9 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useThemeStore } from '@/stores/theme'
 import iconMale from '@/assets/images/icon-male.png'
-import iconFemale from '@/assets/images/icon-female.png'
 import iconCreditCard from '@/assets/images/icon-credit-card.png'
 
 const authStore = useAuthStore()
@@ -51,15 +50,6 @@ function isActive(path: string) {
   return route.path.startsWith(path)
 }
 
-const isMale = computed(() => {
-  const g = authStore.user?.gender
-  return g === 'Male' || g === 0
-})
-
-const isFemale = computed(() => {
-  const g = authStore.user?.gender
-  return g === 'Female' || g === 1
-})
 </script>
 
 <template>
@@ -106,14 +96,8 @@ const isFemale = computed(() => {
               @click.stop="toggleMenu"
             >
               <img
-                v-if="authStore.isAuthenticated && isMale"
+                v-if="authStore.isAuthenticated"
                 :src="iconMale"
-                alt=""
-                class="user-avatar"
-              />
-              <img
-                v-else-if="authStore.isAuthenticated && isFemale"
-                :src="iconFemale"
                 alt=""
                 class="user-avatar"
               />
