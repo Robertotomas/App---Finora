@@ -21,6 +21,14 @@ export interface MonthlyTrend {
   savings: number
 }
 
+export interface AccountBalanceAtPeriod {
+  accountId: string
+  name: string
+  type: number
+  currency: string
+  balance: number
+}
+
 export interface Dashboard {
   totalBalance: number
   currency: string
@@ -32,4 +40,5 @@ export interface Dashboard {
   expensesByCategory: ExpenseByCategory[]
   incomeByCategory: IncomeByCategory[]
   monthlyTrend: MonthlyTrend[]
+  accountBalancesAtPeriod: AccountBalanceAtPeriod[]
 }

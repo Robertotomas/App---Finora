@@ -1,6 +1,6 @@
 import { ref, computed, shallowRef } from 'vue'
 import { dashboardApi } from '@/api/dashboard'
-import type { Dashboard, ExpenseByCategory, IncomeByCategory, MonthlyTrend } from '@/types/dashboard'
+import type { Dashboard, ExpenseByCategory, IncomeByCategory, MonthlyTrend, AccountBalanceAtPeriod } from '@/types/dashboard'
 
 const CACHE_TTL_MS = 60_000 // 1 minute
 
@@ -34,6 +34,7 @@ export function useDashboard() {
   const expensesByCategory = computed(() => data.value?.expensesByCategory ?? [])
   const incomeByCategory = computed(() => data.value?.incomeByCategory ?? [])
   const monthlyTrend = computed(() => data.value?.monthlyTrend ?? [])
+  const accountBalancesAtPeriod = computed(() => data.value?.accountBalancesAtPeriod ?? [])
   const currency = computed(() => data.value?.currency ?? 'EUR')
   const periodLabel = computed(() => {
     if (!data.value) return ''
@@ -162,6 +163,13 @@ export function useDashboard() {
           expenses: Number(x.expenses ?? x.Expenses) || 0,
           savings: Number(x.savings ?? x.Savings) || 0,
         })),
+        accountBalancesAtPeriod: arr('accountBalancesAtPeriod').map((x: Record<string, unknown>) => ({
+          accountId: String(x.accountId ?? x.AccountId ?? ''),
+          name: String(x.name ?? x.Name ?? ''),
+          type: Number(x.type ?? x.Type) ?? 0,
+          currency: String(x.currency ?? x.Currency ?? 'EUR'),
+          balance: Number(x.balance ?? x.Balance) ?? 0,
+        })) as AccountBalanceAtPeriod[],
       }
 
       data.value = mapped
@@ -207,6 +215,7 @@ export function useDashboard() {
     expensesByCategory,
     incomeByCategory,
     monthlyTrend,
+    accountBalancesAtPeriod,
     expensesForChart,
     incomeForChart,
     trendForChart,

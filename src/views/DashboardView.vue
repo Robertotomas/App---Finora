@@ -3,8 +3,10 @@ import { onMounted, computed, ref } from 'vue'
 import type { ExpenseByCategory, IncomeByCategory, MonthlyTrend } from '@/types/dashboard'
 import { useAuthStore } from '@/stores/auth'
 import { useHouseholdStore } from '@/stores/household'
+import { useAccountsStore } from '@/stores/accounts'
 import { useDashboard } from '@/composables/useDashboard'
 import { useMonthlyBudget } from '@/composables/useMonthlyBudget'
+import { ACCOUNT_TYPE_LABELS } from '@/types/account'
 import DashboardSkeleton from '@/components/DashboardSkeleton.vue'
 import ExpensesPieChart from '@/components/charts/ExpensesPieChart.vue'
 import IncomePieChart from '@/components/charts/IncomePieChart.vue'
@@ -13,6 +15,7 @@ import BudgetProgressChart from '@/components/charts/BudgetProgressChart.vue'
 
 const authStore = useAuthStore()
 const householdStore = useHouseholdStore()
+const accountsStore = useAccountsStore()
 const dashboard = useDashboard()
 const budget = useMonthlyBudget()
 const mounted = ref(false)
@@ -49,7 +52,10 @@ onMounted(async () => {
         if (householdStore.household) {
           dashboard.setPeriod(selectedYear.value, selectedMonth.value)
           dashboard.invalidateCache()
-          await dashboard.fetch(true)
+          await Promise.all([
+            dashboard.fetch(true),
+            accountsStore.fetchAccounts()
+          ])
         }
       })(),
       timeout(15000),
@@ -87,6 +93,20 @@ const expensesForChart = computed<ExpenseByCategory[]>(() => dashboard.expensesF
 const incomeForChart = computed<IncomeByCategory[]>(() => dashboard.incomeForChart?.value ?? [])
 const trendForChart = computed<MonthlyTrend[]>(() => dashboard.trendForChart?.value ?? [])
 const periodLabel = computed(() => dashboard.periodLabel.value)
+
+const accountsToShow = computed(() => {
+  const fromDashboard = dashboard.accountBalancesAtPeriod.value
+  if (fromDashboard.length > 0) {
+    return fromDashboard.map(a => ({
+      id: a.accountId,
+      name: a.name,
+      type: a.type,
+      balance: a.balance,
+      currency: a.currency
+    }))
+  }
+  return accountsStore.accounts
+})
 
 const hasChartData = computed(
   () => dashboard.monthlyIncome.value > 0 || dashboard.monthlyExpenses.value > 0
@@ -223,6 +243,26 @@ const showContent = computed(() =>
             <p class="card-value">{{ formattedSavings }}</p>
             <p class="card-subtitle">{{ periodLabel }}</p>
           </div>
+        </div>
+      </div>
+
+      <div v-if="accountsToShow.length > 0" class="accounts-section">
+        <h2 class="section-title">Contas</h2>
+        <div class="accounts-grid">
+          <router-link
+            v-for="account in accountsToShow"
+            :key="account.id"
+            :to="{ name: 'accounts' }"
+            class="account-card-link"
+          >
+            <div class="account-card">
+              <p class="account-card-name">{{ account.name }}</p>
+              <p class="account-card-balance" :class="{ negative: account.balance < 0 }">
+                {{ formatCurrency(account.balance, account.currency) }}
+              </p>
+              <span class="account-card-type">{{ ACCOUNT_TYPE_LABELS[account.type] }}</span>
+            </div>
+          </router-link>
         </div>
       </div>
 
@@ -480,7 +520,7 @@ const showContent = computed(() =>
 .section-title {
   font-size: 1rem;
   font-weight: 600;
-  color: #475569;
+  color: var(--color-text-muted);
   margin: 0;
 }
 
@@ -532,20 +572,20 @@ const showContent = computed(() =>
 .summary-cards-fallback .card-title {
   font-size: 0.8125rem;
   font-weight: 500;
-  color: #64748b;
+  color: var(--color-text-muted);
   margin: 0 0 0.5rem 0;
 }
 
 .summary-cards-fallback .card-value {
   font-size: 1.5rem;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--color-text);
   margin: 0;
 }
 
 .summary-cards-fallback .card-subtitle {
   font-size: 0.75rem;
-  color: #94a3b8;
+  color: var(--color-text-muted);
   margin: 0.25rem 0 0 0;
 }
 
@@ -555,6 +595,60 @@ const showContent = computed(() =>
 .summary-cards-fallback .card-balance .card-value { color: #0f172a; }
 
 .resumo-section {
+  margin-top: 0.5rem;
+}
+
+.accounts-section {
+  margin-top: 0.5rem;
+}
+
+.accounts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 1rem;
+}
+
+.account-card-link {
+  text-decoration: none;
+  color: inherit;
+}
+
+.account-card {
+  background: var(--color-bg-card);
+  border-radius: 12px;
+  padding: 1.25rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  border: 1px solid var(--color-border);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.account-card-link:hover .account-card {
+  border-color: var(--color-link-hover);
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.15);
+}
+
+.account-card-name {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--color-text);
+  margin: 0 0 0.5rem 0;
+}
+
+.account-card-balance {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--color-text);
+  margin: 0;
+}
+
+.account-card-balance.negative {
+  color: var(--color-expense);
+}
+
+.account-card-type {
+  display: inline-block;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
   margin-top: 0.5rem;
 }
 

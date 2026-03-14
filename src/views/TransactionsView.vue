@@ -204,6 +204,7 @@ async function handleCreate(payload: CreateTransactionRequest) {
   actionLoading.value = true
   try {
     await transactionsStore.createTransaction(payload)
+    await accountsStore.fetchAccounts()
     closeCreateModal()
   } catch {
     // Error shown in store
@@ -217,6 +218,7 @@ async function handleEdit(payload: CreateTransactionRequest) {
   actionLoading.value = true
   try {
     await transactionsStore.updateTransaction(transactionToEdit.value.id, payload)
+    await accountsStore.fetchAccounts()
     closeEditModal()
   } catch {
     // Error shown in store
@@ -230,6 +232,7 @@ async function handleDelete() {
   actionLoading.value = true
   try {
     await transactionsStore.deleteTransaction(transactionToDelete.value.id)
+    await accountsStore.fetchAccounts()
     closeDeleteModal()
   } catch {
     // Error shown in store
