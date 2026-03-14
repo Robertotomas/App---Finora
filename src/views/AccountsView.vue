@@ -5,9 +5,13 @@ import { useHouseholdStore } from '@/stores/household'
 import AccountFormModal from '@/components/AccountFormModal.vue'
 import ConfirmDeleteModal from '@/components/ConfirmDeleteModal.vue'
 import type { Account, CreateAccountRequest } from '@/types/account'
-import { ACCOUNT_TYPE_LABELS } from '@/types/account'
+import { ACCOUNT_TYPE_LABELS, AccountType } from '@/types/account'
 
 const accountsStore = useAccountsStore()
+
+function isCreditCard(type: Account['type']): boolean {
+  return Number(type) === AccountType.CreditCard
+}
 const householdStore = useHouseholdStore()
 
 const createModalOpen = ref(false)
@@ -156,7 +160,15 @@ function formatBalance(balance: number, currency: string): string {
           class="account-card"
         >
           <div class="card-main">
-            <h3 class="account-name">{{ account.name }}</h3>
+            <div class="account-header">
+              <span v-if="isCreditCard(account.type)" class="account-type-icon" aria-hidden="true">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect width="20" height="14" x="2" y="5" rx="2"/>
+                  <line x1="2" x2="22" y1="10" y2="10"/>
+                </svg>
+              </span>
+              <h3 class="account-name">{{ account.name }}</h3>
+            </div>
             <p class="account-balance" :class="{ negative: account.balance < 0 }">
               {{ formatBalance(account.balance, account.currency) }}
             </p>
@@ -329,11 +341,31 @@ function formatBalance(balance: number, currency: string): string {
   flex: 1;
 }
 
+.account-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.account-type-icon {
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  color: var(--color-text);
+}
+
+.account-type-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
 .account-name {
   font-size: 1.0625rem;
   font-weight: 600;
   color: #0f172a;
-  margin: 0 0 0.5rem 0;
+  margin: 0;
 }
 
 .account-balance {

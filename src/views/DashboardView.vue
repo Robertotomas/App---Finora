@@ -6,7 +6,11 @@ import { useHouseholdStore } from '@/stores/household'
 import { useAccountsStore } from '@/stores/accounts'
 import { useDashboard } from '@/composables/useDashboard'
 import { useMonthlyBudget } from '@/composables/useMonthlyBudget'
-import { ACCOUNT_TYPE_LABELS } from '@/types/account'
+import { ACCOUNT_TYPE_LABELS, AccountType } from '@/types/account'
+
+function isCreditCard(type: number): boolean {
+  return Number(type) === AccountType.CreditCard
+}
 import DashboardSkeleton from '@/components/DashboardSkeleton.vue'
 import ExpensesPieChart from '@/components/charts/ExpensesPieChart.vue'
 import IncomePieChart from '@/components/charts/IncomePieChart.vue'
@@ -256,7 +260,15 @@ const showContent = computed(() =>
             class="account-card-link"
           >
             <div class="account-card">
-              <p class="account-card-name">{{ account.name }}</p>
+              <div class="account-card-header">
+                <span v-if="isCreditCard(account.type)" class="account-card-icon" aria-hidden="true">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect width="20" height="14" x="2" y="5" rx="2"/>
+                    <line x1="2" x2="22" y1="10" y2="10"/>
+                  </svg>
+                </span>
+                <p class="account-card-name">{{ account.name }}</p>
+              </div>
               <p class="account-card-balance" :class="{ negative: account.balance < 0 }">
                 {{ formatCurrency(account.balance, account.currency) }}
               </p>
@@ -627,11 +639,31 @@ const showContent = computed(() =>
   box-shadow: 0 2px 8px rgba(37, 99, 235, 0.15);
 }
 
+.account-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.account-card-icon {
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  color: var(--color-text);
+}
+
+.account-card-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
 .account-card-name {
   font-size: 0.9375rem;
   font-weight: 600;
   color: var(--color-text);
-  margin: 0 0 0.5rem 0;
+  margin: 0;
 }
 
 .account-card-balance {

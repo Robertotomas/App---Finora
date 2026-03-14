@@ -11,6 +11,7 @@ const email = ref('')
 const password = ref('')
 const firstName = ref('')
 const lastName = ref('')
+const gender = ref<'Male' | 'Female' | ''>('')
 const error = ref('')
 const loading = ref(false)
 
@@ -23,6 +24,8 @@ async function handleSubmit() {
       password: password.value,
       firstName: firstName.value,
       lastName: lastName.value,
+      ...(gender.value === 'Male' && { gender: 0 }),
+      ...(gender.value === 'Female' && { gender: 1 }),
     })
     router.push('/dashboard')
   } catch (e: unknown) {
@@ -52,6 +55,14 @@ async function handleSubmit() {
         <div class="field">
           <label for="lastName">Apelido</label>
           <input id="lastName" v-model="lastName" type="text" required placeholder="Silva" />
+        </div>
+        <div class="field">
+          <label for="gender">Género</label>
+          <select id="gender" v-model="gender" class="field-select">
+            <option value="">—</option>
+            <option value="Male">Masculino</option>
+            <option value="Female">Feminino</option>
+          </select>
         </div>
         <div class="field">
           <label for="email">Email</label>
@@ -118,6 +129,19 @@ async function handleSubmit() {
   outline: none;
   border-color: var(--color-link-hover);
   box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+}
+.field-select {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--color-input-border);
+  border-radius: 0.375rem;
+  font-size: 1rem;
+  background: var(--color-input-bg);
+  color: var(--color-text);
+}
+.field-select:focus {
+  outline: none;
+  border-color: var(--color-link-hover);
 }
 .error {
   background: rgba(248, 113, 113, 0.15);

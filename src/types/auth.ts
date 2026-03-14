@@ -1,8 +1,11 @@
+export type Gender = 'Male' | 'Female' | 0 | 1
+
 export interface User {
   id: string
   email: string
   firstName: string
   lastName: string
+  gender?: Gender
   householdId?: string
 }
 
@@ -23,4 +26,5 @@ export interface RegisterRequest {
   password: string
   firstName: string
   lastName: string
+  gender?: Gender
 }
