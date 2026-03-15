@@ -227,8 +227,8 @@ function isActive(path: string) {
 }
 
 .sidebar-nav-icon-sm {
-  width: 24px;
-  height: 24px;
+  width: 25px;
+  height: 25px;
 }
 
 .sidebar-label {
