@@ -5,6 +5,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useThemeStore } from '@/stores/theme'
 import iconMale from '@/assets/images/icon-male.png'
 import iconCreditCard from '@/assets/images/icon-credit-card.png'
+import iconMonthly from '@/assets/images/icon-monthly.png'
 
 const authStore = useAuthStore()
 const themeStore = useThemeStore()
@@ -39,8 +40,8 @@ onMounted(() => {
 
 const navItems = [
   { to: '/dashboard', label: 'Dashboard', icon: '🏠' },
-  { to: '/monthly', label: 'Plano Mensal', icon: '📅' },
-  { to: '/accounts', label: 'Contas', iconImg: iconCreditCard },
+  { to: '/monthly', label: 'Plano Mensal', iconImg: iconMonthly },
+  { to: '/accounts', label: 'Contas', iconImg: iconCreditCard, iconClass: 'sidebar-nav-icon-sm' },
   { to: '/transactions', label: 'Transações', icon: '📋' },
   { to: '/household', label: 'Household', icon: '👥' },
 ]
@@ -66,7 +67,7 @@ function isActive(path: string) {
           :class="{ active: isActive(item.to) }"
         >
           <span class="sidebar-icon">
-            <img v-if="item.iconImg" :src="item.iconImg" alt="" class="sidebar-nav-icon" />
+            <img v-if="item.iconImg" :src="item.iconImg" alt="" class="sidebar-nav-icon" :class="item.iconClass" />
             <template v-else>{{ item.icon }}</template>
           </span>
           <span class="sidebar-label">{{ item.label }}</span>
@@ -213,16 +214,21 @@ function isActive(path: string) {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   flex-shrink: 0;
   font-size: 1.125rem;
 }
 
 .sidebar-nav-icon {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+}
+
+.sidebar-nav-icon-sm {
   width: 24px;
   height: 24px;
-  object-fit: contain;
 }
 
 .sidebar-label {
