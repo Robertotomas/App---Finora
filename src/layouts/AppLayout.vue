@@ -4,8 +4,10 @@ import { RouterLink, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useThemeStore } from '@/stores/theme'
 import iconMale from '@/assets/images/icon-male.png'
+import iconDashboard from '@/assets/images/icon-dashboard.png'
 import iconCreditCard from '@/assets/images/icon-credit-card.png'
 import iconMonthly from '@/assets/images/icon-monthly.png'
+import iconTransactions from '@/assets/images/icon-transactions.png'
 
 const authStore = useAuthStore()
 const themeStore = useThemeStore()
@@ -39,10 +41,10 @@ onMounted(() => {
 })
 
 const navItems = [
-  { to: '/dashboard', label: 'Dashboard', icon: '🏠' },
-  { to: '/monthly', label: 'Plano Mensal', iconImg: iconMonthly },
+  { to: '/dashboard', label: 'Dashboard', iconImg: iconDashboard },
+  { to: '/monthly', label: 'Plano Mensal', iconImg: iconMonthly, iconClass: 'sidebar-nav-icon-lg' },
   { to: '/accounts', label: 'Contas', iconImg: iconCreditCard, iconClass: 'sidebar-nav-icon-sm' },
-  { to: '/transactions', label: 'Transações', icon: '📋' },
+  { to: '/transactions', label: 'Transações', iconImg: iconTransactions, iconClass: 'sidebar-nav-icon-lg' },
   { to: '/household', label: 'Household', icon: '👥' },
 ]
 
@@ -221,14 +223,19 @@ function isActive(path: string) {
 }
 
 .sidebar-nav-icon {
-  width: 28px;
-  height: 28px;
+  width: 25px;
+  height: 25px;
   object-fit: contain;
 }
 
 .sidebar-nav-icon-sm {
   width: 25px;
   height: 25px;
+}
+
+.sidebar-nav-icon-lg {
+  width: 26px;
+  height: 26px;
 }
 
 .sidebar-label {
