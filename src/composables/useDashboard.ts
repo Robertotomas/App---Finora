@@ -118,7 +118,7 @@ export function useDashboard() {
     try {
       const response = await dashboardApi.get({
         year: year.value,
-        month: month.value,
+        month: month.value ?? undefined,
         trendMonths: 6,
       })
       // Axios wraps response in { data: ... }

@@ -8,7 +8,7 @@ export interface DashboardParams {
 }
 
 export const dashboardApi = {
-  get: (params?: DashboardParams) => {
+    get: (params?: DashboardParams) => {
     const searchParams = new URLSearchParams()
     if (params?.year != null) searchParams.set('year', String(params.year))
     if (params?.month != null) searchParams.set('month', String(params.month))

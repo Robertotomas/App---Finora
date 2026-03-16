@@ -135,25 +135,32 @@ function formatBalance(balance: number, currency: string): string {
         {{ accountsStore.error }}
       </div>
 
-      <div class="actions-bar">
-        <button type="button" class="btn-add" @click="openCreateModal">
-          + Nova conta
-        </button>
-      </div>
+      <div class="section-card">
+        <div class="section-header">
+          <h2 class="section-title">As minhas contas</h2>
+          <button
+            v-if="accountsStore.accounts.length > 0"
+            type="button"
+            class="btn-add"
+            @click="openCreateModal"
+          >
+            + Nova conta
+          </button>
+        </div>
 
-      <div v-if="accountsStore.loading && accountsStore.accounts.length === 0" class="loading-state">
-        <div class="spinner"></div>
-        <p>A carregar contas...</p>
-      </div>
+        <div v-if="accountsStore.loading && accountsStore.accounts.length === 0" class="loading-state loading-in-card">
+          <div class="spinner"></div>
+          <p>A carregar contas...</p>
+        </div>
 
-      <div v-else-if="accountsStore.accounts.length === 0" class="empty-state">
-        <p>Nenhuma conta ainda. Cria a tua primeira conta.</p>
-        <button type="button" class="btn-add" @click="openCreateModal">
-          + Nova conta
-        </button>
-      </div>
+        <div v-else-if="accountsStore.accounts.length === 0" class="section-empty">
+          <p class="section-empty-text">Ainda não tens contas.</p>
+          <button type="button" class="btn-section-add" @click="openCreateModal">
+            Adicionar a sua primeira conta
+          </button>
+        </div>
 
-      <div v-else class="cards-grid">
+        <div v-else class="cards-grid">
         <div
           v-for="account in accountsStore.accounts"
           :key="account.id"
@@ -194,6 +201,7 @@ function formatBalance(balance: number, currency: string): string {
               Eliminar
             </button>
           </div>
+        </div>
         </div>
       </div>
     </div>
@@ -301,23 +309,73 @@ function formatBalance(balance: number, currency: string): string {
   margin-bottom: 1rem;
 }
 
-.actions-bar {
-  margin-bottom: 1.5rem;
+.section-card {
+  background: var(--color-bg-card);
+  border-radius: 12px;
+  padding: 1.5rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  border: 1px solid var(--color-border);
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.25rem;
+}
+
+.section-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--color-text);
+  margin: 0;
+}
+
+.section-empty {
+  text-align: center;
+  padding: 2rem 1rem;
+}
+
+.section-empty-text {
+  font-size: 0.9375rem;
+  color: var(--color-text-muted);
+  margin: 0 0 1rem 0;
+}
+
+.btn-section-add {
+  padding: 0.625rem 1.25rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: #fff;
+  background: #166534;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.btn-section-add:hover {
+  background: #15803d;
+}
+
+.loading-in-card {
+  padding: 2rem;
 }
 
 .btn-add {
-  padding: 0.625rem 1.25rem;
-  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  padding: 0.5rem 1rem;
+  background: #166534;
   color: white;
   border: none;
   border-radius: 8px;
-  font-weight: 500;
+  font-weight: 600;
   font-size: 0.875rem;
   cursor: pointer;
+  transition: background 0.2s;
 }
 
 .btn-add:hover {
-  opacity: 0.95;
+  background: #15803d;
 }
 
 .cards-grid {

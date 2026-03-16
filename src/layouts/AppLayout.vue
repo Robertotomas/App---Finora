@@ -517,6 +517,6 @@ function isActive(path: string) {
   flex: 1;
   min-width: 0;
   overflow-y: auto;
-  padding: 1.5rem;
+  padding: 0 1.5rem 1.5rem;
 }
 </style>
