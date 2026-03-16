@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useThemeStore } from '@/stores/theme'
+import { useHouseholdStore } from '@/stores/household'
 import iconMale from '@/assets/images/icon-male.png'
 import iconDashboard from '@/assets/images/icon-dashboard.png'
 import iconCreditCard from '@/assets/images/icon-credit-card.png'
@@ -11,6 +12,7 @@ import iconTransactions from '@/assets/images/icon-transactions.png'
 
 const authStore = useAuthStore()
 const themeStore = useThemeStore()
+const householdStore = useHouseholdStore()
 const route = useRoute()
 const userMenuOpen = ref(false)
 
@@ -29,7 +31,14 @@ function toggleMenu() {
   userMenuOpen.value = !userMenuOpen.value
 }
 
-onMounted(() => {
+onMounted(async () => {
+  if (authStore.isAuthenticated) {
+    try {
+      await householdStore.fetchHousehold()
+    } catch {
+      /* handled in store */
+    }
+  }
   const handleClickOutside = (e: MouseEvent) => {
     const target = e.target as Element
     if (userMenuOpen.value && !target.closest('.user-menu')) {
@@ -38,6 +47,11 @@ onMounted(() => {
   }
   document.addEventListener('click', handleClickOutside)
   onUnmounted(() => document.removeEventListener('click', handleClickOutside))
+})
+
+const planLabel = computed(() => {
+  if (!householdStore.household) return 'Free'
+  return householdStore.isCouple ? 'Couple' : 'Free'
 })
 
 const navItems = [
@@ -57,41 +71,13 @@ function isActive(path: string) {
 
 <template>
   <div class="app-layout">
-    <!-- Sidebar lateral -->
-    <aside class="sidebar">
-      <div class="sidebar-brand">Finora</div>
-      <nav v-if="authStore.isAuthenticated" class="sidebar-nav">
-        <RouterLink
-          v-for="item in navItems"
-          :key="item.to"
-          :to="item.to"
-          class="sidebar-link"
-          :class="{ active: isActive(item.to) }"
-        >
-          <span class="sidebar-icon">
-            <img v-if="item.iconImg" :src="item.iconImg" alt="" class="sidebar-nav-icon" :class="item.iconClass" />
-            <template v-else>{{ item.icon }}</template>
-          </span>
-          <span class="sidebar-label">{{ item.label }}</span>
-        </RouterLink>
-      </nav>
-      <div v-if="authStore.isAuthenticated" class="sidebar-footer">
-        <button type="button" class="btn-sidebar btn-logout" @click="logout">Sair</button>
-      </div>
-      <div v-else class="sidebar-guest">
-        <RouterLink to="/login" class="sidebar-link">Entrar</RouterLink>
-        <RouterLink to="/register" class="sidebar-link btn-register">Registar</RouterLink>
-      </div>
-    </aside>
-
-    <!-- Área principal: top header + conteúdo -->
-    <div class="main-area">
-      <header class="top-header">
+    <!-- Barra superior - largura total -->
+    <header class="top-header">
+      <div class="header-brand"><span class="brand-bold">Finora</span>Flow</div>
+      <div class="header-actions">
         <div class="header-search">
-          <span class="search-icon">🔍</span>
           <input type="text" placeholder="Pesquisar..." class="search-input" />
         </div>
-        <div class="header-actions">
           <div class="user-menu">
             <button
               type="button"
@@ -149,6 +135,37 @@ function isActive(path: string) {
           </div>
         </div>
       </header>
+
+    <!-- Sidebar + conteúdo (abaixo da barra superior) -->
+    <div class="content-row">
+      <aside class="sidebar">
+        <div v-if="authStore.isAuthenticated" class="sidebar-plan">
+          <span class="sidebar-plan-value">{{ planLabel }}</span>
+        </div>
+        <nav v-if="authStore.isAuthenticated" class="sidebar-nav">
+          <RouterLink
+            v-for="item in navItems"
+            :key="item.to"
+            :to="item.to"
+            class="sidebar-link"
+            :class="{ active: isActive(item.to) }"
+          >
+            <span class="sidebar-icon">
+              <img v-if="item.iconImg" :src="item.iconImg" alt="" class="sidebar-nav-icon" :class="item.iconClass" />
+              <template v-else>{{ item.icon }}</template>
+            </span>
+            <span class="sidebar-label">{{ item.label }}</span>
+          </RouterLink>
+        </nav>
+        <div v-if="authStore.isAuthenticated" class="sidebar-footer">
+          <button type="button" class="btn-sidebar btn-logout" @click="logout">Sair</button>
+        </div>
+        <div v-else class="sidebar-guest">
+          <RouterLink to="/login" class="sidebar-link">Entrar</RouterLink>
+          <RouterLink to="/register" class="sidebar-link btn-register">Registar</RouterLink>
+        </div>
+      </aside>
+
       <main class="main-content">
         <RouterView />
       </main>
@@ -159,11 +176,18 @@ function isActive(path: string) {
 <style scoped>
 .app-layout {
   display: flex;
+  flex-direction: column;
   min-height: 100vh;
   background: var(--color-bg);
 }
 
-/* Sidebar lateral */
+.content-row {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Sidebar lateral - verde no light mode, cinza no dark mode (via variáveis) */
 .sidebar {
   width: 240px;
   min-width: 240px;
@@ -174,16 +198,20 @@ function isActive(path: string) {
   border-right: 1px solid var(--color-sidebar-border);
 }
 
-.sidebar-brand {
-  font-size: 1.25rem;
-  font-weight: 700;
-  padding: 1.25rem 1.5rem;
+.sidebar-plan {
+  padding: 1rem 1.5rem 0.75rem;
+  border-bottom: 1px solid var(--color-sidebar-border);
+}
+
+.sidebar-plan-value {
+  font-size: 0.875rem;
+  font-weight: 600;
   color: var(--color-sidebar-text);
 }
 
 .sidebar-nav {
   flex: 1;
-  padding: 0.5rem 0;
+  padding: 0.75rem 0 0.5rem;
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
@@ -269,6 +297,14 @@ function isActive(path: string) {
   background: var(--color-sidebar-hover);
 }
 
+.sidebar-guest .sidebar-link {
+  color: var(--color-sidebar-text);
+}
+
+.sidebar-guest .sidebar-link:hover {
+  background: var(--color-sidebar-hover);
+}
+
 .sidebar-guest {
   padding: 1rem 1.5rem;
   display: flex;
@@ -286,18 +322,11 @@ function isActive(path: string) {
   background: var(--color-sidebar-active);
 }
 
-/* Top header */
-.main-area {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
+/* Barra superior - largura total */
 .top-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 1.5rem;
   padding: 1rem 1.5rem;
   min-height: 56px;
   background: var(--color-header-bg);
@@ -305,17 +334,18 @@ function isActive(path: string) {
   flex-shrink: 0;
 }
 
-.header-search {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  max-width: 320px;
-  flex: 1;
+.header-brand {
+  font-size: 1.25rem;
+  color: var(--color-logo);
+  flex-shrink: 0;
 }
 
-.search-icon {
-  font-size: 1rem;
-  opacity: 0.6;
+.header-brand .brand-bold {
+  font-weight: 700;
+}
+
+.header-search {
+  max-width: 200px;
 }
 
 .search-input {
@@ -341,6 +371,11 @@ function isActive(path: string) {
   display: flex;
   align-items: center;
   gap: 1rem;
+  margin-left: auto;
+}
+
+.header-actions .search-input {
+  width: 100%;
 }
 
 .user-menu {
@@ -352,17 +387,18 @@ function isActive(path: string) {
   align-items: center;
   gap: 0.625rem;
   padding: 0.25rem 0;
-  font-size: 1.0625rem;
+  font-size: 0.9375rem;
   font-weight: 650;
   color: var(--color-text);
   background: none;
   border: none;
   cursor: pointer;
   transition: color 0.15s;
+  font-family: inherit;
 }
 
 .user-trigger:hover {
-  color: var(--color-link-hover);
+  color: var(--color-text-muted);
 }
 
 .user-avatar {
@@ -470,14 +506,16 @@ function isActive(path: string) {
 }
 
 .user-name {
-  font-size: 1.0625rem;
+  font-size: 0.9375rem;
   font-weight: 700;
   color: inherit;
+  font-family: inherit;
 }
 
 /* Conteúdo principal */
 .main-content {
   flex: 1;
+  min-width: 0;
   overflow-y: auto;
   padding: 1.5rem;
 }
