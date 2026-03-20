@@ -3,7 +3,7 @@ import { ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { RouterLink } from 'vue-router'
-import logoFinoraflow from '@/assets/images/finoraflow-logo.png'
+import iconFinoraFlow from '@/assets/images/finoraflow-icon.png'
 
 const router = useRouter()
 const route = useRoute()
@@ -33,7 +33,12 @@ async function handleSubmit() {
 <template>
   <div class="auth-page">
     <div class="auth-brand auth-brand-hero">
-      <img :src="logoFinoraflow" alt="FinoraFlow" class="auth-brand-hero-img" width="483" height="110" />
+      <div class="auth-brand-hero-stack">
+        <img :src="iconFinoraFlow" alt="" class="auth-brand-hero-img" width="380" height="261" />
+        <p class="auth-brand-wordmark">
+          <span class="auth-brand-wordmark-bold">Finora</span>Flow
+        </p>
+      </div>
     </div>
     <div class="auth-body">
     <div class="auth-card">

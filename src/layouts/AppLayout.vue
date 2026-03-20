@@ -9,7 +9,7 @@ import iconDashboard from '@/assets/images/icon-dashboard.png'
 import iconCreditCard from '@/assets/images/icon-credit-card.png'
 import iconMonthly from '@/assets/images/icon-monthly.png'
 import iconTransactions from '@/assets/images/icon-transactions.png'
-import logoFinoraflow from '@/assets/images/finoraflow-logo.png'
+import iconFinoraFlow from '@/assets/images/finoraflow-icon.png'
 
 const authStore = useAuthStore()
 const themeStore = useThemeStore()
@@ -74,8 +74,11 @@ function isActive(path: string) {
   <div class="app-layout">
     <!-- Barra superior - largura total -->
     <header class="top-header">
-      <RouterLink to="/dashboard" class="header-brand">
-        <img :src="logoFinoraflow" alt="FinoraFlow" class="header-brand-img" width="483" height="110" />
+      <RouterLink to="/dashboard" class="header-brand" aria-label="FinoraFlow — ir para o painel">
+        <img :src="iconFinoraFlow" alt="" class="header-brand-img" width="380" height="261" />
+        <span class="header-brand-text">
+          <span class="header-brand-bold">Finora</span>Flow
+        </span>
       </RouterLink>
       <div class="header-actions">
         <div class="header-search">
@@ -340,18 +343,19 @@ function isActive(path: string) {
   min-height: var(--top-bar-height);
   max-height: var(--top-bar-height);
   box-sizing: border-box;
-  background: #ffffff;
-  border-bottom: 1px solid #e2e8f0;
-  box-shadow: 0 4px 14px -6px rgba(15, 23, 42, 0.1);
+  background: var(--color-header-bg);
+  border-bottom: 1px solid var(--color-header-border);
+  box-shadow: var(--color-top-header-shadow);
   flex-shrink: 0;
 }
 
 .header-brand {
   display: flex;
   align-items: center;
+  gap: 0.5rem;
   flex-shrink: 0;
   height: auto;
-  line-height: 0;
+  line-height: 1;
   text-decoration: none;
   cursor: pointer;
   background: transparent;
@@ -365,12 +369,24 @@ function isActive(path: string) {
   display: block;
   width: auto;
   height: auto;
-  /* Ícone mais pequeno; altura da barra (--top-bar-height) não depende disto */
-  max-height: 36px;
-  max-width: min(480px, max(90px, calc(100vw - 13rem)));
+  /* Só o símbolo F — proporção ~380×261 */
+  max-height: 34px;
+  max-width: min(62px, 16vw);
   object-fit: contain;
   object-position: left center;
   background: transparent;
+}
+
+.header-brand-text {
+  font-size: 1.125rem;
+  font-weight: 500;
+  color: var(--color-logo);
+  letter-spacing: -0.03em;
+  white-space: nowrap;
+}
+
+.header-brand-bold {
+  font-weight: 800;
 }
 
 .header-search {
@@ -397,30 +413,30 @@ function isActive(path: string) {
   border-color: var(--color-link-hover);
 }
 
-/* Pesquisa na barra branca: estilo claro, compacta */
+/* Pesquisa na barra superior: segue tema claro / escuro */
 .top-header .search-input {
   padding: 0.3rem 0.65rem;
   font-size: 0.8125rem;
-  background: #f8fafc;
-  border-color: #e2e8f0;
-  color: #0f172a;
+  background: var(--color-input-bg);
+  border-color: var(--color-input-border);
+  color: var(--color-text);
 }
 
 .top-header .search-input::placeholder {
-  color: #64748b;
+  color: var(--color-text-muted);
 }
 
 .top-header .search-input:focus {
-  border-color: #166534;
-  box-shadow: 0 0 0 2px rgba(22, 101, 52, 0.18);
+  border-color: var(--color-link-hover);
+  box-shadow: 0 0 0 2px var(--color-top-header-focus-ring);
 }
 
 .top-header .user-trigger {
-  color: #1e293b;
+  color: var(--color-text);
 }
 
 .top-header .user-trigger:hover {
-  color: #64748b;
+  color: var(--color-text-muted);
 }
 
 .header-actions {

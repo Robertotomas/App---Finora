@@ -36,6 +36,8 @@
   /* Transição suave verde → conteúdo (sombra para o lado direito) */
   --color-sidebar-edge-shadow: 18px 0 56px -22px rgba(22, 101, 52, 0.38),
     8px 0 24px -8px rgba(15, 23, 42, 0.08);
+  --color-top-header-shadow: 0 4px 14px -6px rgba(15, 23, 42, 0.1);
+  --color-top-header-focus-ring: rgba(37, 99, 235, 0.22);
 }
 
 html.dark {
@@ -74,6 +76,8 @@ html.dark {
   --color-sidebar-active: #475569;
   --color-sidebar-edge-shadow: 14px 0 40px -12px rgba(0, 0, 0, 0.55),
     6px 0 20px -6px rgba(0, 0, 0, 0.35);
+  --color-top-header-shadow: 0 4px 20px -4px rgba(0, 0, 0, 0.45);
+  --color-top-header-focus-ring: rgba(96, 165, 250, 0.35);
 }
 
 * {
