@@ -5,6 +5,18 @@ const router = createRouter({
   history: createWebHistory(),
   routes: [
     {
+      path: '/login',
+      name: 'login',
+      component: () => import('@/views/LoginView.vue'),
+      meta: { requiresAuth: false, guestOnly: true },
+    },
+    {
+      path: '/register',
+      name: 'register',
+      component: () => import('@/views/RegisterView.vue'),
+      meta: { requiresAuth: false, guestOnly: true },
+    },
+    {
       path: '/',
       component: () => import('@/layouts/AppLayout.vue'),
       children: [
@@ -13,18 +25,6 @@ const router = createRouter({
           name: 'home',
           component: () => import('@/views/HomeView.vue'),
           meta: { requiresAuth: false },
-        },
-        {
-          path: 'login',
-          name: 'login',
-          component: () => import('@/views/LoginView.vue'),
-          meta: { requiresAuth: false, guestOnly: true },
-        },
-        {
-          path: 'register',
-          name: 'register',
-          component: () => import('@/views/RegisterView.vue'),
-          meta: { requiresAuth: false, guestOnly: true },
         },
         {
           path: 'dashboard',
