@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { RouterLink, useRoute } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useThemeStore } from '@/stores/theme'
 import { useHouseholdStore } from '@/stores/household'
@@ -15,11 +15,13 @@ const authStore = useAuthStore()
 const themeStore = useThemeStore()
 const householdStore = useHouseholdStore()
 const route = useRoute()
+const router = useRouter()
 const userMenuOpen = ref(false)
 
 function logout() {
   userMenuOpen.value = false
   authStore.logout()
+  router.replace({ name: 'login' })
 }
 
 function setTheme(dark: boolean) {
