@@ -33,6 +33,9 @@
   --color-sidebar-border: #15803d;
   --color-sidebar-hover: #15803d;
   --color-sidebar-active: #15803d;
+  /* Transição suave verde → conteúdo (sombra para o lado direito) */
+  --color-sidebar-edge-shadow: 18px 0 56px -22px rgba(22, 101, 52, 0.38),
+    8px 0 24px -8px rgba(15, 23, 42, 0.08);
 }
 
 html.dark {
@@ -69,6 +72,8 @@ html.dark {
   --color-sidebar-border: #334155;
   --color-sidebar-hover: #334155;
   --color-sidebar-active: #475569;
+  --color-sidebar-edge-shadow: 14px 0 40px -12px rgba(0, 0, 0, 0.55),
+    6px 0 20px -6px rgba(0, 0, 0, 0.35);
 }
 
 * {

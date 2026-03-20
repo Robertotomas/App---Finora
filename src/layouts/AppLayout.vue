@@ -9,6 +9,7 @@ import iconDashboard from '@/assets/images/icon-dashboard.png'
 import iconCreditCard from '@/assets/images/icon-credit-card.png'
 import iconMonthly from '@/assets/images/icon-monthly.png'
 import iconTransactions from '@/assets/images/icon-transactions.png'
+import logoFinoraflow from '@/assets/images/finoraflow-logo.png'
 
 const authStore = useAuthStore()
 const themeStore = useThemeStore()
@@ -74,7 +75,7 @@ function isActive(path: string) {
     <!-- Barra superior - largura total -->
     <header class="top-header">
       <RouterLink to="/dashboard" class="header-brand">
-        <span class="brand-bold">Finora</span>Flow
+        <img :src="logoFinoraflow" alt="FinoraFlow" class="header-brand-img" width="483" height="110" />
       </RouterLink>
       <div class="header-actions">
         <div class="header-search">
@@ -197,7 +198,11 @@ function isActive(path: string) {
   color: var(--color-sidebar-text);
   display: flex;
   flex-direction: column;
-  border-right: 1px solid var(--color-sidebar-border);
+  /* Sem linha dura: sombra suave “derrete” o verde para o branco do conteúdo */
+  border-right: none;
+  box-shadow: var(--color-sidebar-edge-shadow);
+  position: relative;
+  z-index: 1;
 }
 
 .sidebar-plan {
@@ -324,36 +329,53 @@ function isActive(path: string) {
   background: var(--color-sidebar-active);
 }
 
-/* Barra superior - largura total */
+/* Barra fixa — um pouco mais alta para o logo ganhar escala; largura do PNG generosa */
 .top-header {
+  --top-bar-height: 66px;
   display: flex;
   align-items: center;
-  gap: 1.5rem;
-  padding: 1rem 1.5rem;
-  min-height: 56px;
-  background: var(--color-header-bg);
-  border-bottom: 2px solid var(--color-header-border);
+  gap: 1rem;
+  padding: 0 1.25rem;
+  height: var(--top-bar-height);
+  min-height: var(--top-bar-height);
+  max-height: var(--top-bar-height);
+  box-sizing: border-box;
+  background: #ffffff;
+  border-bottom: 1px solid #e2e8f0;
+  box-shadow: 0 4px 14px -6px rgba(15, 23, 42, 0.1);
   flex-shrink: 0;
 }
 
 .header-brand {
-  font-size: 1.25rem;
-  color: var(--color-logo);
+  display: flex;
+  align-items: center;
   flex-shrink: 0;
+  height: auto;
+  line-height: 0;
   text-decoration: none;
   cursor: pointer;
+  background: transparent;
 }
 
 .header-brand:hover {
-  opacity: 0.85;
+  opacity: 0.88;
 }
 
-.header-brand .brand-bold {
-  font-weight: 700;
+.header-brand-img {
+  display: block;
+  width: auto;
+  height: auto;
+  /* Ícone mais pequeno; altura da barra (--top-bar-height) não depende disto */
+  max-height: 36px;
+  max-width: min(480px, max(90px, calc(100vw - 13rem)));
+  object-fit: contain;
+  object-position: left center;
+  background: transparent;
 }
 
 .header-search {
-  max-width: 200px;
+  max-width: min(200px, 26vw);
+  flex-shrink: 1;
 }
 
 .search-input {
@@ -373,6 +395,32 @@ function isActive(path: string) {
 
 .search-input:focus {
   border-color: var(--color-link-hover);
+}
+
+/* Pesquisa na barra branca: estilo claro, compacta */
+.top-header .search-input {
+  padding: 0.3rem 0.65rem;
+  font-size: 0.8125rem;
+  background: #f8fafc;
+  border-color: #e2e8f0;
+  color: #0f172a;
+}
+
+.top-header .search-input::placeholder {
+  color: #64748b;
+}
+
+.top-header .search-input:focus {
+  border-color: #166534;
+  box-shadow: 0 0 0 2px rgba(22, 101, 52, 0.18);
+}
+
+.top-header .user-trigger {
+  color: #1e293b;
+}
+
+.top-header .user-trigger:hover {
+  color: #64748b;
 }
 
 .header-actions {

@@ -7,7 +7,7 @@ const authStore = useAuthStore()
 
 <template>
   <div class="home">
-    <h1>Bem-vindo à Finora</h1>
+    <h1>Bem-vindo ao FinoraFlow</h1>
     <p>Gerir as tuas finanças de forma simples e eficaz.</p>
     <div class="actions">
       <RouterLink v-if="!authStore.isAuthenticated" to="/login" class="btn btn-secondary">Entrar</RouterLink>
