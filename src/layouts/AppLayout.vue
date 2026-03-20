@@ -73,7 +73,9 @@ function isActive(path: string) {
   <div class="app-layout">
     <!-- Barra superior - largura total -->
     <header class="top-header">
-      <div class="header-brand"><span class="brand-bold">Finora</span>Flow</div>
+      <RouterLink to="/dashboard" class="header-brand">
+        <span class="brand-bold">Finora</span>Flow
+      </RouterLink>
       <div class="header-actions">
         <div class="header-search">
           <input type="text" placeholder="Pesquisar..." class="search-input" />
@@ -338,6 +340,12 @@ function isActive(path: string) {
   font-size: 1.25rem;
   color: var(--color-logo);
   flex-shrink: 0;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.header-brand:hover {
+  opacity: 0.85;
 }
 
 .header-brand .brand-bold {
