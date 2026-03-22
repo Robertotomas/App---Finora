@@ -374,15 +374,16 @@ function isActive(path: string) {
   width: auto;
   height: auto;
   /* Logo completo (ícone + FinoraFlow) — PNG verde, mesmo ficheiro claro/escuro */
-  max-height: 28px;
+  max-height: 30px;
   max-width: min(158px, 54vw);
   object-fit: contain;
   object-position: left center;
   background: transparent;
 }
 
+/* Modo escuro: texto verde escuro → branco; ícones FF em verde repostos após invert */
 html.dark .header-brand-img {
-  filter: brightness(1.12) contrast(1.04);
+  filter: invert(1) hue-rotate(156deg) saturate(1.2) brightness(1.07);
 }
 
 .header-search {
