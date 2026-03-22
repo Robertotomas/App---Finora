@@ -77,10 +77,13 @@ function isActive(path: string) {
     <!-- Barra superior - largura total -->
     <header class="top-header">
       <RouterLink to="/dashboard" class="header-brand" aria-label="FinoraFlow — ir para o painel">
-        <img :src="iconFinoraFlow" alt="" class="header-brand-img" width="380" height="261" />
-        <span class="header-brand-text">
-          <span class="header-brand-bold">Finora</span>Flow
-        </span>
+        <img
+          :src="iconFinoraFlow"
+          alt="FinoraFlow"
+          class="header-brand-img"
+          width="800"
+          height="200"
+        />
       </RouterLink>
       <div class="header-actions">
         <div class="header-search">
@@ -354,10 +357,9 @@ function isActive(path: string) {
 .header-brand {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
   flex-shrink: 0;
   height: auto;
-  line-height: 1;
+  line-height: 0;
   text-decoration: none;
   cursor: pointer;
   background: transparent;
@@ -371,24 +373,16 @@ function isActive(path: string) {
   display: block;
   width: auto;
   height: auto;
-  /* Só o símbolo F — proporção ~380×261 */
-  max-height: 34px;
-  max-width: min(62px, 16vw);
+  /* Logo completo (ícone + FinoraFlow) — PNG verde, mesmo ficheiro claro/escuro */
+  max-height: 28px;
+  max-width: min(158px, 54vw);
   object-fit: contain;
   object-position: left center;
   background: transparent;
 }
 
-.header-brand-text {
-  font-size: 1.125rem;
-  font-weight: 500;
-  color: var(--color-logo);
-  letter-spacing: -0.03em;
-  white-space: nowrap;
-}
-
-.header-brand-bold {
-  font-weight: 800;
+html.dark .header-brand-img {
+  filter: brightness(1.12) contrast(1.04);
 }
 
 .header-search {

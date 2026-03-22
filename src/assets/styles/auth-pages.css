@@ -46,38 +46,16 @@
   flex-shrink: 0;
 }
 
-.auth-brand-hero-stack {
-  display: flex;
-  flex-direction: row;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: center;
-  gap: 0.65rem 0.85rem;
-}
-
-.auth-brand-wordmark {
-  margin: 0;
-  font-size: clamp(1.5rem, 5vw, 2rem);
-  font-weight: 500;
-  color: #0f172a;
-  letter-spacing: -0.03em;
-  line-height: 1.2;
-  text-align: left;
-}
-
-.auth-brand-wordmark-bold {
-  font-weight: 800;
-}
-
 .auth-brand-hero-img {
   display: block;
   width: auto;
-  max-width: min(100%, 140px);
+  max-width: min(100%, 280px);
   height: auto;
-  max-height: clamp(3.25rem, 14vw, 5.5rem);
-  margin: 0;
+  max-height: clamp(2.5rem, 10vw, 4.25rem);
+  margin: 0 auto;
   flex-shrink: 0;
   object-fit: contain;
+  object-position: center;
   background: transparent;
 }
 
@@ -221,10 +199,6 @@ html.dark .auth-intro-welcome {
 
 html.dark .auth-brand {
   color: #1e293b;
-}
-
-html.dark .auth-brand-wordmark {
-  color: #0f172a;
 }
 
 html.dark .auth-card h1 {
