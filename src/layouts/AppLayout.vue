@@ -237,11 +237,13 @@ function isActive(path: string) {
   align-items: center;
   gap: 0.75rem;
   padding: 0.625rem 1.5rem;
+  padding-left: calc(1.5rem - 3px);
+  border-left: 3px solid transparent;
   color: var(--color-sidebar-text);
   text-decoration: none;
   font-size: 0.9375rem;
   font-weight: 650;
-  transition: background 0.15s, color 0.15s;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 
 .sidebar-link:hover {
@@ -253,6 +255,11 @@ function isActive(path: string) {
   background: var(--color-sidebar-active);
   color: var(--color-sidebar-text);
   font-weight: 650;
+  border-left-color: rgba(255, 255, 255, 0.95);
+}
+
+html.dark .sidebar-link.active {
+  border-left-color: #94a3b8;
 }
 
 .sidebar-icon {
@@ -485,7 +492,7 @@ html.dark .header-brand-img {
   background: var(--color-bg-card);
   border: 1px solid var(--color-border);
   border-radius: 10px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--app-shadow-dropdown, 0 10px 40px -12px rgba(15, 23, 42, 0.2));
   z-index: 100;
 }
 
@@ -526,8 +533,13 @@ html.dark .header-brand-img {
 }
 
 .theme-btn.active {
-  background: rgba(37, 99, 235, 0.1);
-  border-color: var(--color-link-hover);
+  background: rgba(22, 101, 52, 0.14);
+  border-color: #166534;
+}
+
+html.dark .theme-btn.active {
+  background: rgba(74, 222, 128, 0.12);
+  border-color: #4ade80;
 }
 
 .dropdown-divider {
@@ -581,11 +593,10 @@ html.dark .header-brand-img {
   font-family: inherit;
 }
 
-/* Conteúdo principal */
+/* Conteúdo principal — padding / max-width em app-shell.css */
 .main-content {
   flex: 1;
   min-width: 0;
   overflow-y: auto;
-  padding: 0 1.5rem 1.5rem;
 }
 </style>

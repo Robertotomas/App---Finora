@@ -236,26 +236,9 @@ function formatBalance(balance: number, currency: string): string {
 
 <style scoped>
 .accounts-view {
-  max-width: 800px;
+  max-width: min(800px, 100%);
   margin: 0 auto;
-  padding: 2rem 1rem;
-}
-
-.page-header {
-  margin-bottom: 2rem;
-}
-
-.page-header h1 {
-  font-size: 1.75rem;
-  font-weight: 700;
-  color: #0f172a;
-  margin: 0 0 0.25rem 0;
-}
-
-.subtitle {
-  color: #64748b;
-  font-size: 0.9375rem;
-  margin: 0;
+  padding: 0 0 2.5rem;
 }
 
 .loading-state,
@@ -269,8 +252,8 @@ function formatBalance(balance: number, currency: string): string {
 .spinner {
   width: 40px;
   height: 40px;
-  border: 3px solid #e2e8f0;
-  border-top-color: #2563eb;
+  border: 3px solid var(--color-border);
+  border-top-color: #166534;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
   margin: 0 auto 1rem;
@@ -311,9 +294,9 @@ function formatBalance(balance: number, currency: string): string {
 
 .section-card {
   background: var(--color-bg-card);
-  border-radius: 12px;
+  border-radius: var(--app-radius-md, 12px);
   padding: 1.5rem;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  box-shadow: var(--app-shadow-card, 0 1px 3px rgba(0, 0, 0, 0.06));
   border: 1px solid var(--color-border);
 }
 

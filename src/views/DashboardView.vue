@@ -15,6 +15,7 @@ import ExpensesPieChart from '@/components/charts/ExpensesPieChart.vue'
 import IncomePieChart from '@/components/charts/IncomePieChart.vue'
 import MonthlyLineChart from '@/components/charts/MonthlyLineChart.vue'
 import BudgetProgressChart from '@/components/charts/BudgetProgressChart.vue'
+import MonthYearNavigator from '@/components/MonthYearNavigator.vue'
 
 const householdStore = useHouseholdStore()
 const accountsStore = useAccountsStore()
@@ -25,21 +26,13 @@ const loadError = ref<string | null>(null)
 const isDev = import.meta.env.DEV
 
 const MONTH_NAMES = ['', 'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
-const MONTH_OPTIONS = [
-  { value: 0, label: 'Todos os meses' },
-  ...Array.from({ length: 12 }, (_, i) => ({ value: i + 1, label: MONTH_NAMES[i + 1] }))
-]
-
 const now = new Date()
 const selectedYear = ref(now.getFullYear())
 const selectedMonth = ref(now.getMonth() + 1)
 
-const yearOptions = computed(() => {
+const navYears = computed(() => {
   const y = now.getFullYear()
-  return [
-    { value: 0, label: 'Todos os anos' },
-    ...Array.from({ length: 4 }, (_, i) => ({ value: y - i, label: String(y - i) }))
-  ]
+  return [y, y - 1, y - 2, y - 3, 0]
 })
 
 async function onPeriodChange() {
@@ -196,13 +189,24 @@ const showContent = computed(() =>
     </div>
 
     <div v-if="showContent" class="dashboard-content">
+      <div class="page-header">
+        <h1>Dashboard</h1>
+        <p class="subtitle">
+          Acompanha as tuas despesas e receitas com toda a informação necessária para gerires o orçamento e
+          poupares de forma mais consciente.
+        </p>
+      </div>
+
       <div class="period-filter-bar">
-        <select v-model.number="selectedMonth" @change="onPeriodChange" class="period-select" title="Mês">
-          <option v-for="opt in MONTH_OPTIONS" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
-        </select>
-        <select v-model.number="selectedYear" @change="onPeriodChange" class="period-select" title="Ano">
-          <option v-for="opt in yearOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
-        </select>
+        <MonthYearNavigator
+          v-model:month="selectedMonth"
+          v-model:year="selectedYear"
+          :years="navYears"
+          :month-names="MONTH_NAMES"
+          allow-all-months
+          allow-all-years
+          @change="onPeriodChange"
+        />
       </div>
 
       <div class="dashboard-section-card">
@@ -381,11 +385,11 @@ const showContent = computed(() =>
 
 <style scoped>
 .dashboard {
-  max-width: 960px;
-  margin: -0.5rem auto 0;
-  padding: 0 1rem;
+  max-width: 100%;
+  margin: 0 auto;
+  padding: 0;
   min-height: 400px;
-  background: var(--color-bg);
+  background: transparent;
 }
 
 .loading-state,
@@ -399,8 +403,8 @@ const showContent = computed(() =>
 .spinner {
   width: 40px;
   height: 40px;
-  border: 3px solid #e2e8f0;
-  border-top-color: #2563eb;
+  border: 3px solid var(--color-border);
+  border-top-color: #166534;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
   margin: 0 auto 1rem;
@@ -472,17 +476,18 @@ const showContent = computed(() =>
 .dashboard-content {
   display: flex !important;
   flex-direction: column;
-  gap: 1.25rem;
+  gap: 1.5rem;
   visibility: visible !important;
   opacity: 1 !important;
 }
 
 .dashboard-section-card {
   background: var(--color-bg-card);
-  border-radius: 12px;
-  padding: 1.5rem;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  border-radius: var(--app-radius-md, 12px);
+  padding: 1.375rem 1.5rem;
+  box-shadow: var(--app-shadow-card, 0 1px 3px rgba(0, 0, 0, 0.06));
   border: 1px solid var(--color-border);
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
 }
 
 .section-empty {
@@ -529,44 +534,27 @@ const showContent = computed(() =>
 }
 
 .section-title {
-  font-size: 1rem;
-  font-weight: 600;
-  color: var(--color-text-muted);
-  margin: 0;
+  font-size: 1.0625rem;
+  font-weight: 650;
+  letter-spacing: -0.025em;
+  color: var(--color-text);
+  margin: 0 0 1rem 0;
+  line-height: 1.3;
 }
 
 .period-filter-bar {
   display: flex;
-  gap: 0.75rem;
+  flex-wrap: wrap;
+  gap: 1rem;
   align-items: center;
-  margin-bottom: 1rem;
+  margin-bottom: 0.25rem;
+  padding: 0.5rem 0;
 }
 
 .period-selector {
   display: flex;
   gap: 0.5rem;
   align-items: center;
-}
-
-.period-select {
-  padding: 0.5rem 1rem;
-  font-size: 0.9375rem;
-  border: 1px solid var(--color-input-border);
-  border-radius: 8px;
-  background: var(--color-input-bg);
-  color: var(--color-text);
-  cursor: pointer;
-  min-width: 140px;
-}
-
-.period-select:hover {
-  border-color: #166534;
-}
-
-.period-select:focus {
-  outline: none;
-  border-color: #166534;
-  box-shadow: 0 0 0 2px rgba(22, 101, 52, 0.25);
 }
 
 .period-selector-center {
@@ -582,10 +570,16 @@ const showContent = computed(() =>
 
 .summary-cards-fallback .card {
   background: var(--color-bg-card);
-  border-radius: 12px;
-  padding: 1.25rem;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  border-radius: var(--app-radius-md, 12px);
+  padding: 1.125rem 1.25rem;
+  box-shadow: var(--app-shadow-card, 0 1px 3px rgba(0, 0, 0, 0.06));
   border: 1px solid var(--color-border);
+  transition: box-shadow 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+}
+
+.summary-cards-fallback .card:hover {
+  box-shadow: var(--app-shadow-card-hover, 0 4px 12px rgba(0, 0, 0, 0.08));
+  border-color: var(--color-border);
 }
 
 .summary-cards-fallback .card-title {
@@ -611,7 +605,9 @@ const showContent = computed(() =>
 .summary-cards-fallback .card-income .card-value { color: #059669; }
 .summary-cards-fallback .card-expense .card-value { color: #dc2626; }
 .summary-cards-fallback .card-savings .card-value { color: #2563eb; }
-.summary-cards-fallback .card-balance .card-value { color: #0f172a; }
+.summary-cards-fallback .card-balance .card-value {
+  color: var(--color-text);
+}
 
 
 .accounts-grid {
@@ -627,16 +623,16 @@ const showContent = computed(() =>
 
 .account-card {
   background: var(--color-bg-card);
-  border-radius: 12px;
-  padding: 1.25rem;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  border-radius: var(--app-radius-md, 12px);
+  padding: 1.125rem 1.25rem;
+  box-shadow: var(--app-shadow-card, 0 1px 3px rgba(0, 0, 0, 0.06));
   border: 1px solid var(--color-border);
-  transition: border-color 0.2s, box-shadow 0.2s;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
 }
 
 .account-card-link:hover .account-card {
-  border-color: var(--color-link-hover);
-  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.15);
+  border-color: rgba(22, 101, 52, 0.45);
+  box-shadow: var(--app-shadow-card-hover, 0 4px 16px rgba(0, 0, 0, 0.1));
 }
 
 .account-card-header {
@@ -692,19 +688,19 @@ const showContent = computed(() =>
 
 .comparison-card {
   background: var(--color-bg-card);
-  border-radius: 12px;
+  border-radius: var(--app-radius-md, 12px);
   padding: 1.25rem;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  box-shadow: var(--app-shadow-card, 0 1px 3px rgba(0, 0, 0, 0.06));
   border: 1px solid var(--color-border);
 }
 
 .comparison-title {
   font-size: 0.9375rem;
   font-weight: 600;
-  color: #334155;
+  color: var(--color-text);
   margin: 0 0 1rem 0;
   padding-bottom: 0.5rem;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid var(--color-border);
 }
 
 .comparison-row {
@@ -716,13 +712,13 @@ const showContent = computed(() =>
 
 .comparison-label {
   font-size: 0.8125rem;
-  color: #64748b;
+  color: var(--color-text-muted);
 }
 
 .comparison-value {
   font-size: 1rem;
   font-weight: 600;
-  color: #0f172a;
+  color: var(--color-text);
 }
 
 .comparison-value.expected {
@@ -736,10 +732,10 @@ const showContent = computed(() =>
 
 .comparison-diff {
   font-size: 0.8125rem;
-  color: #64748b;
+  color: var(--color-text-muted);
   margin-top: 0.5rem;
   padding-top: 0.5rem;
-  border-top: 1px dashed #e2e8f0;
+  border-top: 1px dashed var(--color-border);
 }
 
 .charts-section-inner {
@@ -750,16 +746,16 @@ const showContent = computed(() =>
 
 .chart-card {
   background: var(--color-bg-card);
-  border-radius: 12px;
+  border-radius: var(--app-radius-md, 12px);
   padding: 1.25rem;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  box-shadow: var(--app-shadow-card, 0 1px 3px rgba(0, 0, 0, 0.06));
   border: 1px solid var(--color-border);
 }
 
 .chart-title {
   font-size: 0.9375rem;
   font-weight: 600;
-  color: #334155;
+  color: var(--color-text);
   margin: 0 0 1rem 0;
 }
 

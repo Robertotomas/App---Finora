@@ -195,26 +195,9 @@ async function handleLeave() {
 
 <style scoped>
 .household-settings {
-  max-width: 640px;
+  max-width: min(640px, 100%);
   margin: 0 auto;
-  padding: 2rem 1rem;
-}
-
-.page-header {
-  margin-bottom: 2rem;
-}
-
-.page-header h1 {
-  font-size: 1.75rem;
-  font-weight: 700;
-  color: #0f172a;
-  margin: 0 0 0.25rem 0;
-}
-
-.subtitle {
-  color: #64748b;
-  font-size: 0.9375rem;
-  margin: 0;
+  padding: 0 0 2.5rem;
 }
 
 .loading-state,
@@ -227,8 +210,8 @@ async function handleLeave() {
 .spinner {
   width: 40px;
   height: 40px;
-  border: 3px solid #e2e8f0;
-  border-top-color: #2563eb;
+  border: 3px solid var(--color-border);
+  border-top-color: #166534;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
   margin: 0 auto 1rem;
@@ -243,18 +226,18 @@ async function handleLeave() {
 }
 
 .card {
-  background: white;
-  border-radius: 12px;
+  background: var(--color-bg-card);
+  border-radius: var(--app-radius-md, 12px);
   padding: 1.5rem;
   margin-bottom: 1.5rem;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
-  border: 1px solid #f1f5f9;
+  box-shadow: var(--app-shadow-card, 0 1px 3px rgba(0, 0, 0, 0.06));
+  border: 1px solid var(--color-border);
 }
 
 .card h2 {
   font-size: 1rem;
   font-weight: 600;
-  color: #334155;
+  color: var(--color-text);
   margin: 0 0 1rem 0;
 }
 

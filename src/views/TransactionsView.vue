@@ -10,6 +10,7 @@ import TransactionFormModal from '@/components/TransactionFormModal.vue'
 import RecurringFormModal from '@/components/RecurringFormModal.vue'
 import RemoveRecurringModal from '@/components/RemoveRecurringModal.vue'
 import ConfirmDeleteModal from '@/components/ConfirmDeleteModal.vue'
+import MonthYearNavigator from '@/components/MonthYearNavigator.vue'
 import type { Transaction, CreateTransactionRequest } from '@/types/transaction'
 import type { RecurringTransaction, CreateRecurringTransactionRequest } from '@/types/recurringTransaction'
 import {
@@ -47,6 +48,21 @@ const filterFrom = ref('')
 const filterTo = ref('')
 
 const MONTH_NAMES = ['', 'Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
+const TRANSACTION_MONTH_NAMES = [
+  '',
+  'Janeiro',
+  'Fevereiro',
+  'Março',
+  'Abril',
+  'Maio',
+  'Junho',
+  'Julho',
+  'Agosto',
+  'Setembro',
+  'Outubro',
+  'Novembro',
+  'Dezembro',
+]
 const now = new Date()
 const filterMonth = ref<number>(now.getMonth() + 1)
 const filterYear = ref<number>(now.getFullYear())
@@ -426,13 +442,15 @@ function getAccountName(accountId: string): string {
               {{ a.name }}
             </option>
           </select>
-          <select v-model.number="filterMonth" class="filter-select" title="Mês">
-            <option :value="0">Todos os meses</option>
-            <option v-for="m in 12" :key="m" :value="m">{{ MONTH_NAMES[m] }}</option>
-          </select>
-          <select v-model.number="filterYear" class="filter-select" title="Ano">
-            <option v-for="y in yearOptions" :key="y" :value="y">{{ y }}</option>
-          </select>
+          <MonthYearNavigator
+            v-model:month="filterMonth"
+            v-model:year="filterYear"
+            :years="yearOptions"
+            :month-names="TRANSACTION_MONTH_NAMES"
+            allow-all-months
+            all-months-in-year-title="Todos os meses"
+            all-months-in-year-button="Todos os meses"
+          />
           <template v-if="filterMonth === 0">
             <input
               v-model="filterFrom"
@@ -659,26 +677,9 @@ function getAccountName(accountId: string): string {
 
 <style scoped>
 .transactions-view {
-  max-width: 960px;
+  max-width: min(960px, 100%);
   margin: 0 auto;
-  padding: 2rem 1rem;
-}
-
-.page-header {
-  margin-bottom: 2rem;
-}
-
-.page-header h1 {
-  font-size: 1.75rem;
-  font-weight: 700;
-  color: #0f172a;
-  margin: 0 0 0.25rem 0;
-}
-
-.subtitle {
-  color: #64748b;
-  font-size: 0.9375rem;
-  margin: 0;
+  padding: 0 0 2.5rem;
 }
 
 .loading-state,
@@ -692,8 +693,8 @@ function getAccountName(accountId: string): string {
 .spinner {
   width: 40px;
   height: 40px;
-  border: 3px solid #e2e8f0;
-  border-top-color: #2563eb;
+  border: 3px solid var(--color-border);
+  border-top-color: #166534;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
   margin: 0 auto 1rem;
@@ -783,7 +784,8 @@ function getAccountName(accountId: string): string {
 .filters {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  align-items: flex-end;
+  gap: 0.75rem 1rem;
 }
 
 .filter-select,

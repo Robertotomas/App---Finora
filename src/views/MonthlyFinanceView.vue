@@ -4,6 +4,7 @@ import { useHouseholdStore } from '@/stores/household'
 import { useMonthlyBudget } from '@/composables/useMonthlyBudget'
 import { dashboardApi } from '@/api/dashboard'
 import BudgetProgressChart from '@/components/charts/BudgetProgressChart.vue'
+import MonthYearNavigator from '@/components/MonthYearNavigator.vue'
 
 const householdStore = useHouseholdStore()
 const householdId = computed(() => householdStore.household?.id)
@@ -18,7 +19,21 @@ const now = new Date()
 const selectedMonth = ref(now.getMonth() + 1)
 const selectedYear = ref(now.getFullYear())
 
-const MONTH_NAMES = ['', 'Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
+const MONTH_NAMES = [
+  '',
+  'Janeiro',
+  'Fevereiro',
+  'Março',
+  'Abril',
+  'Maio',
+  'Junho',
+  'Julho',
+  'Agosto',
+  'Setembro',
+  'Outubro',
+  'Novembro',
+  'Dezembro',
+]
 
 const periodLabel = computed(() => `${MONTH_NAMES[selectedMonth.value]} ${selectedYear.value}`)
 
@@ -161,12 +176,12 @@ onMounted(async () => {
     <div v-else class="content">
       <div class="controls">
         <div class="period-selector">
-          <select v-model.number="selectedMonth" class="filter-select">
-            <option v-for="m in 12" :key="m" :value="m">{{ MONTH_NAMES[m] }}</option>
-          </select>
-          <select v-model.number="selectedYear" class="filter-select">
-            <option v-for="y in yearOptions" :key="y" :value="y">{{ y }}</option>
-          </select>
+          <MonthYearNavigator
+            v-model:month="selectedMonth"
+            v-model:year="selectedYear"
+            :years="yearOptions"
+            :month-names="MONTH_NAMES"
+          />
         </div>
       </div>
 
@@ -245,28 +260,11 @@ onMounted(async () => {
 
 <style scoped>
 .monthly-finance {
-  max-width: 960px;
+  max-width: min(960px, 100%);
   margin: 0 auto;
-  padding: 2rem 1rem;
+  padding: 0 0 2.5rem;
   min-height: 400px;
-  background: var(--color-bg);
-}
-
-.page-header {
-  margin-bottom: 2rem;
-}
-
-.page-header h1 {
-  font-size: 1.75rem;
-  font-weight: 700;
-  color: var(--color-text);
-  margin: 0 0 0.25rem 0;
-}
-
-.subtitle {
-  font-size: 0.9375rem;
-  color: var(--color-text-muted);
-  margin: 0;
+  background: transparent;
 }
 
 .loading-state,
@@ -279,8 +277,8 @@ onMounted(async () => {
 .spinner {
   width: 40px;
   height: 40px;
-  border: 3px solid #e2e8f0;
-  border-top-color: #2563eb;
+  border: 3px solid var(--color-border);
+  border-top-color: #166534;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
   margin: 0 auto 1rem;
@@ -306,8 +304,9 @@ onMounted(async () => {
 
 .period-selector {
   display: flex;
-  gap: 0.5rem;
-  align-items: center;
+  gap: 1.25rem;
+  align-items: flex-end;
+  flex-wrap: wrap;
 }
 
 .filter-select {
