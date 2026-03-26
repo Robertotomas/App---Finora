@@ -56,6 +56,12 @@ const router = createRouter({
           component: () => import('@/views/TransactionsView.vue'),
           meta: { requiresAuth: true },
         },
+        {
+          path: 'objectives',
+          name: 'objectives',
+          component: () => import('@/views/ObjectivesView.vue'),
+          meta: { requiresAuth: true },
+        },
       ],
     },
   ],

@@ -96,6 +96,15 @@ const incomeForChart = computed<IncomeByCategory[]>(() => dashboard.incomeForCha
 const trendForChart = computed<MonthlyTrend[]>(() => dashboard.trendForChart?.value ?? [])
 const periodLabel = computed(() => {
   if (selectedYear.value === 0) return 'Resumo total'
+  if (selectedMonth.value === -1) {
+    const y = selectedYear.value
+    const n = new Date()
+    const endM = y < n.getFullYear() ? 12 : y > n.getFullYear() ? 0 : n.getMonth() + 1
+    if (endM === 0) return `Início do ano até agora · ${y}`
+    const from = `Janeiro ${y}`
+    const to = `${MONTH_NAMES[endM]} ${y}`
+    return `Início do ano até agora (${from} – ${to})`
+  }
   if (selectedMonth.value === 0) return `Resumo total ${selectedYear.value}`
   return `${MONTH_NAMES[selectedMonth.value]} ${selectedYear.value}`
 })
@@ -122,12 +131,38 @@ const hasIncomeForChart = computed(() => dashboard.monthlyIncome.value > 0)
 
 const budgetForPeriod = computed(() => {
   budget.budgetStore.value // reactive dependency
-  return budget.getBudget(householdStore.household?.id, selectedYear.value, selectedMonth.value)
+  const hid = householdStore.household?.id
+  if (!hid) return { expectedIncome: 0, expectedExpenses: 0 }
+  if (selectedMonth.value === -1 && selectedYear.value > 0) {
+    const n = new Date()
+    const end = selectedYear.value < n.getFullYear() ? 12 : selectedYear.value > n.getFullYear() ? 0 : n.getMonth() + 1
+    if (end === 0) return { expectedIncome: 0, expectedExpenses: 0 }
+    let expectedIncome = 0
+    let expectedExpenses = 0
+    for (let m = 1; m <= end; m++) {
+      const b = budget.getBudget(hid, selectedYear.value, m)
+      expectedIncome += b.expectedIncome
+      expectedExpenses += b.expectedExpenses
+    }
+    return { expectedIncome, expectedExpenses }
+  }
+  return budget.getBudget(hid, selectedYear.value, selectedMonth.value)
 })
 
 const hasBudgetForPeriod = computed(() => {
   budget.budgetStore.value
-  return budget.hasBudget(householdStore.household?.id, selectedYear.value, selectedMonth.value)
+  const hid = householdStore.household?.id
+  if (!hid) return false
+  if (selectedMonth.value === -1 && selectedYear.value > 0) {
+    const n = new Date()
+    const end = selectedYear.value < n.getFullYear() ? 12 : selectedYear.value > n.getFullYear() ? 0 : n.getMonth() + 1
+    if (end === 0) return false
+    for (let m = 1; m <= end; m++) {
+      if (budget.hasBudget(hid, selectedYear.value, m)) return true
+    }
+    return false
+  }
+  return budget.hasBudget(hid, selectedYear.value, selectedMonth.value)
 })
 
 const hasExpectedValuesForProgress = computed(() =>
@@ -205,6 +240,7 @@ const showContent = computed(() =>
           :month-names="MONTH_NAMES"
           allow-all-months
           allow-all-years
+          allow-year-to-date
           @change="onPeriodChange"
         />
       </div>

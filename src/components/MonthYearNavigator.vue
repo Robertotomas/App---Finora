@@ -13,6 +13,9 @@ const props = withDefaults(
     allMonthsInYearTitle?: string
     /** Texto do botão no painel para month=0 */
     allMonthsInYearButton?: string
+    /** Mostrar "Início do ano até agora" (month = -1) */
+    allowYearToDate?: boolean
+    yearToDateButton?: string
   }>(),
   {
     allMonthsInYearTitle: 'Ano completo',
@@ -34,6 +37,8 @@ const props = withDefaults(
     ],
     allowAllMonths: false,
     allowAllYears: false,
+    allowYearToDate: false,
+    yearToDateButton: 'Início do ano até agora',
   }
 )
 
@@ -67,14 +72,15 @@ onMounted(() => document.addEventListener('click', onDocClick, true))
 onUnmounted(() => document.removeEventListener('click', onDocClick, true))
 
 const displayLabel = computed(() => {
-  if (year.value === 0) return 'Todos os períodos'
+    if (year.value === 0) return 'Todos os períodos'
+  if (month.value === -1) return `${props.yearToDateButton} · ${year.value}`
   if (month.value === 0) return `${props.allMonthsInYearTitle} · ${year.value}`
   return `${props.monthNames[month.value]} ${year.value}`
 })
 
 const canPrev = computed(() => {
   if (year.value === 0) return false
-  if (month.value === 0) {
+  if (month.value === 0 || month.value === -1) {
     return year.value > minYear.value
   }
   if (year.value < minYear.value) return false
@@ -84,7 +90,7 @@ const canPrev = computed(() => {
 
 const canNext = computed(() => {
   if (year.value === 0) return false
-  if (month.value === 0) {
+  if (month.value === 0 || month.value === -1) {
     return year.value < maxYear.value
   }
   if (year.value > maxYear.value) return false
@@ -101,7 +107,7 @@ function clampAfterNav() {
 
 function prev() {
   if (!canPrev.value) return
-  if (month.value === 0) {
+  if (month.value === 0 || month.value === -1) {
     const asc = yearsPositive.value
     const idx = asc.indexOf(year.value)
     if (idx > 0) year.value = asc[idx - 1]
@@ -117,7 +123,7 @@ function prev() {
 
 function next() {
   if (!canNext.value) return
-  if (month.value === 0) {
+  if (month.value === 0 || month.value === -1) {
     const asc = yearsPositive.value
     const idx = asc.indexOf(year.value)
     if (idx >= 0 && idx < asc.length - 1) year.value = asc[idx + 1]
@@ -153,6 +159,13 @@ function pickYear(y: number) {
 function chooseAllMonthsCurrentYear() {
   if (year.value === 0) return
   month.value = 0
+  closePanel()
+  emit('change')
+}
+
+function chooseYearToDate() {
+  if (year.value === 0) return
+  month.value = -1
   closePanel()
   emit('change')
 }
@@ -253,6 +266,15 @@ function chooseAllPeriods() {
             @click="chooseAllMonthsCurrentYear"
           >
             {{ allMonthsInYearButton }}
+          </button>
+          <button
+            v-if="allowYearToDate"
+            type="button"
+            class="panel-footer-btn panel-footer-btn-secondary"
+            :class="{ active: month === -1 }"
+            @click="chooseYearToDate"
+          >
+            {{ yearToDateButton }}
           </button>
         </div>
       </div>
@@ -465,6 +487,10 @@ html.dark .month-cell.active {
   border-color: #166534;
   color: #166534;
   background: rgba(22, 101, 52, 0.1);
+}
+
+.panel-footer-btn-secondary {
+  margin-top: 0.5rem;
 }
 
 .panel-enter-active,

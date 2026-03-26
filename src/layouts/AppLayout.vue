@@ -62,6 +62,7 @@ const navItems = [
   { to: '/monthly', label: 'Plano Mensal', iconImg: iconMonthly, iconClass: 'sidebar-nav-icon-lg' },
   { to: '/accounts', label: 'Contas', iconImg: iconCreditCard, iconClass: 'sidebar-nav-icon-sm' },
   { to: '/transactions', label: 'Transações', iconImg: iconTransactions, iconClass: 'sidebar-nav-icon-lg' },
+  { to: '/objectives', label: 'Objetivos', icon: '🎯' },
   { to: '/household', label: 'Household', icon: '👥' },
 ]
 

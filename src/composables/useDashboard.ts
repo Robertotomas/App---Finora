@@ -11,7 +11,7 @@ let cacheTime = 0
 function getCacheKey(year?: number, month?: number): string {
   const now = new Date()
   const y = year ?? now.getFullYear()
-  const m = month ?? now.getMonth() + 1
+  const m = month !== undefined && month !== null ? month : now.getMonth() + 1
   return `${y}-${m}`
 }
 
@@ -39,7 +39,11 @@ export function useDashboard() {
   const periodLabel = computed(() => {
     if (!data.value) return ''
     const names = ['', 'Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
-    return `${names[data.value.month]} ${data.value.year}`
+    return data.value.month === -1
+      ? `Início do ano até agora · ${data.value.year}`
+      : data.value.month === 0
+        ? `Resumo total ${data.value.year}`
+        : `${names[data.value.month]} ${data.value.year}`
   })
 
   const isEmpty = computed(() => {
@@ -84,7 +88,9 @@ export function useDashboard() {
       const d = data.value
       const monthNames = ['', 'Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
       const y = d?.year ?? new Date().getFullYear()
-      const m = d?.month ?? new Date().getMonth() + 1
+      const rawM = d?.month
+      const m =
+        rawM != null && rawM >= 1 && rawM <= 12 ? rawM : new Date().getMonth() + 1
       return [{
         year: y,
         month: m,
@@ -135,11 +141,15 @@ export function useDashboard() {
       const monthlyIncome = Number(get('monthlyIncome')) || 0
       const monthlyExpenses = Number(get('monthlyExpenses')) || 0
 
+      const rawMonth = get('month')
+      const parsedMonth =
+        rawMonth !== undefined && rawMonth !== null ? Number(rawMonth) : new Date().getMonth() + 1
+
       const mapped: Dashboard = {
         totalBalance: Number(get('totalBalance')) || 0,
         currency: String(get('currency') || 'EUR'),
         year: Number(get('year')) || new Date().getFullYear(),
-        month: Number(get('month')) || new Date().getMonth() + 1,
+        month: Number.isFinite(parsedMonth) ? parsedMonth : new Date().getMonth() + 1,
         monthlyIncome,
         monthlyExpenses,
         monthlySavings: Number(get('monthlySavings')) || monthlyIncome - monthlyExpenses,
