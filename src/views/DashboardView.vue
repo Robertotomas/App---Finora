@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, computed, ref } from 'vue'
+import { onMounted, computed, ref, nextTick } from 'vue'
 import type { ExpenseByCategory, IncomeByCategory, MonthlyTrend } from '@/types/dashboard'
 import type { SavingsObjectiveActive } from '@/types/objective'
 import { objectivesApi } from '@/api/objectives'
@@ -11,6 +11,10 @@ import { ACCOUNT_TYPE_LABELS, AccountType } from '@/types/account'
 
 function isCreditCard(type: number): boolean {
   return Number(type) === AccountType.CreditCard
+}
+
+function accountTypeLabel(type: number): string {
+  return ACCOUNT_TYPE_LABELS[type as AccountType] ?? ''
 }
 import DashboardSkeleton from '@/components/DashboardSkeleton.vue'
 import ExpensesPieChart from '@/components/charts/ExpensesPieChart.vue'
@@ -26,6 +30,8 @@ const budget = useMonthlyBudget()
 const mounted = ref(false)
 const loadError = ref<string | null>(null)
 const isDev = import.meta.env.DEV
+const periodChangeLoading = ref(false)
+const dashboardContentRef = ref<HTMLElement | null>(null)
 
 const objectivesLoading = ref(false)
 const objectivesLoaded = ref(false)
@@ -100,9 +106,16 @@ const navYears = computed(() => {
 })
 
 async function onPeriodChange() {
-  dashboard.setPeriod(selectedYear.value, selectedMonth.value)
-  dashboard.invalidateCache()
-  await dashboard.fetch(true)
+  periodChangeLoading.value = true
+  await nextTick()
+  dashboardContentRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  try {
+    dashboard.setPeriod(selectedYear.value, selectedMonth.value)
+    dashboard.invalidateCache()
+    await dashboard.fetch(true)
+  } finally {
+    periodChangeLoading.value = false
+  }
 }
 
 onMounted(async () => {
@@ -288,7 +301,7 @@ const showContent = computed(() =>
       <p>A carregar dashboard...</p>
     </div>
 
-    <div v-if="showContent" class="dashboard-content">
+    <div v-if="showContent" ref="dashboardContentRef" class="dashboard-content">
       <div class="page-header">
         <h1>Dashboard</h1>
         <p class="subtitle">
@@ -310,6 +323,14 @@ const showContent = computed(() =>
         />
       </div>
 
+      <div v-if="periodChangeLoading" class="period-refresh-state">
+        <div class="period-refresh-inner">
+          <div class="spinner"></div>
+          <p class="period-refresh-text">A atualizar dados do dashboard...</p>
+        </div>
+      </div>
+
+      <template v-else>
       <div class="dashboard-section-card">
         <h2 class="section-title">{{ periodLabel || 'Resumo' }}</h2>
         <div class="summary-cards summary-cards-fallback">
@@ -399,7 +420,7 @@ const showContent = computed(() =>
               <p class="account-card-balance" :class="{ negative: account.balance < 0 }">
                 {{ formatCurrency(account.balance, account.currency) }}
               </p>
-              <span class="account-card-type">{{ ACCOUNT_TYPE_LABELS[account.type] }}</span>
+              <span class="account-card-type">{{ accountTypeLabel(account.type) }}</span>
             </div>
           </router-link>
         </div>
@@ -521,6 +542,7 @@ const showContent = computed(() =>
           </div>
         </div>
       </div>
+      </template>
     </div>
   </div>
 </template>
@@ -621,6 +643,27 @@ const showContent = computed(() =>
   gap: 1.5rem;
   visibility: visible !important;
   opacity: 1 !important;
+}
+
+.period-refresh-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 240px;
+}
+
+.period-refresh-inner {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.25rem 0;
+}
+
+.period-refresh-text {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--color-text-muted);
 }
 
 .dashboard-section-card {
