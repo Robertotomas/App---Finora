@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { onMounted, computed, ref } from 'vue'
 import type { ExpenseByCategory, IncomeByCategory, MonthlyTrend } from '@/types/dashboard'
+import type { SavingsObjectiveActive } from '@/types/objective'
+import { objectivesApi } from '@/api/objectives'
 import { useHouseholdStore } from '@/stores/household'
 import { useAccountsStore } from '@/stores/accounts'
 import { useDashboard } from '@/composables/useDashboard'
@@ -24,6 +26,68 @@ const budget = useMonthlyBudget()
 const mounted = ref(false)
 const loadError = ref<string | null>(null)
 const isDev = import.meta.env.DEV
+
+const objectivesLoading = ref(false)
+const objectivesLoaded = ref(false)
+const objectivesPreview = ref<SavingsObjectiveActive[]>([])
+const objectivesActiveTotal = ref(0)
+const objectivesMoreCount = computed(() => Math.max(0, objectivesActiveTotal.value - 4))
+
+function parseTargetDateOnly(raw: unknown): string | null {
+  if (raw == null || raw === '') return null
+  if (typeof raw === 'string') {
+    const s = raw.slice(0, 10)
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s
+    const d = new Date(raw)
+    return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10)
+  }
+  return null
+}
+
+function mapActiveObjectivesFromOverview(payload: unknown): SavingsObjectiveActive[] {
+  const raw = (payload ?? {}) as Record<string, unknown>
+  const pick = (key: string) => raw[key] ?? raw[key.charAt(0).toUpperCase() + key.slice(1)]
+  const list = pick('activeObjectives')
+  if (!Array.isArray(list)) return []
+  return list
+    .map((x) => {
+      const item = x as Record<string, unknown>
+      return {
+        id: String(item.id ?? item.Id ?? ''),
+        name: String(item.name ?? item.Name ?? ''),
+        targetAmount: Number(item.targetAmount ?? item.TargetAmount) || 0,
+        targetDate: parseTargetDateOnly(item.targetDate ?? item.TargetDate),
+        sortOrder: Number(item.sortOrder ?? item.SortOrder) || 0,
+        allocatedAmount: Number(item.allocatedAmount ?? item.AllocatedAmount) || 0,
+        progressPercent: Number(item.progressPercent ?? item.ProgressPercent) || 0,
+        canFinalize: Boolean(item.canFinalize ?? item.CanFinalize),
+      } as SavingsObjectiveActive
+    })
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+}
+
+async function loadObjectivesPreview() {
+  objectivesLoading.value = true
+  try {
+    const { data } = await objectivesApi.getOverview()
+    const all = mapActiveObjectivesFromOverview(data)
+    objectivesActiveTotal.value = all.length
+    objectivesPreview.value = all.slice(0, 4)
+  } catch {
+    objectivesPreview.value = []
+    objectivesActiveTotal.value = 0
+  } finally {
+    objectivesLoading.value = false
+    objectivesLoaded.value = true
+  }
+}
+
+function formatObjectiveDate(iso: string): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  return d.toLocaleDateString('pt-PT')
+}
 
 const MONTH_NAMES = ['', 'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
 const now = new Date()
@@ -56,7 +120,8 @@ onMounted(async () => {
           dashboard.invalidateCache()
           await Promise.all([
             dashboard.fetch(true),
-            accountsStore.fetchAccounts()
+            accountsStore.fetchAccounts(),
+            loadObjectivesPreview(),
           ])
         }
       })(),
@@ -267,6 +332,47 @@ const showContent = computed(() =>
             <p class="card-title">Poupança</p>
             <p class="card-value">{{ formattedSavings }}</p>
             <p class="card-subtitle">{{ periodLabel }}</p>
+          </div>
+        </div>
+
+        <div class="dashboard-objectives">
+          <div class="dashboard-objectives-header">
+            <h3 class="dashboard-objectives-title">Objetivos de poupança</h3>
+            <router-link :to="{ name: 'objectives' }" class="dashboard-objectives-link">Ver todos</router-link>
+          </div>
+          <div v-if="objectivesLoading" class="objectives-preview-skeleton">
+            <span class="objectives-preview-loading">A carregar objetivos…</span>
+          </div>
+          <div v-else-if="objectivesPreview.length > 0" class="objectives-preview-block">
+            <div class="objectives-preview-grid">
+              <router-link
+                v-for="goal in objectivesPreview"
+                :key="goal.id"
+                :to="{ name: 'objectives' }"
+                class="objective-preview-card"
+              >
+                <p class="objective-preview-name">{{ goal.name }}</p>
+                <p class="objective-preview-amounts">
+                  {{ formatCurrency(goal.allocatedAmount, dashboard.currency.value) }} /
+                  {{ formatCurrency(goal.targetAmount, dashboard.currency.value) }}
+                </p>
+                <div class="objective-preview-track" role="progressbar" :aria-valuenow="goal.progressPercent" aria-valuemin="0" aria-valuemax="100">
+                  <div class="objective-preview-fill" :style="{ width: `${Math.min(100, goal.progressPercent)}%` }" />
+                </div>
+                <p class="objective-preview-meta">
+                  <span>{{ goal.progressPercent.toFixed(0) }}%</span>
+                  <span v-if="goal.targetDate" class="objective-preview-date"> · Meta {{ formatObjectiveDate(goal.targetDate) }}</span>
+                </p>
+              </router-link>
+            </div>
+            <p v-if="objectivesMoreCount > 0" class="objectives-more-count">
+              +{{ objectivesMoreCount }}
+              {{ objectivesMoreCount === 1 ? 'objetivo ativo' : 'objetivos ativos' }}
+            </p>
+          </div>
+          <div v-else-if="objectivesLoaded" class="objectives-preview-empty">
+            <p class="objectives-preview-empty-text">Ainda não tens objetivos ativos.</p>
+            <router-link :to="{ name: 'objectives' }" class="btn-add-objective">+ Criar objetivo</router-link>
           </div>
         </div>
       </div>
@@ -602,6 +708,157 @@ const showContent = computed(() =>
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: 1.25rem;
+}
+
+.dashboard-objectives {
+  margin-top: 1.35rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.dashboard-objectives-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.875rem;
+}
+
+.dashboard-objectives-title {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 650;
+  color: var(--color-text);
+  letter-spacing: -0.02em;
+}
+
+.dashboard-objectives-link {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #166534;
+  text-decoration: none;
+}
+
+.dashboard-objectives-link:hover {
+  text-decoration: underline;
+}
+
+html.dark .dashboard-objectives-link {
+  color: #4ade80;
+}
+
+.objectives-preview-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.objectives-more-count {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  line-height: 1.4;
+}
+
+.objectives-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 0.75rem;
+}
+
+.objective-preview-card {
+  display: block;
+  padding: 0.875rem 1rem;
+  border-radius: 10px;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg);
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.objective-preview-card:hover {
+  border-color: #166534;
+  box-shadow: 0 2px 8px rgba(22, 101, 52, 0.12);
+}
+
+.objective-preview-name {
+  margin: 0 0 0.35rem;
+  font-size: 0.875rem;
+  font-weight: 650;
+  color: var(--color-text);
+  line-height: 1.3;
+}
+
+.objective-preview-amounts {
+  margin: 0 0 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.objective-preview-track {
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--color-table-row-hover);
+  overflow: hidden;
+}
+
+.objective-preview-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #166534 0%, #16a34a 100%);
+  border-radius: 999px;
+  transition: width 0.2s ease;
+}
+
+.objective-preview-meta {
+  margin: 0.4rem 0 0;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+.objective-preview-date {
+  color: var(--color-text-muted);
+}
+
+.objectives-preview-skeleton {
+  min-height: 2.5rem;
+  display: flex;
+  align-items: center;
+}
+
+.objectives-preview-loading {
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+}
+
+.objectives-preview-empty {
+  text-align: center;
+  padding: 0.5rem 0 0.25rem;
+}
+
+.objectives-preview-empty-text {
+  margin: 0 0 0.65rem;
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+}
+
+.btn-add-objective {
+  display: inline-block;
+  padding: 0.45rem 0.9rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #fff;
+  background: #166534;
+  border-radius: 8px;
+  text-decoration: none;
+}
+
+.btn-add-objective:hover {
+  background: #15803d;
 }
 
 .summary-cards-fallback .card {
