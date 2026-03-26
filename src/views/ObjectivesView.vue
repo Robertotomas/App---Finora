@@ -29,6 +29,7 @@ const formOpen = ref(false)
 const editingId = ref<string | null>(null)
 const formName = ref('')
 const formTarget = ref<number | null>(null)
+const formTargetDate = ref('')
 
 const activeObjectives = computed<SavingsObjectiveActive[]>(() => overview.value.activeObjectives)
 const historyObjectives = computed<SavingsObjectiveHistory[]>(() => overview.value.historyObjectives)
@@ -38,6 +39,7 @@ function resetForm() {
   editingId.value = null
   formName.value = ''
   formTarget.value = null
+  formTargetDate.value = ''
 }
 
 function openCreateForm() {
@@ -49,7 +51,39 @@ function openEditForm(item: SavingsObjectiveActive) {
   editingId.value = item.id
   formName.value = item.name
   formTarget.value = item.targetAmount
+  formTargetDate.value = toDateInputValue(item.targetDate)
   formOpen.value = true
+}
+
+function toDateInputValue(iso: string | null | undefined): string {
+  if (iso == null || iso === '') return ''
+  const s = String(iso).slice(0, 10)
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  return d.toISOString().slice(0, 10)
+}
+
+function parseTargetDateField(raw: unknown): string | null {
+  if (raw == null || raw === '') return null
+  if (typeof raw === 'string') {
+    const s = raw.slice(0, 10)
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s
+    const d = new Date(raw)
+    return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10)
+  }
+  const o = raw as Record<string, unknown>
+  if (
+    typeof o.year === 'number' &&
+    typeof o.month === 'number' &&
+    typeof o.day === 'number'
+  ) {
+    const y = o.year
+    const m = String(o.month).padStart(2, '0')
+    const day = String(o.day).padStart(2, '0')
+    return `${y}-${m}-${day}`
+  }
+  return null
 }
 
 function normalizeOverview(payload: unknown): SavingsObjectivesOverview {
@@ -70,6 +104,7 @@ function normalizeOverview(payload: unknown): SavingsObjectivesOverview {
         id: String(item.id ?? item.Id ?? ''),
         name: String(item.name ?? item.Name ?? ''),
         targetAmount: Number(item.targetAmount ?? item.TargetAmount) || 0,
+        targetDate: parseTargetDateField(item.targetDate ?? item.TargetDate),
         sortOrder: Number(item.sortOrder ?? item.SortOrder) || 0,
         allocatedAmount: Number(item.allocatedAmount ?? item.AllocatedAmount) || 0,
         progressPercent: Number(item.progressPercent ?? item.ProgressPercent) || 0,
@@ -82,6 +117,7 @@ function normalizeOverview(payload: unknown): SavingsObjectivesOverview {
         id: String(item.id ?? item.Id ?? ''),
         name: String(item.name ?? item.Name ?? ''),
         targetAmount: Number(item.targetAmount ?? item.TargetAmount) || 0,
+        targetDate: parseTargetDateField(item.targetDate ?? item.TargetDate),
         sortOrder: Number(item.sortOrder ?? item.SortOrder) || 0,
         completedAt: String(item.completedAt ?? item.CompletedAt ?? ''),
       }
@@ -112,10 +148,14 @@ async function submitForm() {
   saving.value = true
   error.value = null
   try {
+    const targetDateRaw = formTargetDate.value.trim()
+    const targetDate = targetDateRaw === '' ? null : targetDateRaw
+
     if (editingId.value) {
       const payload: UpdateSavingsObjectiveRequest = {
         name: formName.value.trim(),
         targetAmount: Number(formTarget.value),
+        targetDate,
       }
       const { data } = await objectivesApi.update(editingId.value, payload)
       overview.value = normalizeOverview(data)
@@ -123,6 +163,7 @@ async function submitForm() {
       const payload: CreateSavingsObjectiveRequest = {
         name: formName.value.trim(),
         targetAmount: Number(formTarget.value),
+        targetDate,
       }
       const { data } = await objectivesApi.create(payload)
       overview.value = normalizeOverview(data)
@@ -238,6 +279,10 @@ onMounted(async () => {
               <span class="field-label">Valor necessário</span>
               <input v-model.number="formTarget" class="field-input" type="number" min="0.01" step="0.01" placeholder="0,00" />
             </label>
+            <label class="field field-span-2">
+              <span class="field-label">Quer atingir até (opcional)</span>
+              <input v-model="formTargetDate" class="field-input" type="date" />
+            </label>
           </div>
           <div class="form-actions">
             <button type="button" class="btn-secondary" :disabled="saving" @click="resetForm">Cancelar</button>
@@ -267,6 +312,7 @@ onMounted(async () => {
             <p class="goal-amounts">
               {{ formatCurrency(goal.allocatedAmount) }} / {{ formatCurrency(goal.targetAmount) }}
             </p>
+            <p v-if="goal.targetDate" class="goal-target-date">Meta: {{ formatDate(goal.targetDate) }}</p>
 
             <div class="progress-track" role="progressbar" :aria-valuenow="goal.progressPercent" aria-valuemin="0" aria-valuemax="100">
               <div class="progress-fill" :style="{ width: `${Math.min(100, goal.progressPercent)}%` }"></div>
@@ -304,6 +350,7 @@ onMounted(async () => {
               <tr>
                 <th>Objetivo</th>
                 <th>Valor</th>
+                <th>Meta até</th>
                 <th>Ordem</th>
                 <th>Finalizado em</th>
               </tr>
@@ -312,6 +359,7 @@ onMounted(async () => {
               <tr v-for="item in historyObjectives" :key="item.id">
                 <td>{{ item.name }}</td>
                 <td>{{ formatCurrency(item.targetAmount) }}</td>
+                <td>{{ item.targetDate ? formatDate(item.targetDate) : '—' }}</td>
                 <td>#{{ item.sortOrder }}</td>
                 <td>{{ formatDate(item.completedAt) }}</td>
               </tr>
@@ -442,6 +490,16 @@ onMounted(async () => {
   margin: 0 0 0.625rem;
   color: var(--color-text);
   font-weight: 600;
+}
+
+.goal-target-date {
+  margin: -0.25rem 0 0.5rem;
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+}
+
+.field-span-2 {
+  grid-column: 1 / -1;
 }
 
 .progress-track {

@@ -2,6 +2,8 @@ export interface SavingsObjectiveActive {
   id: string
   name: string
   targetAmount: number
+  /** ISO date yyyy-MM-dd */
+  targetDate: string | null
   sortOrder: number
   allocatedAmount: number
   progressPercent: number
@@ -12,6 +14,7 @@ export interface SavingsObjectiveHistory {
   id: string
   name: string
   targetAmount: number
+  targetDate: string | null
   sortOrder: number
   completedAt: string
 }
@@ -27,9 +30,11 @@ export interface SavingsObjectivesOverview {
 export interface CreateSavingsObjectiveRequest {
   name: string
   targetAmount: number
+  targetDate?: string | null
 }
 
 export interface UpdateSavingsObjectiveRequest {
   name: string
   targetAmount: number
+  targetDate?: string | null
 }
