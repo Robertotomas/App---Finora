@@ -10,6 +10,7 @@ import iconDashboard from '@/assets/images/icon-dashboard.png'
 import iconCreditCard from '@/assets/images/icon-credit-card.png'
 import iconMonthly from '@/assets/images/icon-monthly.png'
 import iconTransactions from '@/assets/images/icon-transactions.png'
+import iconObjectives from '@/assets/images/icon-objectives.png'
 import iconFinoraFlow from '@/assets/images/finoraflow-icon.png'
 
 const authStore = useAuthStore()
@@ -75,7 +76,7 @@ const navItems = [
   { to: '/monthly', label: 'Plano Mensal', iconImg: iconMonthly, iconClass: 'sidebar-nav-icon-lg' },
   { to: '/accounts', label: 'Contas', iconImg: iconCreditCard, iconClass: 'sidebar-nav-icon-sm' },
   { to: '/transactions', label: 'Transações', iconImg: iconTransactions, iconClass: 'sidebar-nav-icon-lg' },
-  { to: '/objectives', label: 'Objetivos', icon: '🎯' },
+  { to: '/objectives', label: 'Objetivos', iconImg: iconObjectives, iconClass: 'sidebar-nav-icon-lg sidebar-nav-icon-objectives' },
   { to: '/household', label: 'Household', icon: '👥' },
 ]
 
@@ -307,6 +308,12 @@ html.dark .sidebar-link.active {
 .sidebar-nav-icon-lg {
   width: 26px;
   height: 26px;
+}
+
+/* Ícone alvo em preto: no tema escuro inverter para contraste com a sidebar */
+html.dark .sidebar-nav-icon-objectives {
+  filter: brightness(0) invert(1);
+  opacity: 0.95;
 }
 
 .sidebar-label {
