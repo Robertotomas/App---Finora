@@ -19,7 +19,8 @@ export const useHouseholdStore = defineStore('household', () => {
       household.value = {
         id: data.id,
         type: data.type,
-        name: data.name
+        name: data.name,
+        primaryAccountId: data.primaryAccountId ?? undefined
       }
       return data
     } catch (e: unknown) {

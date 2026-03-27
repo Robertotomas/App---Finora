@@ -4,7 +4,13 @@ import { accountsApi } from '@/api/accounts'
 import type { Account, CreateAccountRequest, UpdateAccountRequest } from '@/types/account'
 
 function extractError(e: unknown): string {
-  const err = e as { response?: { data?: { errors?: Record<string, string[]> }; status: number } }
+  const err = e as {
+    response?: {
+      data?: { errors?: Record<string, string[]>; message?: string }
+      status: number
+    }
+  }
+  if (err.response?.data?.message) return err.response.data.message
   if (err.response?.data?.errors) {
     const first = Object.values(err.response.data.errors)[0]
     return Array.isArray(first) ? first[0] : String(first)
@@ -29,7 +35,8 @@ export const useAccountsStore = defineStore('accounts', () => {
         type: a.type,
         balance: Number(a.balance),
         currency: a.currency,
-        householdId: a.householdId
+        householdId: a.householdId,
+        isActiveForPlan: a.isActiveForPlan ?? true
       }))
       return accounts.value
     } catch (e: unknown) {
@@ -74,7 +81,8 @@ export const useAccountsStore = defineStore('accounts', () => {
         type: data.type,
         balance: Number(data.balance),
         currency: data.currency,
-        householdId: data.householdId
+        householdId: data.householdId,
+        isActiveForPlan: data.isActiveForPlan ?? true
       }
       const idx = accounts.value.findIndex((a) => a.id === id)
       if (idx >= 0) {

@@ -23,6 +23,8 @@ export interface Account {
   balance: number
   currency: string
   householdId: string
+  /** No Free com várias contas, só a principal tem movimentos; as outras ficam false */
+  isActiveForPlan?: boolean
 }
 
 export interface CreateAccountRequest {

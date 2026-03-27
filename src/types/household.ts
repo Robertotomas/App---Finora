@@ -7,6 +7,11 @@ export interface Household {
   id: string
   type: HouseholdType
   name: string
+  primaryAccountId?: string | null
+}
+
+export interface SetPrimaryAccountRequest {
+  accountId: string
 }
 
 export interface HouseholdMember {

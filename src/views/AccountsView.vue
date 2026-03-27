@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { useAccountsStore } from '@/stores/accounts'
 import { useHouseholdStore } from '@/stores/household'
 import { useSubscriptionStore } from '@/stores/subscription'
+import { householdApi } from '@/api/household'
 import AccountFormModal from '@/components/AccountFormModal.vue'
 import BaseModal from '@/components/BaseModal.vue'
 import ConfirmDeleteModal from '@/components/ConfirmDeleteModal.vue'
@@ -25,6 +26,49 @@ const accountToDelete = ref<Account | null>(null)
 
 const actionLoading = ref(false)
 const accountLimitModalOpen = ref(false)
+
+const needsPrimarySelection = computed(
+  () => subscriptionStore.limits.needsPrimaryAccountSelection === true
+)
+
+const selectedPrimaryId = ref('')
+const primarySelectionLoading = ref(false)
+const primaryError = ref<string | null>(null)
+
+watch(
+  () => [accountsStore.accounts, needsPrimarySelection.value] as const,
+  () => {
+    if (!needsPrimarySelection.value || accountsStore.accounts.length === 0) return
+    const ok = accountsStore.accounts.some((a) => a.id === selectedPrimaryId.value)
+    if (!selectedPrimaryId.value || !ok) {
+      selectedPrimaryId.value = accountsStore.accounts[0].id
+    }
+  },
+  { immediate: true }
+)
+
+async function setPrimaryAccount() {
+  if (!selectedPrimaryId.value) return
+  primarySelectionLoading.value = true
+  primaryError.value = null
+  try {
+    await householdApi.setPrimaryAccount({ accountId: selectedPrimaryId.value })
+    await Promise.all([subscriptionStore.fetchSubscription(), accountsStore.fetchAccounts()])
+    if (householdStore.household) {
+      await householdStore.fetchHousehold()
+    }
+  } catch (e: unknown) {
+    const err = e as { response?: { data?: { message?: string } } }
+    primaryError.value = err.response?.data?.message ?? 'Não foi possível definir a conta principal.'
+  } finally {
+    primarySelectionLoading.value = false
+  }
+}
+
+function isPrimaryBadge(account: Account): boolean {
+  const pid = subscriptionStore.limits.primaryAccountId
+  return !!pid && pid === account.id && subscriptionStore.isFree && accountsStore.accounts.length > 1
+}
 
 onMounted(async () => {
   try {
@@ -52,6 +96,8 @@ function closeCreateModal() {
 }
 
 function openEditModal(account: Account) {
+  if (needsPrimarySelection.value) return
+  if (account.isActiveForPlan === false) return
   accountsStore.clearError()
   accountToEdit.value = account
   editModalOpen.value = true
@@ -150,6 +196,32 @@ function formatBalance(balance: number, currency: string): string {
         {{ accountsStore.error }}
       </div>
 
+      <div
+        v-if="needsPrimarySelection && accountsStore.accounts.length > 1"
+        class="primary-banner"
+      >
+        <p class="primary-banner-title">Escolhe a conta principal</p>
+        <p class="primary-banner-text">
+          No plano Free só uma conta pode estar ativa para movimentos e edições. As outras ficam só para consulta até
+          eliminares ou atualizares o plano.
+        </p>
+        <div class="primary-radio-list">
+          <label v-for="a in accountsStore.accounts" :key="a.id" class="primary-radio">
+            <input v-model="selectedPrimaryId" type="radio" name="primary" :value="a.id" />
+            <span>{{ a.name }}</span>
+          </label>
+        </div>
+        <p v-if="primaryError" class="primary-banner-error">{{ primaryError }}</p>
+        <button
+          type="button"
+          class="btn-primary-confirm"
+          :disabled="primarySelectionLoading || !selectedPrimaryId"
+          @click="setPrimaryAccount"
+        >
+          {{ primarySelectionLoading ? 'A guardar...' : 'Confirmar conta principal' }}
+        </button>
+      </div>
+
       <div class="section-card">
         <div class="section-header">
           <h2 class="section-title">As minhas contas</h2>
@@ -180,6 +252,7 @@ function formatBalance(balance: number, currency: string): string {
           v-for="account in accountsStore.accounts"
           :key="account.id"
           class="account-card"
+          :class="{ 'account-card--locked': account.isActiveForPlan === false }"
         >
           <div class="card-main">
             <div class="account-header">
@@ -190,6 +263,7 @@ function formatBalance(balance: number, currency: string): string {
                 </svg>
               </span>
               <h3 class="account-name">{{ account.name }}</h3>
+              <span v-if="isPrimaryBadge(account)" class="primary-badge">Principal</span>
             </div>
             <p class="account-balance" :class="{ negative: account.balance < 0 }">
               {{ formatBalance(account.balance, account.currency) }}
@@ -197,12 +271,22 @@ function formatBalance(balance: number, currency: string): string {
             <span class="account-type-badge">
               {{ ACCOUNT_TYPE_LABELS[account.type] }}
             </span>
+            <p v-if="account.isActiveForPlan === false" class="account-locked-hint">
+              Conta só de consulta no plano Free com várias contas.
+            </p>
           </div>
           <div class="card-actions">
             <button
               type="button"
               class="btn-icon"
-              title="Editar"
+              :title="
+                needsPrimarySelection
+                  ? 'Escolhe primeiro a conta principal acima'
+                  : account.isActiveForPlan === false
+                    ? 'No plano Free só podes editar a conta principal'
+                    : 'Editar'
+              "
+              :disabled="needsPrimarySelection || account.isActiveForPlan === false"
               @click="openEditModal(account)"
             >
               Editar
@@ -325,6 +409,70 @@ function formatBalance(balance: number, currency: string): string {
   margin-bottom: 1rem;
 }
 
+.primary-banner {
+  margin-bottom: 1rem;
+  padding: 1rem 1.25rem;
+  border-radius: var(--app-radius-md, 12px);
+  border: 1px solid #fde68a;
+  background: #fffbeb;
+}
+
+.primary-banner-title {
+  margin: 0 0 0.5rem 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #92400e;
+}
+
+.primary-banner-text {
+  margin: 0 0 1rem 0;
+  font-size: 0.875rem;
+  line-height: 1.45;
+  color: #78350f;
+}
+
+.primary-radio-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.primary-radio {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9375rem;
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.primary-banner-error {
+  margin: 0 0 0.75rem 0;
+  font-size: 0.8125rem;
+  color: #dc2626;
+}
+
+.btn-primary-confirm {
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #fff;
+  background: #166534;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.btn-primary-confirm:hover:not(:disabled) {
+  background: #15803d;
+}
+
+.btn-primary-confirm:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .section-card {
   background: var(--color-bg-card);
   border-radius: var(--app-radius-md, 12px);
@@ -411,6 +559,24 @@ function formatBalance(balance: number, currency: string): string {
   gap: 1rem;
 }
 
+.account-card--locked {
+  opacity: 0.92;
+  border-style: dashed;
+  border-color: #cbd5e1;
+}
+
+.account-locked-hint {
+  margin: 0.5rem 0 0 0;
+  font-size: 0.75rem;
+  color: #64748b;
+  line-height: 1.35;
+}
+
+.btn-icon:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .card-main {
   flex: 1;
 }
@@ -418,8 +584,20 @@ function formatBalance(balance: number, currency: string): string {
 .account-header {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 0.5rem;
   margin-bottom: 0.5rem;
+}
+
+.primary-badge {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #166534;
+  background: #dcfce7;
+  padding: 0.2rem 0.45rem;
+  border-radius: 6px;
 }
 
 .account-type-icon {

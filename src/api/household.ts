@@ -1,5 +1,5 @@
 import api from './client'
-import type { Household, HouseholdMember, UpdateHouseholdRequest } from '@/types/household'
+import type { Household, HouseholdMember, SetPrimaryAccountRequest, UpdateHouseholdRequest } from '@/types/household'
 
 export const householdApi = {
   getMyHousehold: () =>
@@ -10,4 +10,7 @@ export const householdApi = {
 
   update: (id: string, data: UpdateHouseholdRequest) =>
     api.put<Household>(`/api/household/${id}`, data),
+
+  setPrimaryAccount: (data: SetPrimaryAccountRequest) =>
+    api.put<Household>('/api/household/me/primary-account', data),
 }

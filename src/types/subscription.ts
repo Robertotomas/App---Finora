@@ -6,6 +6,10 @@ export interface SubscriptionLimits {
   expensesRemainingThisMonth: number | null
   objectivesEnabled: boolean
   canInvite: boolean
+  /** Free + mais do que uma conta e ainda não foi escolhida conta principal */
+  needsPrimaryAccountSelection?: boolean
+  /** Só preenchido em Free multi-conta depois de escolher principal */
+  primaryAccountId?: string | null
 }
 
 export interface SubscriptionMe {

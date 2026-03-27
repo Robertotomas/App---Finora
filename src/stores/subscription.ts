@@ -46,6 +46,8 @@ export const useSubscriptionStore = defineStore('subscription', () => {
     expensesRemainingThisMonth: null,
     objectivesEnabled: false,
     canInvite: false,
+    needsPrimaryAccountSelection: false,
+    primaryAccountId: null,
   })
 
   const plan = computed<SubscriptionPlan>(() => (subscription.value?.plan ?? 'Free') as SubscriptionPlan)
