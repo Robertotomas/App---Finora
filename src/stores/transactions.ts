@@ -17,6 +17,18 @@ function extractError(e: unknown): string {
   return 'Ocorreu um erro. Tenta novamente.'
 }
 
+/** 403 com estes códigos é tratado na UI (modal); não mostrar barra de erro genérica */
+function isHandledPlanRestrictionError(e: unknown): boolean {
+  const err = e as { response?: { status?: number; data?: { code?: string } } }
+  if (err.response?.status !== 403) return false
+  const code = err.response?.data?.code
+  return (
+    code === 'PLAN_LIMIT' ||
+    code === 'FREE_PRIMARY_REQUIRED' ||
+    code === 'FREE_ACCOUNT_LOCKED'
+  )
+}
+
 function mapTransaction(d: { id: string; accountId: string; householdId: string; type: number; category: number; amount: number; date: string; description?: string; splits?: { userId: string; percentage: number }[] }): Transaction {
   return {
     id: d.id,
@@ -44,7 +56,11 @@ export const useTransactionsStore = defineStore('transactions', () => {
       transactions.value = data.map(mapTransaction)
       return transactions.value
     } catch (e: unknown) {
-      error.value = extractError(e)
+      if (!isHandledPlanRestrictionError(e)) {
+        error.value = extractError(e)
+      } else {
+        error.value = null
+      }
       throw e
     } finally {
       loading.value = false
@@ -60,7 +76,11 @@ export const useTransactionsStore = defineStore('transactions', () => {
       transactions.value = [tx, ...transactions.value]
       return tx
     } catch (e: unknown) {
-      error.value = extractError(e)
+      if (!isHandledPlanRestrictionError(e)) {
+        error.value = extractError(e)
+      } else {
+        error.value = null
+      }
       throw e
     } finally {
       loading.value = false
@@ -82,7 +102,11 @@ export const useTransactionsStore = defineStore('transactions', () => {
       }
       return tx
     } catch (e: unknown) {
-      error.value = extractError(e)
+      if (!isHandledPlanRestrictionError(e)) {
+        error.value = extractError(e)
+      } else {
+        error.value = null
+      }
       throw e
     } finally {
       loading.value = false
@@ -96,7 +120,11 @@ export const useTransactionsStore = defineStore('transactions', () => {
       await transactionsApi.delete(id)
       transactions.value = transactions.value.filter((t) => t.id !== id)
     } catch (e: unknown) {
-      error.value = extractError(e)
+      if (!isHandledPlanRestrictionError(e)) {
+        error.value = extractError(e)
+      } else {
+        error.value = null
+      }
       throw e
     } finally {
       loading.value = false

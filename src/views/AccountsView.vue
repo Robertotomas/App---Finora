@@ -31,6 +31,13 @@ const needsPrimarySelection = computed(
   () => subscriptionStore.limits.needsPrimaryAccountSelection === true
 )
 
+/** Contas que não são a principal no Free — precisam de plano pago para movimentos/edição */
+const showUnlockAccountsBanner = computed(
+  () =>
+    !needsPrimarySelection.value &&
+    accountsStore.accounts.some((a) => a.isActiveForPlan === false)
+)
+
 const selectedPrimaryId = ref('')
 const primarySelectionLoading = ref(false)
 const primaryError = ref<string | null>(null)
@@ -220,6 +227,20 @@ function formatBalance(balance: number, currency: string): string {
         >
           {{ primarySelectionLoading ? 'A guardar...' : 'Confirmar conta principal' }}
         </button>
+      </div>
+
+      <div v-if="showUnlockAccountsBanner" class="primary-banner accounts-unlock-banner">
+        <div class="accounts-unlock-banner-inner">
+          <div class="accounts-unlock-banner-copy">
+            <p class="primary-banner-title">Outras contas</p>
+            <p class="primary-banner-text accounts-unlock-banner-desc">
+              Para desbloquear as outras contas para movimentos e edições, atualize o plano para Pro ou Couple.
+            </p>
+          </div>
+          <router-link :to="{ name: 'subscription' }" class="accounts-unlock-banner-cta">
+            Ver planos
+          </router-link>
+        </div>
       </div>
 
       <div class="section-card">
@@ -431,6 +452,19 @@ function formatBalance(balance: number, currency: string): string {
   color: #78350f;
 }
 
+html.dark .primary-banner {
+  border-color: rgba(250, 204, 21, 0.38);
+  background: rgba(120, 53, 15, 0.28);
+}
+
+html.dark .primary-banner-title {
+  color: #fcd34d;
+}
+
+html.dark .primary-banner-text {
+  color: #fde68a;
+}
+
 .primary-radio-list {
   display: flex;
   flex-direction: column;
@@ -471,6 +505,42 @@ function formatBalance(balance: number, currency: string): string {
 .btn-primary-confirm:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+.accounts-unlock-banner-inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.875rem 1rem;
+}
+
+.accounts-unlock-banner-copy {
+  flex: 1;
+  min-width: min(100%, 240px);
+}
+
+.accounts-unlock-banner-desc {
+  margin-bottom: 0;
+}
+
+.accounts-unlock-banner-cta {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem 1rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #fff;
+  background: #166534;
+  border-radius: 8px;
+  text-decoration: none;
+  transition: background 0.2s;
+}
+
+.accounts-unlock-banner-cta:hover {
+  background: #15803d;
 }
 
 .section-card {

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { useTransactionsStore } from '@/stores/transactions'
 import { useRecurringTransactionsStore } from '@/stores/recurringTransactions'
 import { useAccountsStore } from '@/stores/accounts'
@@ -28,6 +29,7 @@ const accountsStore = useAccountsStore()
 const householdStore = useHouseholdStore()
 const authStore = useAuthStore()
 const subscriptionStore = useSubscriptionStore()
+const router = useRouter()
 
 const activeTab = ref<'transactions' | 'recurring'>('transactions')
 
@@ -248,6 +250,21 @@ function closeCreateModal() {
   createModalOpen.value = false
 }
 
+/** Fecha o aviso de limite/plano, limpa erros e volta ao separador Transações (e à rota, se necessário). */
+function dismissLimitModal() {
+  limitModalOpen.value = false
+  transactionsStore.clearError()
+  recurringStore.clearError()
+  closeCreateModal()
+  closeEditModal()
+  closeRecurringCreateModal()
+  closeRecurringEditModal()
+  activeTab.value = 'transactions'
+  if (router.currentRoute.value.name !== 'transactions') {
+    void router.push({ name: 'transactions' })
+  }
+}
+
 function openEditModal(tx: Transaction) {
   if (needsPrimarySelection.value) {
     limitModalKind.value = 'primary'
@@ -294,18 +311,21 @@ async function handleCreate(payload: CreateTransactionRequest) {
     const err = e as { response?: { status?: number; data?: { code?: string; message?: string } } }
     const code = err.response?.data?.code
     if (err.response?.status === 403 && code === 'PLAN_LIMIT') {
+      closeCreateModal()
       limitModalKind.value = 'plan'
       limitMessage.value = payload.type === TransactionType.Income
         ? 'Atingiste o limite de receitas do plano Free: só podes adicionar 1 receita por mês. Atualiza para Pro ou Couple para continuares.'
         : 'Atingiste o limite de despesas do plano Free: só podes adicionar 5 despesas por mês. Atualiza para Pro ou Couple para continuares.'
       limitModalOpen.value = true
     } else if (err.response?.status === 403 && code === 'FREE_PRIMARY_REQUIRED') {
+      closeCreateModal()
       limitModalKind.value = 'primary'
       limitMessage.value =
         err.response?.data?.message ??
         'Tens mais do que uma conta no plano Free. Escolhe a conta principal em Contas antes de adicionar movimentos.'
       limitModalOpen.value = true
     } else if (err.response?.status === 403 && code === 'FREE_ACCOUNT_LOCKED') {
+      closeCreateModal()
       limitModalKind.value = 'primary'
       limitMessage.value =
         err.response?.data?.message ??
@@ -328,12 +348,14 @@ async function handleEdit(payload: CreateTransactionRequest) {
     const err = e as { response?: { status?: number; data?: { code?: string; message?: string } } }
     const code = err.response?.data?.code
     if (err.response?.status === 403 && code === 'FREE_PRIMARY_REQUIRED') {
+      closeEditModal()
       limitModalKind.value = 'primary'
       limitMessage.value =
         err.response?.data?.message ??
         'Escolhe a conta principal em Contas antes de editar movimentos.'
       limitModalOpen.value = true
     } else if (err.response?.status === 403 && code === 'FREE_ACCOUNT_LOCKED') {
+      closeEditModal()
       limitModalKind.value = 'primary'
       limitMessage.value =
         err.response?.data?.message ??
@@ -458,6 +480,7 @@ async function handleRecurringCreate(payload: CreateRecurringTransactionRequest)
     const err = e as { response?: { status?: number; data?: { code?: string; message?: string } } }
     const code = err.response?.data?.code
     if (err.response?.status === 403 && code === 'PLAN_LIMIT') {
+      closeRecurringCreateModal()
       limitModalKind.value = 'plan'
       limitMessage.value = payload.type === TransactionType.Income
         ? 'Atingiste o limite de receitas do plano Free: só podes adicionar 1 receita por mês. Atualiza para Pro ou Couple para continuares.'
@@ -466,6 +489,7 @@ async function handleRecurringCreate(payload: CreateRecurringTransactionRequest)
       return
     }
     if (err.response?.status === 403 && code === 'FREE_PRIMARY_REQUIRED') {
+      closeRecurringCreateModal()
       limitModalKind.value = 'primary'
       limitMessage.value =
         err.response?.data?.message ??
@@ -474,6 +498,7 @@ async function handleRecurringCreate(payload: CreateRecurringTransactionRequest)
       return
     }
     if (err.response?.status === 403 && code === 'FREE_ACCOUNT_LOCKED') {
+      closeRecurringCreateModal()
       limitModalKind.value = 'primary'
       limitMessage.value =
         err.response?.data?.message ??
@@ -497,12 +522,14 @@ async function handleRecurringEdit(payload: CreateRecurringTransactionRequest) {
     const err = e as { response?: { status?: number; data?: { code?: string; message?: string } } }
     const code = err.response?.data?.code
     if (err.response?.status === 403 && code === 'FREE_PRIMARY_REQUIRED') {
+      closeRecurringEditModal()
       limitModalKind.value = 'primary'
       limitMessage.value =
         err.response?.data?.message ??
         'Escolhe a conta principal em Contas antes de editar recorrentes.'
       limitModalOpen.value = true
     } else if (err.response?.status === 403 && code === 'FREE_ACCOUNT_LOCKED') {
+      closeRecurringEditModal()
       limitModalKind.value = 'primary'
       limitMessage.value =
         err.response?.data?.message ??
@@ -871,17 +898,17 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
     <BaseModal
       v-if="limitModalOpen"
       :title="limitModalKind === 'primary' ? 'Conta principal' : 'Limite do plano Free'"
-      @close="limitModalOpen = false"
+      @close="dismissLimitModal"
     >
       <div class="locked-modal-body">
         <p>{{ limitMessage }}</p>
         <div class="locked-modal-actions">
-          <button type="button" class="btn-secondary" @click="limitModalOpen = false">Agora não</button>
+          <button type="button" class="btn-secondary" @click="dismissLimitModal">Agora não</button>
           <router-link
             v-if="limitModalKind === 'primary'"
             :to="{ name: 'accounts' }"
             class="locked-modal-cta"
-            @click="limitModalOpen = false"
+            @click="dismissLimitModal"
           >
             Ir para Contas
           </router-link>
@@ -889,7 +916,7 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
             v-else
             :to="{ name: 'subscription' }"
             class="locked-modal-cta"
-            @click="limitModalOpen = false"
+            @click="dismissLimitModal"
           >
             Ver planos
           </router-link>

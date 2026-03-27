@@ -17,6 +17,17 @@ function extractError(e: unknown): string {
   return 'Ocorreu um erro. Tenta novamente.'
 }
 
+function isHandledPlanRestrictionError(e: unknown): boolean {
+  const err = e as { response?: { status?: number; data?: { code?: string } } }
+  if (err.response?.status !== 403) return false
+  const code = err.response?.data?.code
+  return (
+    code === 'PLAN_LIMIT' ||
+    code === 'FREE_PRIMARY_REQUIRED' ||
+    code === 'FREE_ACCOUNT_LOCKED'
+  )
+}
+
 function mapRecurring(d: {
   id: string
   accountId: string
@@ -58,7 +69,11 @@ export const useRecurringTransactionsStore = defineStore('recurringTransactions'
       recurring.value = data.map(mapRecurring)
       return recurring.value
     } catch (e: unknown) {
-      error.value = extractError(e)
+      if (!isHandledPlanRestrictionError(e)) {
+        error.value = extractError(e)
+      } else {
+        error.value = null
+      }
       throw e
     } finally {
       loading.value = false
@@ -74,7 +89,11 @@ export const useRecurringTransactionsStore = defineStore('recurringTransactions'
       recurring.value = [r, ...recurring.value]
       return r
     } catch (e: unknown) {
-      error.value = extractError(e)
+      if (!isHandledPlanRestrictionError(e)) {
+        error.value = extractError(e)
+      } else {
+        error.value = null
+      }
       throw e
     } finally {
       loading.value = false
@@ -96,7 +115,11 @@ export const useRecurringTransactionsStore = defineStore('recurringTransactions'
       }
       return r
     } catch (e: unknown) {
-      error.value = extractError(e)
+      if (!isHandledPlanRestrictionError(e)) {
+        error.value = extractError(e)
+      } else {
+        error.value = null
+      }
       throw e
     } finally {
       loading.value = false
@@ -115,7 +138,11 @@ export const useRecurringTransactionsStore = defineStore('recurringTransactions'
         )
       }
     } catch (e: unknown) {
-      error.value = extractError(e)
+      if (!isHandledPlanRestrictionError(e)) {
+        error.value = extractError(e)
+      } else {
+        error.value = null
+      }
       throw e
     } finally {
       loading.value = false
