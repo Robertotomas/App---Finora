@@ -1,13 +1,17 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { computed, ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { useAccountsStore } from '@/stores/accounts'
 import { useHouseholdStore } from '@/stores/household'
+import { useSubscriptionStore } from '@/stores/subscription'
 import AccountFormModal from '@/components/AccountFormModal.vue'
 import ConfirmDeleteModal from '@/components/ConfirmDeleteModal.vue'
 import type { Account, CreateAccountRequest } from '@/types/account'
 import { ACCOUNT_TYPE_LABELS, AccountType } from '@/types/account'
 
 const accountsStore = useAccountsStore()
+const subscriptionStore = useSubscriptionStore()
+const router = useRouter()
 
 function isCreditCard(type: Account['type']): boolean {
   return Number(type) === AccountType.CreditCard
@@ -22,18 +26,25 @@ const accountToDelete = ref<Account | null>(null)
 
 const actionLoading = ref(false)
 
+const canCreateAccount = computed(() => subscriptionStore.canAddAccount)
+
 onMounted(async () => {
   try {
     await householdStore.fetchHousehold()
     if (householdStore.household) {
       await accountsStore.fetchAccounts()
     }
+    await subscriptionStore.fetchSubscription()
   } catch {
     // Handled in stores
   }
 })
 
 function openCreateModal() {
+  if (!subscriptionStore.canAddAccount) {
+    router.push({ name: 'subscription' })
+    return
+  }
   accountsStore.clearError()
   createModalOpen.value = true
 }
@@ -67,9 +78,14 @@ async function handleCreate(payload: CreateAccountRequest) {
   actionLoading.value = true
   try {
     await accountsStore.createAccount(payload)
+    await subscriptionStore.fetchSubscription()
     closeCreateModal()
-  } catch {
-    // Error shown in store
+  } catch (e: unknown) {
+    const err = e as { response?: { status: number; data?: { code?: string; message?: string } } }
+    const code = err.response?.data?.code
+    if (err.response?.status === 403 && code === 'PLAN_LIMIT') {
+      await router.push({ name: 'subscription' })
+    }
   } finally {
     actionLoading.value = false
   }
@@ -93,6 +109,7 @@ async function handleDelete() {
   actionLoading.value = true
   try {
     await accountsStore.deleteAccount(accountToDelete.value.id)
+    await subscriptionStore.fetchSubscription()
     closeDeleteModal()
   } catch {
     // Error shown in store
@@ -144,7 +161,7 @@ function formatBalance(balance: number, currency: string): string {
             class="btn-add"
             @click="openCreateModal"
           >
-            + Nova conta
+            {{ canCreateAccount ? '+ Nova conta' : 'Atualizar plano' }}
           </button>
         </div>
 
@@ -156,7 +173,7 @@ function formatBalance(balance: number, currency: string): string {
         <div v-else-if="accountsStore.accounts.length === 0" class="section-empty">
           <p class="section-empty-text">Ainda não tens contas.</p>
           <button type="button" class="btn-section-add" @click="openCreateModal">
-            Adicionar a sua primeira conta
+            {{ canCreateAccount ? 'Adicionar a sua primeira conta' : 'Atualizar plano' }}
           </button>
         </div>
 

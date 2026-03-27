@@ -5,12 +5,14 @@ import { useRecurringTransactionsStore } from '@/stores/recurringTransactions'
 import { useAccountsStore } from '@/stores/accounts'
 import { useHouseholdStore } from '@/stores/household'
 import { useAuthStore } from '@/stores/auth'
+import { useSubscriptionStore } from '@/stores/subscription'
 import { householdApi } from '@/api/household'
 import TransactionFormModal from '@/components/TransactionFormModal.vue'
 import RecurringFormModal from '@/components/RecurringFormModal.vue'
 import RemoveRecurringModal from '@/components/RemoveRecurringModal.vue'
 import ConfirmDeleteModal from '@/components/ConfirmDeleteModal.vue'
 import MonthYearNavigator from '@/components/MonthYearNavigator.vue'
+import UpgradePlanModal from '@/components/UpgradePlanModal.vue'
 import type { Transaction, CreateTransactionRequest } from '@/types/transaction'
 import type { RecurringTransaction, CreateRecurringTransactionRequest } from '@/types/recurringTransaction'
 import {
@@ -25,6 +27,7 @@ const recurringStore = useRecurringTransactionsStore()
 const accountsStore = useAccountsStore()
 const householdStore = useHouseholdStore()
 const authStore = useAuthStore()
+const subscriptionStore = useSubscriptionStore()
 
 const activeTab = ref<'transactions' | 'recurring'>('transactions')
 
@@ -76,6 +79,14 @@ const page = ref(1)
 const pageSize = 20
 
 const actionLoading = ref(false)
+
+const upgradeModalOpen = ref(false)
+const upgradeReason = ref<string | null>(null)
+
+function openUpgradeModal(reason: string) {
+  upgradeReason.value = reason
+  upgradeModalOpen.value = true
+}
 
 const paginatedTransactions = computed(() => {
   const list = transactionsStore.transactions
@@ -135,6 +146,7 @@ onMounted(async () => {
       await fetchWithFilters()
       await recurringStore.fetchRecurring()
     }
+    await subscriptionStore.fetchSubscription()
   } catch {
     // Handled in stores
   }
@@ -222,8 +234,11 @@ async function handleCreate(payload: CreateTransactionRequest) {
     await transactionsStore.createTransaction(payload)
     await accountsStore.fetchAccounts()
     closeCreateModal()
-  } catch {
-    // Error shown in store
+  } catch (e: unknown) {
+    const err = e as { response?: { status?: number; data?: { code?: string; message?: string } } }
+    if (err.response?.status === 403 && err.response.data?.code === 'PLAN_LIMIT') {
+      openUpgradeModal(err.response.data.message ?? 'Atualiza o teu plano para continuar.')
+    }
   } finally {
     actionLoading.value = false
   }
@@ -671,6 +686,12 @@ function getAccountName(accountId: string): string {
       @close="closeRecurringRemoveModal"
       @remove-from-current-month="handleRecurringRemoveFromCurrentMonth"
       @remove-from-next-month="handleRecurringRemoveFromNextMonth"
+    />
+
+    <UpgradePlanModal
+      :open="upgradeModalOpen"
+      :reason="upgradeReason ?? undefined"
+      @close="upgradeModalOpen = false"
     />
   </div>
 </template>

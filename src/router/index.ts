@@ -62,6 +62,12 @@ const router = createRouter({
           component: () => import('@/views/ObjectivesView.vue'),
           meta: { requiresAuth: true },
         },
+        {
+          path: 'subscription',
+          name: 'subscription',
+          component: () => import('@/views/SubscriptionView.vue'),
+          meta: { requiresAuth: true },
+        },
       ],
     },
   ],

@@ -5,6 +5,7 @@ import type { SavingsObjectiveActive } from '@/types/objective'
 import { objectivesApi } from '@/api/objectives'
 import { useHouseholdStore } from '@/stores/household'
 import { useAccountsStore } from '@/stores/accounts'
+import { useSubscriptionStore } from '@/stores/subscription'
 import { useDashboard } from '@/composables/useDashboard'
 import { useMonthlyBudget } from '@/composables/useMonthlyBudget'
 import { ACCOUNT_TYPE_LABELS, AccountType } from '@/types/account'
@@ -25,6 +26,7 @@ import MonthYearNavigator from '@/components/MonthYearNavigator.vue'
 
 const householdStore = useHouseholdStore()
 const accountsStore = useAccountsStore()
+const subscriptionStore = useSubscriptionStore()
 const dashboard = useDashboard()
 const budget = useMonthlyBudget()
 const mounted = ref(false)
@@ -38,6 +40,8 @@ const objectivesLoaded = ref(false)
 const objectivesPreview = ref<SavingsObjectiveActive[]>([])
 const objectivesActiveTotal = ref(0)
 const objectivesMoreCount = computed(() => Math.max(0, objectivesActiveTotal.value - 4))
+const objectivesLocked = computed(() => subscriptionStore.isFree)
+const objectivesRoute = computed(() => (objectivesLocked.value ? { name: 'subscription' } : { name: 'objectives' }))
 
 function parseTargetDateOnly(raw: unknown): string | null {
   if (raw == null || raw === '') return null
@@ -135,6 +139,7 @@ onMounted(async () => {
             dashboard.fetch(true),
             accountsStore.fetchAccounts(),
             loadObjectivesPreview(),
+            subscriptionStore.fetchSubscription(),
           ])
         }
       })(),
@@ -359,18 +364,26 @@ const showContent = computed(() =>
         <div class="dashboard-objectives">
           <div class="dashboard-objectives-header">
             <h3 class="dashboard-objectives-title">Objetivos de poupança</h3>
-            <router-link :to="{ name: 'objectives' }" class="dashboard-objectives-link">Ver todos</router-link>
+            <router-link
+              :to="objectivesRoute"
+              class="dashboard-objectives-link"
+            >Ver todos</router-link>
           </div>
           <div v-if="objectivesLoading" class="objectives-preview-skeleton">
             <span class="objectives-preview-loading">A carregar objetivos…</span>
           </div>
-          <div v-else-if="objectivesPreview.length > 0" class="objectives-preview-block">
+          <div
+            v-else-if="objectivesPreview.length > 0"
+            class="objectives-preview-block"
+            :class="{ 'objectives-preview-block--locked': objectivesLocked }"
+          >
             <div class="objectives-preview-grid">
               <router-link
                 v-for="goal in objectivesPreview"
                 :key="goal.id"
-                :to="{ name: 'objectives' }"
+                :to="objectivesRoute"
                 class="objective-preview-card"
+                :class="{ 'objective-preview-card--locked': objectivesLocked }"
               >
                 <p class="objective-preview-name">{{ goal.name }}</p>
                 <p class="objective-preview-amounts">
@@ -390,10 +403,32 @@ const showContent = computed(() =>
               +{{ objectivesMoreCount }}
               {{ objectivesMoreCount === 1 ? 'objetivo ativo' : 'objetivos ativos' }}
             </p>
+            <router-link
+              v-if="objectivesLocked"
+              :to="{ name: 'subscription' }"
+              class="btn-add-objective"
+            >
+              Atualiza para Pro ou Couple
+            </router-link>
           </div>
-          <div v-else-if="objectivesLoaded" class="objectives-preview-empty">
+          <div
+            v-else-if="objectivesLoaded"
+            class="objectives-preview-empty"
+            :class="{ 'objectives-preview-empty--locked': objectivesLocked }"
+          >
             <p class="objectives-preview-empty-text">Ainda não tens objetivos ativos.</p>
-            <router-link :to="{ name: 'objectives' }" class="btn-add-objective">+ Criar objetivo</router-link>
+            <router-link
+              v-if="!objectivesLocked"
+              :to="objectivesRoute"
+              class="btn-add-objective"
+            >+ Criar objetivo</router-link>
+            <router-link
+              v-else
+              :to="{ name: 'subscription' }"
+              class="btn-add-objective"
+            >
+              Atualiza para Pro ou Couple
+            </router-link>
           </div>
         </div>
       </div>
@@ -881,6 +916,18 @@ html.dark .dashboard-objectives-link {
 .objectives-preview-empty {
   text-align: center;
   padding: 0.5rem 0 0.25rem;
+}
+
+.objectives-preview-block--locked {
+  opacity: 0.55;
+}
+
+.objectives-preview-empty--locked {
+  opacity: 0.7;
+}
+
+.objective-preview-card--locked {
+  cursor: not-allowed;
 }
 
 .objectives-preview-empty-text {

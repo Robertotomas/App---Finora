@@ -2,6 +2,8 @@
 import { computed, onMounted, ref } from 'vue'
 import { useHouseholdStore } from '@/stores/household'
 import { objectivesApi } from '@/api/objectives'
+import { useSubscriptionStore } from '@/stores/subscription'
+import UpgradePlanModal from '@/components/UpgradePlanModal.vue'
 import type {
   CreateSavingsObjectiveRequest,
   SavingsObjectiveActive,
@@ -11,6 +13,7 @@ import type {
 } from '@/types/objective'
 
 const householdStore = useHouseholdStore()
+const subscriptionStore = useSubscriptionStore()
 
 const loading = ref(false)
 const saving = ref(false)
@@ -34,6 +37,16 @@ const formTargetDate = ref('')
 const activeObjectives = computed<SavingsObjectiveActive[]>(() => overview.value.activeObjectives)
 const historyObjectives = computed<SavingsObjectiveHistory[]>(() => overview.value.historyObjectives)
 
+const objectivesLocked = computed(() => !subscriptionStore.canAccessObjectives)
+
+const upgradeModalOpen = ref(false)
+const upgradeReason = ref<string | null>(null)
+
+function openUpgradeModal(reason: string) {
+  upgradeReason.value = reason
+  upgradeModalOpen.value = true
+}
+
 function resetForm() {
   formOpen.value = false
   editingId.value = null
@@ -43,11 +56,19 @@ function resetForm() {
 }
 
 function openCreateForm() {
+  if (objectivesLocked.value) {
+    openUpgradeModal('No plano Free não podes adicionar objetivos. Atualiza para Pro ou Couple.')
+    return
+  }
   resetForm()
   formOpen.value = true
 }
 
 function openEditForm(item: SavingsObjectiveActive) {
+  if (objectivesLocked.value) {
+    openUpgradeModal('No plano Free não podes adicionar/editar objetivos. Atualiza para Pro ou Couple.')
+    return
+  }
   editingId.value = item.id
   formName.value = item.name
   formTarget.value = item.targetAmount
@@ -140,6 +161,10 @@ async function loadOverview() {
 }
 
 async function submitForm() {
+  if (objectivesLocked.value) {
+    openUpgradeModal('No plano Free não podes adicionar/editar objetivos. Atualiza para Pro ou Couple.')
+    return
+  }
   if (!formName.value.trim() || !formTarget.value || formTarget.value <= 0) {
     error.value = 'Preenche nome e valor alvo válido.'
     return
@@ -178,6 +203,10 @@ async function submitForm() {
 }
 
 async function finalizeObjective(item: SavingsObjectiveActive) {
+  if (objectivesLocked.value) {
+    openUpgradeModal('No plano Free não podes gerir objetivos. Atualiza para Pro ou Couple.')
+    return
+  }
   saving.value = true
   error.value = null
   try {
@@ -210,6 +239,7 @@ function formatDate(value: string): string {
 onMounted(async () => {
   try {
     await householdStore.fetchHousehold()
+    await subscriptionStore.fetchSubscription()
   } catch {
     // handled below
   }
@@ -265,7 +295,18 @@ onMounted(async () => {
 
       <section v-if="activeTab === 'active'" class="content-section">
         <div class="toolbar">
-          <button type="button" class="btn-add" @click="openCreateForm">+ Novo objetivo</button>
+          <button
+            v-if="!objectivesLocked"
+            type="button"
+            class="btn-add"
+            @click="openCreateForm"
+          >+ Novo objetivo</button>
+          <button
+            v-else
+            type="button"
+            class="btn-add"
+            @click="openUpgradeModal('No plano Free objetivos estão bloqueados. Atualiza para Pro ou Couple.')"
+          >Atualiza para Pro ou Couple</button>
         </div>
 
         <div v-if="formOpen" class="goal-form-card">
@@ -298,8 +339,15 @@ onMounted(async () => {
         </div>
 
         <div v-else-if="activeObjectives.length === 0" class="empty-state">
-          <p>Ainda não tens objetivos ativos.</p>
-          <button type="button" class="btn-add" @click="openCreateForm">Criar primeiro objetivo</button>
+          <p v-if="!objectivesLocked">Ainda não tens objetivos ativos.</p>
+          <p v-else>Objetivos estão bloqueados no plano Free.</p>
+          <button
+            type="button"
+            class="btn-add"
+            @click="objectivesLocked ? openUpgradeModal('Objetivos bloqueados no plano Free. Atualiza para Pro ou Couple.') : openCreateForm()"
+          >
+            {{ objectivesLocked ? 'Atualiza para Pro ou Couple' : 'Criar primeiro objetivo' }}
+          </button>
         </div>
 
         <div v-else class="goals-grid">
@@ -320,11 +368,18 @@ onMounted(async () => {
             <p class="progress-text">{{ goal.progressPercent.toFixed(2) }}%</p>
 
             <div class="goal-actions">
-              <button type="button" class="btn-secondary" :disabled="saving" @click="openEditForm(goal)">Editar</button>
+              <button
+                type="button"
+                class="btn-secondary"
+                :disabled="saving || objectivesLocked"
+                @click="openEditForm(goal)"
+              >
+                Editar
+              </button>
               <button
                 type="button"
                 class="btn-finish"
-                :disabled="saving || !goal.canFinalize"
+                :disabled="saving || !goal.canFinalize || objectivesLocked"
                 @click="finalizeObjective(goal)"
               >
                 Finalizar
@@ -367,9 +422,14 @@ onMounted(async () => {
           </table>
         </div>
       </section>
+      <UpgradePlanModal
+        :open="upgradeModalOpen"
+        :reason="upgradeReason ?? undefined"
+        @close="upgradeModalOpen = false"
+      />
     </template>
   </div>
-</template>
+  </template>
 
 <style scoped>
 .objectives-view {

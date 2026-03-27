@@ -4,6 +4,7 @@ import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useThemeStore } from '@/stores/theme'
 import { useHouseholdStore } from '@/stores/household'
+import { useSubscriptionStore } from '@/stores/subscription'
 import iconMale from '@/assets/images/icon-male.png'
 import iconDashboard from '@/assets/images/icon-dashboard.png'
 import iconCreditCard from '@/assets/images/icon-credit-card.png'
@@ -14,6 +15,7 @@ import iconFinoraFlow from '@/assets/images/finoraflow-icon.png'
 const authStore = useAuthStore()
 const themeStore = useThemeStore()
 const householdStore = useHouseholdStore()
+const subscriptionStore = useSubscriptionStore()
 const route = useRoute()
 const router = useRouter()
 const userMenuOpen = ref(false)
@@ -37,7 +39,10 @@ function toggleMenu() {
 onMounted(async () => {
   if (authStore.isAuthenticated) {
     try {
-      await householdStore.fetchHousehold()
+      await Promise.all([
+        householdStore.fetchHousehold(),
+        subscriptionStore.fetchSubscription(),
+      ])
     } catch {
       /* handled in store */
     }
@@ -53,9 +58,17 @@ onMounted(async () => {
 })
 
 const planLabel = computed(() => {
-  if (!householdStore.household) return 'Free'
-  return householdStore.isCouple ? 'Couple' : 'Free'
+  return subscriptionStore.plan
 })
+
+const planManageLabel = computed(() =>
+  subscriptionStore.plan === 'Free' ? 'Atualizar plano' : 'Gerir plano',
+)
+
+function goToSubscription() {
+  userMenuOpen.value = false
+  router.push({ name: 'subscription' })
+}
 
 const navItems = [
   { to: '/dashboard', label: 'Dashboard', iconImg: iconDashboard },
@@ -134,6 +147,13 @@ function isActive(path: string) {
                 </div>
                 <template v-if="authStore.isAuthenticated">
                   <div class="dropdown-divider" />
+                  <button
+                    type="button"
+                    class="dropdown-item"
+                    @click="goToSubscription"
+                  >
+                    {{ planManageLabel }}
+                  </button>
                   <button
                     type="button"
                     class="dropdown-item dropdown-logout"
