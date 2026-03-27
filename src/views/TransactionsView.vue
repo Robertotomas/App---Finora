@@ -343,7 +343,15 @@ async function handleRecurringCreate(payload: CreateRecurringTransactionRequest)
   try {
     await recurringStore.createRecurring(payload)
     closeRecurringCreateModal()
-  } catch {
+  } catch (e: unknown) {
+    const err = e as { response?: { status?: number; data?: { code?: string } } }
+    if (err.response?.status === 403 && err.response.data?.code === 'PLAN_LIMIT') {
+      limitMessage.value = payload.type === TransactionType.Income
+        ? 'Atingiste o limite de receitas do plano Free: só podes adicionar 1 receita por mês. Atualiza para Pro ou Couple para continuares.'
+        : 'Atingiste o limite de despesas do plano Free: só podes adicionar 5 despesas por mês. Atualiza para Pro ou Couple para continuares.'
+      limitModalOpen.value = true
+      return
+    }
     // Error shown in store
   } finally {
     actionLoading.value = false
