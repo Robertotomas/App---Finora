@@ -1,17 +1,16 @@
 <script setup lang="ts">
-import { computed, ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, onMounted } from 'vue'
 import { useAccountsStore } from '@/stores/accounts'
 import { useHouseholdStore } from '@/stores/household'
 import { useSubscriptionStore } from '@/stores/subscription'
 import AccountFormModal from '@/components/AccountFormModal.vue'
+import BaseModal from '@/components/BaseModal.vue'
 import ConfirmDeleteModal from '@/components/ConfirmDeleteModal.vue'
 import type { Account, CreateAccountRequest } from '@/types/account'
 import { ACCOUNT_TYPE_LABELS, AccountType } from '@/types/account'
 
 const accountsStore = useAccountsStore()
 const subscriptionStore = useSubscriptionStore()
-const router = useRouter()
 
 function isCreditCard(type: Account['type']): boolean {
   return Number(type) === AccountType.CreditCard
@@ -25,8 +24,7 @@ const accountToEdit = ref<Account | null>(null)
 const accountToDelete = ref<Account | null>(null)
 
 const actionLoading = ref(false)
-
-const canCreateAccount = computed(() => subscriptionStore.canAddAccount)
+const accountLimitModalOpen = ref(false)
 
 onMounted(async () => {
   try {
@@ -42,7 +40,7 @@ onMounted(async () => {
 
 function openCreateModal() {
   if (!subscriptionStore.canAddAccount) {
-    router.push({ name: 'subscription' })
+    accountLimitModalOpen.value = true
     return
   }
   accountsStore.clearError()
@@ -84,7 +82,7 @@ async function handleCreate(payload: CreateAccountRequest) {
     const err = e as { response?: { status: number; data?: { code?: string; message?: string } } }
     const code = err.response?.data?.code
     if (err.response?.status === 403 && code === 'PLAN_LIMIT') {
-      await router.push({ name: 'subscription' })
+      accountLimitModalOpen.value = true
     }
   } finally {
     actionLoading.value = false
@@ -161,7 +159,7 @@ function formatBalance(balance: number, currency: string): string {
             class="btn-add"
             @click="openCreateModal"
           >
-            {{ canCreateAccount ? '+ Nova conta' : 'Atualizar plano' }}
+            + Nova conta
           </button>
         </div>
 
@@ -173,7 +171,7 @@ function formatBalance(balance: number, currency: string): string {
         <div v-else-if="accountsStore.accounts.length === 0" class="section-empty">
           <p class="section-empty-text">Ainda não tens contas.</p>
           <button type="button" class="btn-section-add" @click="openCreateModal">
-            {{ canCreateAccount ? 'Adicionar a sua primeira conta' : 'Atualizar plano' }}
+            Adicionar a sua primeira conta
           </button>
         </div>
 
@@ -248,6 +246,24 @@ function formatBalance(balance: number, currency: string): string {
       @close="closeDeleteModal"
       @confirm="handleDelete"
     />
+
+    <BaseModal
+      v-if="accountLimitModalOpen"
+      title="Limite do plano Free"
+      @close="accountLimitModalOpen = false"
+    >
+      <div class="locked-modal-body">
+        <p>
+          Atingiste o limite de contas do plano Free: só podes ter uma conta. Atualiza para Pro ou Couple para adicionares mais.
+        </p>
+        <div class="locked-modal-actions">
+          <button type="button" class="btn-secondary" @click="accountLimitModalOpen = false">Agora não</button>
+          <router-link :to="{ name: 'subscription' }" class="locked-modal-cta" @click="accountLimitModalOpen = false">
+            Ver planos
+          </router-link>
+        </div>
+      </div>
+    </BaseModal>
   </div>
 </template>
 
@@ -471,5 +487,47 @@ function formatBalance(balance: number, currency: string): string {
   color: #dc2626;
   border-color: #fecaca;
   background: #fef2f2;
+}
+
+.locked-modal-body p {
+  margin: 0;
+  color: var(--color-text-muted);
+  line-height: 1.45;
+}
+
+.locked-modal-actions {
+  margin-top: 1rem;
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.locked-modal-actions .btn-secondary,
+.locked-modal-actions .locked-modal-cta {
+  border-radius: 8px;
+  border: 1px solid transparent;
+  padding: 0.5rem 0.85rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.locked-modal-actions .btn-secondary {
+  background: transparent;
+  border-color: var(--color-border);
+  color: var(--color-text);
+}
+
+.locked-modal-actions .locked-modal-cta {
+  background: #166534;
+  color: #fff;
+}
+
+.locked-modal-actions .locked-modal-cta:hover {
+  background: #15803d;
 }
 </style>

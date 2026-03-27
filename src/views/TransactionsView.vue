@@ -12,7 +12,7 @@ import RecurringFormModal from '@/components/RecurringFormModal.vue'
 import RemoveRecurringModal from '@/components/RemoveRecurringModal.vue'
 import ConfirmDeleteModal from '@/components/ConfirmDeleteModal.vue'
 import MonthYearNavigator from '@/components/MonthYearNavigator.vue'
-import UpgradePlanModal from '@/components/UpgradePlanModal.vue'
+import BaseModal from '@/components/BaseModal.vue'
 import type { Transaction, CreateTransactionRequest } from '@/types/transaction'
 import type { RecurringTransaction, CreateRecurringTransactionRequest } from '@/types/recurringTransaction'
 import {
@@ -80,13 +80,8 @@ const pageSize = 20
 
 const actionLoading = ref(false)
 
-const upgradeModalOpen = ref(false)
-const upgradeReason = ref<string | null>(null)
-
-function openUpgradeModal(reason: string) {
-  upgradeReason.value = reason
-  upgradeModalOpen.value = true
-}
+const limitModalOpen = ref(false)
+const limitMessage = ref('Atualiza o teu plano para continuar.')
 
 const paginatedTransactions = computed(() => {
   const list = transactionsStore.transactions
@@ -237,7 +232,10 @@ async function handleCreate(payload: CreateTransactionRequest) {
   } catch (e: unknown) {
     const err = e as { response?: { status?: number; data?: { code?: string; message?: string } } }
     if (err.response?.status === 403 && err.response.data?.code === 'PLAN_LIMIT') {
-      openUpgradeModal(err.response.data.message ?? 'Atualiza o teu plano para continuar.')
+      limitMessage.value = payload.type === TransactionType.Income
+        ? 'Atingiste o limite de receitas do plano Free: só podes adicionar 1 receita por mês. Atualiza para Pro ou Couple para continuares.'
+        : 'Atingiste o limite de despesas do plano Free: só podes adicionar 5 despesas por mês. Atualiza para Pro ou Couple para continuares.'
+      limitModalOpen.value = true
     }
   } finally {
     actionLoading.value = false
@@ -688,11 +686,21 @@ function getAccountName(accountId: string): string {
       @remove-from-next-month="handleRecurringRemoveFromNextMonth"
     />
 
-    <UpgradePlanModal
-      :open="upgradeModalOpen"
-      :reason="upgradeReason ?? undefined"
-      @close="upgradeModalOpen = false"
-    />
+    <BaseModal
+      v-if="limitModalOpen"
+      title="Limite do plano Free"
+      @close="limitModalOpen = false"
+    >
+      <div class="locked-modal-body">
+        <p>{{ limitMessage }}</p>
+        <div class="locked-modal-actions">
+          <button type="button" class="btn-secondary" @click="limitModalOpen = false">Agora não</button>
+          <router-link :to="{ name: 'subscription' }" class="locked-modal-cta" @click="limitModalOpen = false">
+            Ver planos
+          </router-link>
+        </div>
+      </div>
+    </BaseModal>
   </div>
 </template>
 
@@ -924,6 +932,48 @@ function getAccountName(accountId: string): string {
   color: #dc2626;
   border-color: #fecaca;
   background: #fef2f2;
+}
+
+.locked-modal-body p {
+  margin: 0;
+  color: var(--color-text-muted);
+  line-height: 1.45;
+}
+
+.locked-modal-actions {
+  margin-top: 1rem;
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.locked-modal-actions .btn-secondary,
+.locked-modal-actions .locked-modal-cta {
+  border-radius: 8px;
+  border: 1px solid transparent;
+  padding: 0.5rem 0.85rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.locked-modal-actions .btn-secondary {
+  background: transparent;
+  border-color: var(--color-border);
+  color: var(--color-text);
+}
+
+.locked-modal-actions .locked-modal-cta {
+  background: #166534;
+  color: #fff;
+}
+
+.locked-modal-actions .locked-modal-cta:hover {
+  background: #15803d;
 }
 
 .pagination {
