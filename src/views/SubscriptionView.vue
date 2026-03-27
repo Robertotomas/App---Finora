@@ -61,6 +61,8 @@ async function choosePlan(plan: SubscriptionPlan) {
   upgrading.value = plan
   try {
     await subscriptionStore.upgrade(plan)
+    // Garante limites (ex.: objectivesEnabled) alinhados com o servidor antes de navegar para Objetivos/Dashboard.
+    await subscriptionStore.fetchSubscription()
   } finally {
     upgrading.value = null
   }

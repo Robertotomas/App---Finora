@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, computed, ref, nextTick } from 'vue'
+import { onMounted, computed, ref, nextTick, watch } from 'vue'
 import type { ExpenseByCategory, IncomeByCategory, MonthlyTrend } from '@/types/dashboard'
 import type { SavingsObjectiveActive } from '@/types/objective'
 import { objectivesApi } from '@/api/objectives'
@@ -40,8 +40,6 @@ const objectivesLoaded = ref(false)
 const objectivesPreview = ref<SavingsObjectiveActive[]>([])
 const objectivesActiveTotal = ref(0)
 const objectivesMoreCount = computed(() => Math.max(0, objectivesActiveTotal.value - 4))
-const objectivesLocked = computed(() => subscriptionStore.isFree)
-const objectivesRoute = computed(() => (objectivesLocked.value ? { name: 'subscription' } : { name: 'objectives' }))
 
 function parseTargetDateOnly(raw: unknown): string | null {
   if (raw == null || raw === '') return null
@@ -91,6 +89,14 @@ async function loadObjectivesPreview() {
     objectivesLoaded.value = true
   }
 }
+
+watch(
+  () => subscriptionStore.limits.objectivesEnabled,
+  async () => {
+    if (!householdStore.household) return
+    await loadObjectivesPreview()
+  }
+)
 
 function formatObjectiveDate(iso: string): string {
   if (!iso) return ''
@@ -365,70 +371,77 @@ const showContent = computed(() =>
           <div class="dashboard-objectives-header">
             <h3 class="dashboard-objectives-title">Objetivos de poupança</h3>
             <router-link
-              :to="objectivesRoute"
+              :to="{ name: 'objectives' }"
               class="dashboard-objectives-link"
             >Ver todos</router-link>
           </div>
-          <div v-if="objectivesLoading" class="objectives-preview-skeleton">
-            <span class="objectives-preview-loading">A carregar objetivos…</span>
-          </div>
           <div
-            v-else-if="objectivesPreview.length > 0"
-            class="objectives-preview-block"
-            :class="{ 'objectives-preview-block--locked': objectivesLocked }"
+            class="dashboard-objectives-body-wrap"
+            :class="{
+              'dashboard-objectives-body-wrap--locked':
+                !subscriptionStore.canAccessObjectives && objectivesPreview.length > 0,
+            }"
           >
-            <div class="objectives-preview-grid">
-              <router-link
-                v-for="goal in objectivesPreview"
-                :key="goal.id"
-                :to="objectivesRoute"
-                class="objective-preview-card"
-                :class="{ 'objective-preview-card--locked': objectivesLocked }"
+            <div class="dashboard-objectives-body-inner">
+              <div v-if="objectivesLoading" class="objectives-preview-skeleton">
+                <span class="objectives-preview-loading">A carregar objetivos…</span>
+              </div>
+              <div
+                v-else-if="objectivesPreview.length > 0"
+                class="objectives-preview-block"
               >
-                <p class="objective-preview-name">{{ goal.name }}</p>
-                <p class="objective-preview-amounts">
-                  {{ formatCurrency(goal.allocatedAmount, dashboard.currency.value) }} /
-                  {{ formatCurrency(goal.targetAmount, dashboard.currency.value) }}
-                </p>
-                <div class="objective-preview-track" role="progressbar" :aria-valuenow="goal.progressPercent" aria-valuemin="0" aria-valuemax="100">
-                  <div class="objective-preview-fill" :style="{ width: `${Math.min(100, goal.progressPercent)}%` }" />
+                <div class="objectives-preview-grid">
+                  <router-link
+                    v-for="goal in objectivesPreview"
+                    :key="goal.id"
+                    :to="{ name: 'objectives' }"
+                    class="objective-preview-card"
+                  >
+                    <p class="objective-preview-name">{{ goal.name }}</p>
+                    <p class="objective-preview-amounts">
+                      {{ formatCurrency(goal.allocatedAmount, dashboard.currency.value) }} /
+                      {{ formatCurrency(goal.targetAmount, dashboard.currency.value) }}
+                    </p>
+                    <div class="objective-preview-track" role="progressbar" :aria-valuenow="goal.progressPercent" aria-valuemin="0" aria-valuemax="100">
+                      <div class="objective-preview-fill" :style="{ width: `${Math.min(100, goal.progressPercent)}%` }" />
+                    </div>
+                    <p class="objective-preview-meta">
+                      <span>{{ goal.progressPercent.toFixed(0) }}%</span>
+                      <span v-if="goal.targetDate" class="objective-preview-date"> · Meta {{ formatObjectiveDate(goal.targetDate) }}</span>
+                    </p>
+                  </router-link>
                 </div>
-                <p class="objective-preview-meta">
-                  <span>{{ goal.progressPercent.toFixed(0) }}%</span>
-                  <span v-if="goal.targetDate" class="objective-preview-date"> · Meta {{ formatObjectiveDate(goal.targetDate) }}</span>
+                <p v-if="objectivesMoreCount > 0" class="objectives-more-count">
+                  +{{ objectivesMoreCount }}
+                  {{ objectivesMoreCount === 1 ? 'objetivo ativo' : 'objetivos ativos' }}
                 </p>
-              </router-link>
+              </div>
+              <div
+                v-else-if="objectivesLoaded"
+                class="objectives-preview-empty"
+              >
+                <p class="objectives-preview-empty-text">Ainda não tens objetivos ativos.</p>
+                <router-link
+                  v-if="subscriptionStore.canAccessObjectives"
+                  :to="{ name: 'objectives' }"
+                  class="btn-add-objective"
+                >+ Criar objetivo</router-link>
+                <router-link
+                  v-else
+                  :to="{ name: 'subscription' }"
+                  class="btn-add-objective"
+                >Ver planos</router-link>
+              </div>
             </div>
-            <p v-if="objectivesMoreCount > 0" class="objectives-more-count">
-              +{{ objectivesMoreCount }}
-              {{ objectivesMoreCount === 1 ? 'objetivo ativo' : 'objetivos ativos' }}
-            </p>
-            <router-link
-              v-if="objectivesLocked"
-              :to="{ name: 'subscription' }"
-              class="btn-add-objective"
+            <div
+              v-if="!subscriptionStore.canAccessObjectives && objectivesPreview.length > 0"
+              class="dashboard-objectives-lock-overlay"
             >
-              Atualiza para Pro ou Couple
-            </router-link>
-          </div>
-          <div
-            v-else-if="objectivesLoaded"
-            class="objectives-preview-empty"
-            :class="{ 'objectives-preview-empty--locked': objectivesLocked }"
-          >
-            <p class="objectives-preview-empty-text">Ainda não tens objetivos ativos.</p>
-            <router-link
-              v-if="!objectivesLocked"
-              :to="objectivesRoute"
-              class="btn-add-objective"
-            >+ Criar objetivo</router-link>
-            <router-link
-              v-else
-              :to="{ name: 'subscription' }"
-              class="btn-add-objective"
-            >
-              Atualiza para Pro ou Couple
-            </router-link>
+              <div class="dashboard-objectives-lock-panel">
+                <p class="dashboard-objectives-lock-text">Atualize o plano para visualização completa</p>
+                <router-link :to="{ name: 'subscription' }" class="btn-add-objective dashboard-objectives-lock-cta">Ver planos</router-link>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -826,6 +839,49 @@ html.dark .dashboard-objectives-link {
   color: #4ade80;
 }
 
+.dashboard-objectives-body-wrap {
+  position: relative;
+}
+
+.dashboard-objectives-body-wrap--locked .dashboard-objectives-body-inner {
+  filter: blur(8px) grayscale(0.25);
+  opacity: 0.52;
+  pointer-events: none;
+  user-select: none;
+}
+
+.dashboard-objectives-lock-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.75rem;
+  background: rgba(0, 0, 0, 0.06);
+  pointer-events: none;
+}
+
+html.dark .dashboard-objectives-lock-overlay {
+  background: rgba(0, 0, 0, 0.28);
+}
+
+.dashboard-objectives-lock-panel {
+  pointer-events: auto;
+  text-align: center;
+  padding: 0.75rem 1rem;
+  border-radius: 10px;
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+}
+
+.dashboard-objectives-lock-text {
+  margin: 0 0 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
 .objectives-preview-block {
   display: flex;
   flex-direction: column;
@@ -916,18 +972,6 @@ html.dark .dashboard-objectives-link {
 .objectives-preview-empty {
   text-align: center;
   padding: 0.5rem 0 0.25rem;
-}
-
-.objectives-preview-block--locked {
-  opacity: 0.48;
-}
-
-.objectives-preview-empty--locked {
-  opacity: 0.48;
-}
-
-.objective-preview-card--locked {
-  cursor: not-allowed;
 }
 
 .objectives-preview-empty-text {

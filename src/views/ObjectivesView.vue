@@ -1,9 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useHouseholdStore } from '@/stores/household'
 import { objectivesApi } from '@/api/objectives'
 import { useSubscriptionStore } from '@/stores/subscription'
-import BaseModal from '@/components/BaseModal.vue'
 import type {
   CreateSavingsObjectiveRequest,
   SavingsObjectiveActive,
@@ -38,11 +37,6 @@ const activeObjectives = computed<SavingsObjectiveActive[]>(() => overview.value
 const historyObjectives = computed<SavingsObjectiveHistory[]>(() => overview.value.historyObjectives)
 
 const objectivesLocked = computed(() => !subscriptionStore.canAccessObjectives)
-const lockedInfoOpen = ref(false)
-
-function openLockedInfo() {
-  lockedInfoOpen.value = true
-}
 
 function resetForm() {
   formOpen.value = false
@@ -151,6 +145,20 @@ async function loadOverview() {
   }
 }
 
+/** Plano muda: recarrega overview (valores atualizados ao voltar ao Pro). */
+watch(
+  () => subscriptionStore.limits.objectivesEnabled,
+  async (enabled) => {
+    if (!householdStore.household) return
+    await loadOverview()
+    if (!enabled) {
+      error.value = null
+      activeTab.value = 'active'
+      resetForm()
+    }
+  }
+)
+
 async function submitForm() {
   if (objectivesLocked.value) return
   if (!formName.value.trim() || !formTarget.value || formTarget.value <= 0) {
@@ -252,7 +260,8 @@ onMounted(async () => {
     </div>
 
     <template v-else>
-      <div class="objectives-shell" :class="{ 'objectives-shell--locked': objectivesLocked }">
+      <div class="objectives-shell-wrap" :class="{ 'objectives-shell-wrap--locked': objectivesLocked }">
+        <div class="objectives-shell objectives-shell-inner">
       <div class="summary-strip">
         <div class="summary-item">
           <span class="summary-label">Poupança acumulada</span>
@@ -321,13 +330,17 @@ onMounted(async () => {
         <div v-else-if="activeObjectives.length === 0" class="empty-state">
           <p>Ainda não tens objetivos ativos.</p>
           <button
+            v-if="!objectivesLocked"
             type="button"
             class="btn-add"
-            :disabled="objectivesLocked"
             @click="openCreateForm()"
           >
             Criar primeiro objetivo
           </button>
+          <p v-else class="objectives-free-hint">
+            No plano Free podes criar objetivos ao subires de plano.
+            <router-link :to="{ name: 'subscription' }" class="link">Ver planos</router-link>
+          </p>
         </div>
 
         <div v-else class="goals-grid">
@@ -402,31 +415,18 @@ onMounted(async () => {
           </table>
         </div>
       </section>
-      </div>
-      <div v-if="objectivesLocked" class="locked-cta">
-        <button type="button" class="btn-add locked-cta-btn" @click="openLockedInfo">
-          Atualizar plano
-        </button>
-      </div>
-    </template>
-
-    <BaseModal
-      v-if="lockedInfoOpen"
-      title="Objetivos bloqueados"
-      @close="lockedInfoOpen = false"
-    >
-      <div class="locked-modal-body">
-        <p>
-          Para criares e acompanhares objetivos de poupança, precisas de um plano Pro ou Couple.
-        </p>
-        <div class="locked-modal-actions">
-          <button type="button" class="btn-secondary" @click="lockedInfoOpen = false">Agora não</button>
-          <router-link :to="{ name: 'subscription' }" class="btn-add" @click="lockedInfoOpen = false">
-            Ver planos
-          </router-link>
+        </div>
+        <div v-if="objectivesLocked" class="objectives-lock-overlay" aria-hidden="true">
+          <div class="objectives-lock-panel">
+            <p class="objectives-lock-title">Atualize o plano para visualização completa</p>
+            <p class="objectives-lock-text">
+              Os valores dos teus objetivos mantêm-se guardados. Voltam a aparecer ao atualizares o plano.
+            </p>
+            <router-link :to="{ name: 'subscription' }" class="btn-add objectives-lock-cta">Ver planos</router-link>
+          </div>
         </div>
       </div>
-    </BaseModal>
+    </template>
   </div>
 </template>
 
@@ -437,42 +437,73 @@ onMounted(async () => {
   padding: 0 0 2.5rem;
 }
 
-.objectives-shell {
-  transition: opacity 0.2s ease, filter 0.2s ease;
+.objectives-shell-wrap {
+  position: relative;
 }
 
-.objectives-shell--locked {
-  opacity: 0.48;
-  filter: grayscale(0.35) blur(1px);
+.objectives-shell-wrap--locked .objectives-shell-inner {
+  filter: blur(9px) grayscale(0.25);
+  opacity: 0.52;
   pointer-events: none;
   user-select: none;
 }
 
-.locked-cta {
-  margin-top: 1rem;
+.objectives-lock-overlay {
+  position: absolute;
+  inset: 0;
   display: flex;
+  align-items: center;
   justify-content: center;
+  padding: 1.5rem;
+  background: rgba(0, 0, 0, 0.06);
+  pointer-events: none;
 }
 
-.locked-cta-btn {
+html.dark .objectives-lock-overlay {
+  background: rgba(0, 0, 0, 0.28);
+}
+
+.objectives-lock-panel {
+  pointer-events: auto;
+  max-width: 420px;
+  text-align: center;
+  padding: 1.25rem 1.5rem;
+  border-radius: 12px;
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+.objectives-lock-title {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.objectives-lock-text {
+  margin: 0 0 1rem;
+  font-size: 0.875rem;
+  line-height: 1.45;
+  color: var(--color-text-muted);
+}
+
+.objectives-lock-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   text-decoration: none;
 }
 
-.locked-modal-body p {
-  margin: 0;
+.objectives-free-hint {
+  margin: 0.75rem 0 0;
+  font-size: 0.875rem;
   color: var(--color-text-muted);
   line-height: 1.45;
 }
 
-.locked-modal-actions {
-  margin-top: 1rem;
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.5rem;
-}
-
-.locked-modal-actions .btn-add {
-  text-decoration: none;
+.objectives-shell {
+  transition: opacity 0.2s ease, filter 0.2s ease;
 }
 
 .summary-strip {

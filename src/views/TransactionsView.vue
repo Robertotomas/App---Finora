@@ -75,6 +75,16 @@ const yearOptions = computed(() => {
   return [y, y - 1, y - 2, y - 3]
 })
 
+/** 1.º dia do mês do filtro: o limite Free aplica-se ao mês da data da transação, não ao mês do calendário “hoje”. */
+const defaultDateForNewTransaction = computed(() => {
+  if (filterMonth.value >= 1 && filterMonth.value <= 12) {
+    const y = filterYear.value
+    const m = String(filterMonth.value).padStart(2, '0')
+    return `${y}-${m}-01`
+  }
+  return undefined
+})
+
 const page = ref(1)
 const pageSize = 20
 
@@ -804,6 +814,7 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
       :is-couple="householdStore.isCouple"
       :current-user-id="authStore.user?.id ?? ''"
       :loading="actionLoading"
+      :default-date-for-new="defaultDateForNewTransaction"
       @close="closeCreateModal"
       @submit="handleCreate"
     />

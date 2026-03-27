@@ -19,6 +19,8 @@ const props = defineProps<{
   isCouple: boolean
   currentUserId: string
   loading?: boolean
+  /** Para nova transação: data inicial (yyyy-MM-dd), p.ex. 1.º dia do mês do filtro na lista */
+  defaultDateForNew?: string | null
 }>()
 
 const emit = defineEmits<{
@@ -96,7 +98,10 @@ watch(
         type.value = TransactionType.Expense
         category.value = TransactionCategory.Other
         amount.value = 0
-        date.value = new Date().toISOString().slice(0, 10)
+        const fallback = new Date().toISOString().slice(0, 10)
+        const fromFilter = props.defaultDateForNew?.trim()
+        date.value =
+          fromFilter && /^\d{4}-\d{2}-\d{2}$/.test(fromFilter) ? fromFilter : fallback
         description.value = ''
         if (props.isCouple && props.members.length >= 2) {
           const n = props.members.length
