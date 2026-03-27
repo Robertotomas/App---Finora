@@ -919,11 +919,11 @@ html.dark .dashboard-objectives-link {
 }
 
 .objectives-preview-block--locked {
-  opacity: 0.55;
+  opacity: 0.48;
 }
 
 .objectives-preview-empty--locked {
-  opacity: 0.7;
+  opacity: 0.48;
 }
 
 .objective-preview-card--locked {

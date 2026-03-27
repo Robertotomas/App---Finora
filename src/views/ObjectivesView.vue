@@ -3,7 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useHouseholdStore } from '@/stores/household'
 import { objectivesApi } from '@/api/objectives'
 import { useSubscriptionStore } from '@/stores/subscription'
-import UpgradePlanModal from '@/components/UpgradePlanModal.vue'
+import BaseModal from '@/components/BaseModal.vue'
 import type {
   CreateSavingsObjectiveRequest,
   SavingsObjectiveActive,
@@ -38,13 +38,10 @@ const activeObjectives = computed<SavingsObjectiveActive[]>(() => overview.value
 const historyObjectives = computed<SavingsObjectiveHistory[]>(() => overview.value.historyObjectives)
 
 const objectivesLocked = computed(() => !subscriptionStore.canAccessObjectives)
+const lockedInfoOpen = ref(false)
 
-const upgradeModalOpen = ref(false)
-const upgradeReason = ref<string | null>(null)
-
-function openUpgradeModal(reason: string) {
-  upgradeReason.value = reason
-  upgradeModalOpen.value = true
+function openLockedInfo() {
+  lockedInfoOpen.value = true
 }
 
 function resetForm() {
@@ -56,19 +53,13 @@ function resetForm() {
 }
 
 function openCreateForm() {
-  if (objectivesLocked.value) {
-    openUpgradeModal('No plano Free não podes adicionar objetivos. Atualiza para Pro ou Couple.')
-    return
-  }
+  if (objectivesLocked.value) return
   resetForm()
   formOpen.value = true
 }
 
 function openEditForm(item: SavingsObjectiveActive) {
-  if (objectivesLocked.value) {
-    openUpgradeModal('No plano Free não podes adicionar/editar objetivos. Atualiza para Pro ou Couple.')
-    return
-  }
+  if (objectivesLocked.value) return
   editingId.value = item.id
   formName.value = item.name
   formTarget.value = item.targetAmount
@@ -161,10 +152,7 @@ async function loadOverview() {
 }
 
 async function submitForm() {
-  if (objectivesLocked.value) {
-    openUpgradeModal('No plano Free não podes adicionar/editar objetivos. Atualiza para Pro ou Couple.')
-    return
-  }
+  if (objectivesLocked.value) return
   if (!formName.value.trim() || !formTarget.value || formTarget.value <= 0) {
     error.value = 'Preenche nome e valor alvo válido.'
     return
@@ -203,10 +191,7 @@ async function submitForm() {
 }
 
 async function finalizeObjective(item: SavingsObjectiveActive) {
-  if (objectivesLocked.value) {
-    openUpgradeModal('No plano Free não podes gerir objetivos. Atualiza para Pro ou Couple.')
-    return
-  }
+  if (objectivesLocked.value) return
   saving.value = true
   error.value = null
   try {
@@ -267,6 +252,7 @@ onMounted(async () => {
     </div>
 
     <template v-else>
+      <div class="objectives-shell" :class="{ 'objectives-shell--locked': objectivesLocked }">
       <div class="summary-strip">
         <div class="summary-item">
           <span class="summary-label">Poupança acumulada</span>
@@ -296,17 +282,11 @@ onMounted(async () => {
       <section v-if="activeTab === 'active'" class="content-section">
         <div class="toolbar">
           <button
-            v-if="!objectivesLocked"
             type="button"
             class="btn-add"
+            :disabled="objectivesLocked"
             @click="openCreateForm"
           >+ Novo objetivo</button>
-          <button
-            v-else
-            type="button"
-            class="btn-add"
-            @click="openUpgradeModal('No plano Free objetivos estão bloqueados. Atualiza para Pro ou Couple.')"
-          >Atualiza para Pro ou Couple</button>
         </div>
 
         <div v-if="formOpen" class="goal-form-card">
@@ -339,14 +319,14 @@ onMounted(async () => {
         </div>
 
         <div v-else-if="activeObjectives.length === 0" class="empty-state">
-          <p v-if="!objectivesLocked">Ainda não tens objetivos ativos.</p>
-          <p v-else>Objetivos estão bloqueados no plano Free.</p>
+          <p>Ainda não tens objetivos ativos.</p>
           <button
             type="button"
             class="btn-add"
-            @click="objectivesLocked ? openUpgradeModal('Objetivos bloqueados no plano Free. Atualiza para Pro ou Couple.') : openCreateForm()"
+            :disabled="objectivesLocked"
+            @click="openCreateForm()"
           >
-            {{ objectivesLocked ? 'Atualiza para Pro ou Couple' : 'Criar primeiro objetivo' }}
+            Criar primeiro objetivo
           </button>
         </div>
 
@@ -422,20 +402,77 @@ onMounted(async () => {
           </table>
         </div>
       </section>
-      <UpgradePlanModal
-        :open="upgradeModalOpen"
-        :reason="upgradeReason ?? undefined"
-        @close="upgradeModalOpen = false"
-      />
+      </div>
+      <div v-if="objectivesLocked" class="locked-cta">
+        <button type="button" class="btn-add locked-cta-btn" @click="openLockedInfo">
+          Atualizar plano
+        </button>
+      </div>
     </template>
+
+    <BaseModal
+      v-if="lockedInfoOpen"
+      title="Objetivos bloqueados"
+      @close="lockedInfoOpen = false"
+    >
+      <div class="locked-modal-body">
+        <p>
+          Para criares e acompanhares objetivos de poupança, precisas de um plano Pro ou Couple.
+        </p>
+        <div class="locked-modal-actions">
+          <button type="button" class="btn-secondary" @click="lockedInfoOpen = false">Agora não</button>
+          <router-link :to="{ name: 'subscription' }" class="btn-add" @click="lockedInfoOpen = false">
+            Ver planos
+          </router-link>
+        </div>
+      </div>
+    </BaseModal>
   </div>
-  </template>
+</template>
 
 <style scoped>
 .objectives-view {
   max-width: min(960px, 100%);
   margin: 0 auto;
   padding: 0 0 2.5rem;
+}
+
+.objectives-shell {
+  transition: opacity 0.2s ease, filter 0.2s ease;
+}
+
+.objectives-shell--locked {
+  opacity: 0.48;
+  filter: grayscale(0.35) blur(1px);
+  pointer-events: none;
+  user-select: none;
+}
+
+.locked-cta {
+  margin-top: 1rem;
+  display: flex;
+  justify-content: center;
+}
+
+.locked-cta-btn {
+  text-decoration: none;
+}
+
+.locked-modal-body p {
+  margin: 0;
+  color: var(--color-text-muted);
+  line-height: 1.45;
+}
+
+.locked-modal-actions {
+  margin-top: 1rem;
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.locked-modal-actions .btn-add {
+  text-decoration: none;
 }
 
 .summary-strip {
