@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { authApi } from '@/api/auth'
-import type { User, LoginRequest, RegisterRequest } from '@/types/auth'
+import { userFromProfileResponse, type User, type LoginRequest, type RegisterRequest } from '@/types/auth'
 
 const TOKEN_KEY = 'token'
 const USER_KEY = 'user'
@@ -52,6 +52,14 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  /** Atualiza o utilizador em memória e no localStorage (ex.: após guardar o perfil). */
+  function applyUserFromProfileResponse(payload: unknown) {
+    if (!token.value) return
+    const next = userFromProfileResponse(payload)
+    user.value = next
+    localStorage.setItem(USER_KEY, JSON.stringify(next))
+  }
+
   return {
     token,
     user,
@@ -60,5 +68,6 @@ export const useAuthStore = defineStore('auth', () => {
     register,
     logout,
     loadFromStorage,
+    applyUserFromProfileResponse,
   }
 })

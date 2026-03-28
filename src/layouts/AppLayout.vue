@@ -71,6 +71,11 @@ function goToSubscription() {
   router.push({ name: 'subscription' })
 }
 
+function goToProfile() {
+  userMenuOpen.value = false
+  router.push({ name: 'profile' })
+}
+
 const navItems = [
   { to: '/dashboard', label: 'Dashboard', iconImg: iconDashboard },
   { to: '/monthly', label: 'Plano Mensal', iconImg: iconMonthly, iconClass: 'sidebar-nav-icon-lg' },
@@ -148,6 +153,13 @@ function isActive(path: string) {
                 </div>
                 <template v-if="authStore.isAuthenticated">
                   <div class="dropdown-divider" />
+                  <button
+                    type="button"
+                    class="dropdown-item"
+                    @click="goToProfile"
+                  >
+                    Perfil
+                  </button>
                   <button
                     type="button"
                     class="dropdown-item"
