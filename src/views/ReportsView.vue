@@ -226,10 +226,12 @@ onUnmounted(() => {
                 </div>
               </div>
               <div class="report-card__footer">
-                <p class="report-card__message">Alteraste transações neste mês?</p>
-                <p class="report-card__hint">
-                  Podes atualizar o PDF com os dados mais recentes.
-                </p>
+                <div class="report-card__footer-copy">
+                  <p class="report-card__message">Alteraste transações neste mês?</p>
+                  <p class="report-card__hint">
+                    Podes atualizar o PDF com os dados mais recentes.
+                  </p>
+                </div>
                 <button
                   type="button"
                   class="btn-refresh-pdf"
@@ -487,19 +489,29 @@ html.dark .reports-lock-overlay {
 }
 
 .report-card__footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem 1rem;
   padding: 0.75rem 1rem 0.9rem;
   background: var(--color-bg-muted, rgba(0, 0, 0, 0.03));
 }
 
+.report-card__footer-copy {
+  min-width: min(100%, 12rem);
+  flex: 1;
+}
+
 .report-card__message {
-  margin: 0 0 0.35rem;
+  margin: 0 0 0.25rem;
   font-size: 0.9375rem;
   font-weight: 600;
   color: var(--color-text);
 }
 
 .report-card__hint {
-  margin: 0 0 0.65rem;
+  margin: 0;
   font-size: 0.8125rem;
   line-height: 1.45;
   color: var(--color-text-muted);
@@ -507,6 +519,8 @@ html.dark .reports-lock-overlay {
 
 .btn-refresh-pdf {
   flex-shrink: 0;
+  align-self: center;
+  margin-left: auto;
   padding: 0.4rem 0.75rem;
   font-size: 0.8125rem;
   font-weight: 600;
