@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useHouseholdStore } from '@/stores/household'
 import { objectivesApi } from '@/api/objectives'
 import { useSubscriptionStore } from '@/stores/subscription'
+import ConfirmDeleteModal from '@/components/ConfirmDeleteModal.vue'
 import type {
   CreateSavingsObjectiveRequest,
   SavingsObjectiveActive,
@@ -32,6 +33,9 @@ const editingId = ref<string | null>(null)
 const formName = ref('')
 const formTarget = ref<number | null>(null)
 const formTargetDate = ref('')
+
+/** Objetivo em confirmação de eliminação */
+const objectiveToDelete = ref<{ id: string; name: string } | null>(null)
 
 const activeObjectives = computed<SavingsObjectiveActive[]>(() => overview.value.activeObjectives)
 const historyObjectives = computed<SavingsObjectiveHistory[]>(() => overview.value.historyObjectives)
@@ -214,6 +218,33 @@ async function finalizeObjective(item: SavingsObjectiveActive) {
   }
 }
 
+function openDeleteObjective(goal: { id: string; name: string }) {
+  if (objectivesLocked.value) return
+  objectiveToDelete.value = { id: goal.id, name: goal.name }
+}
+
+function closeDeleteObjective() {
+  objectiveToDelete.value = null
+}
+
+async function confirmDeleteObjective() {
+  if (!objectiveToDelete.value || objectivesLocked.value) return
+  saving.value = true
+  error.value = null
+  const id = objectiveToDelete.value.id
+  try {
+    const { data } = await objectivesApi.delete(id)
+    overview.value = normalizeOverview(data)
+    if (editingId.value === id) resetForm()
+    objectiveToDelete.value = null
+  } catch (e: unknown) {
+    const err = e as { response?: { data?: { message?: string } }; message?: string }
+    error.value = err.response?.data?.message || err.message || 'Não foi possível eliminar o objetivo.'
+  } finally {
+    saving.value = false
+  }
+}
+
 function formatCurrency(value: number): string {
   return new Intl.NumberFormat('pt-PT', {
     style: 'currency',
@@ -277,27 +308,44 @@ onMounted(async () => {
         </div>
       </div>
 
-      <div class="tabs">
-        <button type="button" class="tab" :class="{ active: activeTab === 'active' }" @click="activeTab = 'active'">
-          Objetivos ativos
-        </button>
-        <button type="button" class="tab" :class="{ active: activeTab === 'history' }" @click="activeTab = 'history'">
-          Histórico
-        </button>
-      </div>
-
-      <div v-if="error" class="global-error">{{ error }}</div>
-
-      <section v-if="activeTab === 'active'" class="content-section">
-        <div class="toolbar">
+      <div class="objectives-tabs-row">
+        <div class="objectives-segment" role="tablist" aria-label="Secção de objetivos">
+          <button
+            type="button"
+            class="objectives-segment__btn"
+            role="tab"
+            :aria-selected="activeTab === 'active'"
+            :class="{ 'objectives-segment__btn--active': activeTab === 'active' }"
+            @click="activeTab = 'active'"
+          >
+            Objetivos ativos
+          </button>
+          <button
+            type="button"
+            class="objectives-segment__btn"
+            role="tab"
+            :aria-selected="activeTab === 'history'"
+            :class="{ 'objectives-segment__btn--active': activeTab === 'history' }"
+            @click="activeTab = 'history'"
+          >
+            Objetivos concluídos
+          </button>
+        </div>
+        <div v-if="activeTab === 'active'" class="objectives-tabs-row__action">
           <button
             type="button"
             class="btn-add"
             :disabled="objectivesLocked"
             @click="openCreateForm"
-          >+ Novo objetivo</button>
+          >
+            + Novo objetivo
+          </button>
         </div>
+      </div>
 
+      <div v-if="error" class="global-error">{{ error }}</div>
+
+      <section v-if="activeTab === 'active'" class="content-section">
         <div v-if="formOpen" class="goal-form-card">
           <h2 class="section-title">{{ editingId ? 'Editar objetivo' : 'Novo objetivo' }}</h2>
           <div class="goal-form-grid">
@@ -377,6 +425,32 @@ onMounted(async () => {
               >
                 Finalizar
               </button>
+              <button
+                type="button"
+                class="goal-btn-delete"
+                :disabled="saving || objectivesLocked"
+                title="Eliminar objetivo"
+                :aria-label="`Eliminar objetivo ${goal.name}`"
+                @click="openDeleteObjective(goal)"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M3 6h18" />
+                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                  <line x1="10" x2="10" y1="11" y2="17" />
+                  <line x1="14" x2="14" y1="11" y2="17" />
+                </svg>
+              </button>
             </div>
           </article>
         </div>
@@ -385,7 +459,7 @@ onMounted(async () => {
       <section v-else class="content-section">
         <div v-if="loading" class="loading-state">
           <div class="spinner"></div>
-          <p>A carregar histórico...</p>
+          <p>A carregar objetivos concluídos...</p>
         </div>
 
         <div v-else-if="historyObjectives.length === 0" class="empty-state">
@@ -401,6 +475,9 @@ onMounted(async () => {
                 <th>Meta até</th>
                 <th>Ordem</th>
                 <th>Finalizado em</th>
+                <th class="history-actions-col" scope="col">
+                  <span class="visually-hidden">Ações</span>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -410,6 +487,34 @@ onMounted(async () => {
                 <td>{{ item.targetDate ? formatDate(item.targetDate) : '—' }}</td>
                 <td>#{{ item.sortOrder }}</td>
                 <td>{{ formatDate(item.completedAt) }}</td>
+                <td class="history-actions-cell">
+                  <button
+                    type="button"
+                    class="goal-btn-delete goal-btn-delete--table"
+                    :disabled="saving || objectivesLocked"
+                    title="Eliminar objetivo"
+                    :aria-label="`Eliminar objetivo ${item.name}`"
+                    @click="openDeleteObjective(item)"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="18"
+                      height="18"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      aria-hidden="true"
+                    >
+                      <path d="M3 6h18" />
+                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                      <line x1="10" x2="10" y1="11" y2="17" />
+                      <line x1="14" x2="14" y1="11" y2="17" />
+                    </svg>
+                  </button>
+                </td>
               </tr>
             </tbody>
           </table>
@@ -427,6 +532,19 @@ onMounted(async () => {
         </div>
       </div>
     </template>
+
+    <ConfirmDeleteModal
+      :open="!!objectiveToDelete"
+      title="Eliminar objetivo"
+      :message="
+        objectiveToDelete
+          ? `Tens a certeza que queres eliminar «${objectiveToDelete.name}»? Esta ação não pode ser desfeita.`
+          : ''
+      "
+      :loading="saving"
+      @close="closeDeleteObjective"
+      @confirm="confirmDeleteObjective"
+    />
   </div>
 </template>
 
@@ -533,10 +651,70 @@ html.dark .objectives-lock-overlay {
   color: var(--color-text);
 }
 
-.toolbar {
+/* Separadores + «Novo objetivo» na mesma linha */
+.objectives-tabs-row {
   display: flex;
-  justify-content: flex-end;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1rem;
   margin-bottom: 1rem;
+}
+
+.objectives-tabs-row__action {
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+/* Controlo segmentado (evita estilos globais .tabs / .tab) */
+.objectives-segment {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  padding: 4px;
+  border-radius: 11px;
+  background: var(--color-table-row-hover);
+  border: 1px solid var(--color-border);
+  gap: 4px;
+}
+
+.objectives-segment__btn {
+  border: none;
+  border-radius: 8px;
+  padding: 0.45rem 0.95rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  background: transparent;
+  color: var(--color-text-muted);
+  margin: 0;
+  transition: color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.objectives-segment__btn:hover {
+  color: var(--color-text);
+  background: rgba(255, 255, 255, 0.55);
+}
+
+html.dark .objectives-segment__btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.objectives-segment__btn--active {
+  background: var(--color-bg-card);
+  color: var(--app-brand-tab, #166534);
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+}
+
+html.dark .objectives-segment__btn--active {
+  color: #4ade80;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+}
+
+.objectives-segment__btn:focus-visible {
+  outline: 2px solid var(--color-link-hover);
+  outline-offset: 2px;
 }
 
 .goal-form-card {
@@ -653,7 +831,65 @@ html.dark .objectives-lock-overlay {
 .goal-actions {
   display: flex;
   justify-content: flex-end;
+  align-items: center;
+  flex-wrap: wrap;
   gap: 0.5rem;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.goal-btn-delete {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 2.25rem;
+  height: 2.25rem;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: transparent;
+  color: #b91c1c;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.goal-btn-delete:hover:not(:disabled) {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #991b1b;
+}
+
+html.dark .goal-btn-delete {
+  color: #f87171;
+}
+
+html.dark .goal-btn-delete:hover:not(:disabled) {
+  background: rgba(248, 113, 113, 0.12);
+  border-color: rgba(248, 113, 113, 0.45);
+}
+
+.goal-btn-delete--table {
+  width: 2rem;
+  height: 2rem;
+}
+
+.goal-btn-delete:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .btn-add,
@@ -755,6 +991,18 @@ html.dark .objectives-lock-overlay {
 .history-table td {
   color: var(--color-text);
   font-size: 0.875rem;
+}
+
+.history-actions-col,
+.history-actions-cell {
+  width: 3.25rem;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.history-actions-col {
+  text-transform: none;
+  letter-spacing: normal;
 }
 
 .link {
