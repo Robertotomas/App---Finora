@@ -180,7 +180,30 @@ onUnmounted(() => {
                           <circle cx="12" cy="12" r="3" />
                         </svg>
                       </button>
-                      <button type="button" class="btn-download" @click="downloadReport(row)">Descarregar PDF</button>
+                      <button
+                        type="button"
+                        class="btn-icon-download"
+                        title="Descarregar PDF"
+                        aria-label="Descarregar PDF"
+                        @click="downloadReport(row)"
+                      >
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          width="20"
+                          height="20"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="2"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          aria-hidden="true"
+                        >
+                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                          <polyline points="7 10 12 15 17 10" />
+                          <line x1="12" x2="12" y1="15" y2="3" />
+                        </svg>
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -371,6 +394,19 @@ html.dark .reports-lock-overlay {
   align-items: center;
   justify-content: center;
   text-decoration: none;
+  padding: 0.4rem 0.85rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #fff;
+  background: #166534;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.reports-lock-cta:hover {
+  background: #15803d;
+  color: #fff;
 }
 
 .table-container {
@@ -443,20 +479,26 @@ html.dark .reports-lock-overlay {
   border-color: #166534;
 }
 
-.btn-download {
+.btn-icon-download {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
-  padding: 0.4rem 0.85rem;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: #fff;
-  background: #166534;
-  border: none;
+  width: 2.25rem;
+  height: 2.25rem;
+  padding: 0;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
+  background: var(--color-bg-card);
+  color: var(--color-text-muted);
   cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 
-.btn-download:hover {
-  background: #15803d;
+.btn-icon-download:hover {
+  background: var(--color-bg-muted, rgba(0, 0, 0, 0.06));
+  color: #166534;
+  border-color: #166534;
 }
 
 .pdf-preview-backdrop {
