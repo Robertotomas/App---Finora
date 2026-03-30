@@ -21,12 +21,6 @@ const router = createRouter({
       component: () => import('@/layouts/AppLayout.vue'),
       children: [
         {
-          path: '',
-          name: 'home',
-          component: () => import('@/views/HomeView.vue'),
-          meta: { requiresAuth: false },
-        },
-        {
           path: 'dashboard',
           name: 'dashboard',
           component: () => import('@/views/DashboardView.vue'),
@@ -84,6 +78,13 @@ router.beforeEach((to, _from, next) => {
   authStore.loadFromStorage()
 
   const isAuthenticated = authStore.isAuthenticated
+
+  // Landing "/" não deve existir: encaminha sempre para o destino correto.
+  if (to.path === '/') {
+    if (isAuthenticated) next({ name: 'dashboard' })
+    else next({ name: 'login' })
+    return
+  }
 
   if (to.meta.requiresAuth && !isAuthenticated) {
     next({ name: 'login', query: { redirect: to.fullPath } })
