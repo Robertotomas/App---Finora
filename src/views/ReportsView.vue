@@ -17,6 +17,9 @@ const previewUrl = ref<string | null>(null)
 const previewLoading = ref(false)
 const previewTitle = ref('')
 
+/** Linha em regeneração de PDF */
+const refreshingId = ref<string | null>(null)
+
 const reportsLocked = computed(() => !subscriptionStore.canAccessMonthlyReports)
 
 async function load() {
@@ -80,6 +83,27 @@ async function downloadReport(row: MonthlyReportListItem) {
     URL.revokeObjectURL(url)
   } catch {
     error.value = 'Não foi possível descarregar o PDF.'
+  }
+}
+
+async function refreshReportPdf(row: MonthlyReportListItem) {
+  if (reportsLocked.value || refreshingId.value) return
+  refreshingId.value = row.id
+  error.value = null
+  try {
+    const updated = await reportsApi.refresh(row.id)
+    const idx = items.value.findIndex((x) => x.id === row.id)
+    if (idx >= 0) items.value[idx] = updated
+    closePreview()
+  } catch (e: unknown) {
+    const err = e as { response?: { status?: number; data?: { message?: string } } }
+    if (err.response?.status === 403) {
+      error.value = 'Atualizar relatórios está disponível nos planos Pro e Couple.'
+    } else {
+      error.value = err.response?.data?.message ?? 'Não foi possível atualizar o PDF.'
+    }
+  } finally {
+    refreshingId.value = null
   }
 }
 
@@ -153,62 +177,70 @@ onUnmounted(() => {
             </p>
           </div>
 
-          <div v-else-if="!reportsLocked" class="table-container">
-            <table class="reports-table">
-              <thead>
-                <tr>
-                  <th>Período</th>
-                  <th>Gerado em</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="row in items" :key="row.id">
-                  <td>{{ formatMonthYear(row) }}</td>
-                  <td>{{ formatGenerated(row.generatedAt) }}</td>
-                  <td class="cell-actions">
-                    <div class="action-buttons">
-                      <button
-                        type="button"
-                        class="btn-icon-preview"
-                        title="Pré-visualizar"
-                        aria-label="Pré-visualizar PDF"
-                        @click="openPreview(row)"
+          <div v-else-if="!reportsLocked" class="reports-cards">
+            <article v-for="row in items" :key="row.id" class="report-card">
+              <div class="report-card__main">
+                <div class="report-card__info">
+                  <h3 class="report-card__period">{{ formatMonthYear(row) }}</h3>
+                  <p class="report-card__generated">Gerado em {{ formatGenerated(row.generatedAt) }}</p>
+                </div>
+                <div class="report-card__toolbar">
+                  <div class="action-buttons">
+                    <button
+                      type="button"
+                      class="btn-icon-preview"
+                      title="Pré-visualizar"
+                      aria-label="Pré-visualizar PDF"
+                      @click="openPreview(row)"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
+                        <circle cx="12" cy="12" r="3" />
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      class="btn-icon-download"
+                      title="Descarregar PDF"
+                      aria-label="Descarregar PDF"
+                      @click="downloadReport(row)"
+                    >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="20"
+                        height="20"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        aria-hidden="true"
                       >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                          <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
-                          <circle cx="12" cy="12" r="3" />
-                        </svg>
-                      </button>
-                      <button
-                        type="button"
-                        class="btn-icon-download"
-                        title="Descarregar PDF"
-                        aria-label="Descarregar PDF"
-                        @click="downloadReport(row)"
-                      >
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          width="20"
-                          height="20"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          stroke-width="2"
-                          stroke-linecap="round"
-                          stroke-linejoin="round"
-                          aria-hidden="true"
-                        >
-                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                          <polyline points="7 10 12 15 17 10" />
-                          <line x1="12" x2="12" y1="15" y2="3" />
-                        </svg>
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                        <polyline points="7 10 12 15 17 10" />
+                        <line x1="12" x2="12" y1="15" y2="3" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <div class="report-card__footer">
+                <p class="report-card__message">Alteraste transações neste mês?</p>
+                <p class="report-card__hint">
+                  Podes atualizar o PDF com os dados mais recentes.
+                </p>
+                <button
+                  type="button"
+                  class="btn-refresh-pdf"
+                  :disabled="refreshingId === row.id"
+                  :aria-busy="refreshingId === row.id"
+                  @click="refreshReportPdf(row)"
+                >
+                  {{ refreshingId === row.id ? 'A atualizar…' : 'Atualizar PDF' }}
+                </button>
+              </div>
+            </article>
           </div>
         </div>
 
@@ -218,7 +250,7 @@ onUnmounted(() => {
             <p class="reports-lock-text">
               Sobe de plano para listar e descarregar relatórios mensais automáticos com gráficos e totais.
             </p>
-            <router-link :to="{ name: 'subscription' }" class="btn-download reports-lock-cta">Ver planos</router-link>
+            <router-link :to="{ name: 'subscription' }" class="reports-lock-cta">Ver planos</router-link>
           </div>
         </div>
       </div>
@@ -409,44 +441,91 @@ html.dark .reports-lock-overlay {
   color: #fff;
 }
 
-.table-container {
-  overflow-x: auto;
+.reports-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
 }
 
-.reports-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.9375rem;
-  background: var(--color-bg-card);
+.report-card {
   border: 1px solid var(--color-border);
   border-radius: 12px;
   overflow: hidden;
+  background: var(--color-bg-card);
 }
 
-.reports-table th,
-.reports-table td {
-  padding: 0.75rem 1rem;
-  text-align: left;
+.report-card__main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+  padding: 0.875rem 1rem;
   border-bottom: 1px solid var(--color-border);
 }
 
-.reports-table th {
-  background: var(--color-bg-muted, rgba(0, 0, 0, 0.03));
-  font-weight: 600;
-  color: var(--color-text-muted);
+.report-card__info {
+  min-width: 0;
+}
+
+.report-card__period {
+  margin: 0 0 0.25rem;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--color-text);
+  line-height: 1.25;
+}
+
+.report-card__generated {
+  margin: 0;
   font-size: 0.8125rem;
-  text-transform: uppercase;
-  letter-spacing: 0.02em;
+  color: var(--color-text-muted);
 }
 
-.reports-table tr:last-child td {
-  border-bottom: none;
+.report-card__toolbar {
+  flex-shrink: 0;
 }
 
-.cell-actions {
-  text-align: right;
-  width: 1%;
-  white-space: nowrap;
+.report-card__footer {
+  padding: 0.75rem 1rem 0.9rem;
+  background: var(--color-bg-muted, rgba(0, 0, 0, 0.03));
+}
+
+.report-card__message {
+  margin: 0 0 0.35rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.report-card__hint {
+  margin: 0 0 0.65rem;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: var(--color-text-muted);
+}
+
+.btn-refresh-pdf {
+  flex-shrink: 0;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #fff;
+  background: #166534;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s ease;
+}
+
+.btn-refresh-pdf:hover:not(:disabled) {
+  background: #15803d;
+}
+
+.btn-refresh-pdf:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
 }
 
 .action-buttons {

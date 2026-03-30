@@ -34,4 +34,10 @@ export const reportsApi = {
     })
     return data
   },
+
+  /** Regenera o PDF com dados atuais (transações alteradas). */
+  refresh: async (id: string) => {
+    const { data } = await api.post<unknown>(`/api/reports/${id}/refresh`)
+    return normalizeListItem((data ?? {}) as Record<string, unknown>)
+  },
 }
