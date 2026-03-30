@@ -82,6 +82,7 @@ const navItems = [
   { to: '/accounts', label: 'Contas', iconImg: iconCreditCard, iconClass: 'sidebar-nav-icon-sm' },
   { to: '/transactions', label: 'Transações', iconImg: iconTransactions, iconClass: 'sidebar-nav-icon-lg' },
   { to: '/objectives', label: 'Objetivos', iconImg: iconObjectives, iconClass: 'sidebar-nav-icon-lg sidebar-nav-icon-objectives' },
+  { to: '/reports', label: 'Relatórios', iconImg: iconMonthly, iconClass: 'sidebar-nav-icon-lg' },
   { to: '/household', label: 'Household', icon: '👥' },
 ]
 

@@ -11,6 +11,7 @@ const firstName = ref('')
 const lastName = ref('')
 const email = ref('')
 const gender = ref<'Male' | 'Female' | ''>('')
+const timeZoneId = ref('')
 
 const loading = ref(false)
 const saving = ref(false)
@@ -29,6 +30,7 @@ function fillFromUser(u: User | null) {
   lastName.value = u.lastName
   email.value = u.email
   gender.value = genderToSelect(u.gender)
+  timeZoneId.value = u.timeZoneId ?? ''
 }
 
 onMounted(async () => {
@@ -61,6 +63,7 @@ async function handleSubmit() {
       firstName: firstName.value.trim(),
       lastName: lastName.value.trim(),
       gender: gender.value === 'Male' ? 0 : gender.value === 'Female' ? 1 : null,
+      timeZoneId: timeZoneId.value.trim() || null,
     })
     authStore.applyUserFromProfileResponse(data)
     fillFromUser(authStore.user)
@@ -119,6 +122,19 @@ async function handleSubmit() {
           <span class="field-label">Email</span>
           <input :value="email" class="field-input" type="email" disabled readonly />
           <span class="field-hint">O email não pode ser alterado aqui.</span>
+        </label>
+
+        <label class="field">
+          <span class="field-label">Fuso horário (IANA)</span>
+          <input
+            v-model="timeZoneId"
+            class="field-input"
+            type="text"
+            maxlength="100"
+            placeholder="Europe/Lisbon"
+            autocomplete="off"
+          />
+          <span class="field-hint">Usado para gerar o relatório mensal no dia 1 (mês anterior). Vazio = UTC.</span>
         </label>
 
         <div class="form-actions">

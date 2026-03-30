@@ -146,6 +146,7 @@ export function useMonthlyFinance(getHouseholdId: () => string | undefined) {
         expensesByCategory: [],
         incomeByCategory: [],
         monthlyTrend: [],
+        accountBalancesAtPeriod: [],
       }
 
       const budget = getBudgetForPeriod()

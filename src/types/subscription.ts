@@ -5,6 +5,8 @@ export interface SubscriptionLimits {
   incomeRemainingThisMonth: number | null
   expensesRemainingThisMonth: number | null
   objectivesEnabled: boolean
+  /** Pro/Couple; falls back to objectivesEnabled if omitted (older API responses). */
+  monthlyReportsEnabled?: boolean
   canInvite: boolean
   /** Free + mais do que uma conta e ainda não foi escolhida conta principal */
   needsPrimaryAccountSelection?: boolean
