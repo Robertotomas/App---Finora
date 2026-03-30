@@ -77,6 +77,14 @@ function goToProfile() {
   router.push({ name: 'profile' })
 }
 
+function goToHousehold() {
+  userMenuOpen.value = false
+  router.push({ name: 'household-settings' })
+}
+
+/** Household só no menu do utilizador, com plano Couple ativo (ver rota + item). */
+const showHouseholdInUserMenu = computed(() => subscriptionStore.plan === 'Couple')
+
 const navItems = [
   { to: '/dashboard', label: 'Dashboard', iconImg: iconDashboard },
   { to: '/monthly', label: 'Plano Mensal', iconImg: iconMonthly, iconClass: 'sidebar-nav-icon-lg' },
@@ -84,7 +92,6 @@ const navItems = [
   { to: '/transactions', label: 'Transações', iconImg: iconTransactions, iconClass: 'sidebar-nav-icon-lg' },
   { to: '/objectives', label: 'Objetivos', iconImg: iconObjectives, iconClass: 'sidebar-nav-icon-lg sidebar-nav-icon-objectives' },
   { to: '/reports', label: 'Relatórios', iconImg: iconReports, iconClass: 'sidebar-nav-icon-lg sidebar-nav-icon-reports' },
-  { to: '/household', label: 'Household', icon: '👥' },
 ]
 
 function isActive(path: string) {
@@ -163,6 +170,14 @@ function isActive(path: string) {
                     Perfil
                   </button>
                   <button
+                    v-if="showHouseholdInUserMenu"
+                    type="button"
+                    class="dropdown-item"
+                    @click="goToHousehold"
+                  >
+                    Household
+                  </button>
+                  <button
                     type="button"
                     class="dropdown-item"
                     @click="goToSubscription"
@@ -187,7 +202,13 @@ function isActive(path: string) {
     <div class="content-row">
       <aside class="sidebar">
         <div v-if="authStore.isAuthenticated" class="sidebar-plan">
-          <span class="sidebar-plan-value">{{ planLabel }}</span>
+          <RouterLink
+            :to="{ name: 'subscription' }"
+            class="sidebar-plan-link"
+            aria-label="Ver planos e subscrição"
+          >
+            {{ planLabel }}
+          </RouterLink>
         </div>
         <nav v-if="authStore.isAuthenticated" class="sidebar-nav">
           <RouterLink
@@ -198,8 +219,7 @@ function isActive(path: string) {
             :class="{ active: isActive(item.to) }"
           >
             <span class="sidebar-icon">
-              <img v-if="item.iconImg" :src="item.iconImg" alt="" class="sidebar-nav-icon" :class="item.iconClass" />
-              <template v-else>{{ item.icon }}</template>
+              <img :src="item.iconImg" alt="" class="sidebar-nav-icon" :class="item.iconClass" />
             </span>
             <span class="sidebar-label">{{ item.label }}</span>
           </RouterLink>
@@ -254,10 +274,21 @@ function isActive(path: string) {
   border-bottom: 1px solid var(--color-sidebar-border);
 }
 
-.sidebar-plan-value {
+/* Só o texto é clicável (inline), sem “barra” larga */
+.sidebar-plan-link {
+  display: inline;
   font-size: 0.875rem;
   font-weight: 600;
   color: var(--color-sidebar-text);
+  text-decoration: none;
+  cursor: pointer;
+  outline: none;
+}
+
+.sidebar-plan-link:hover,
+.sidebar-plan-link:focus-visible {
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .sidebar-nav {

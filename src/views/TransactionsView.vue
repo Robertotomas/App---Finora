@@ -599,7 +599,7 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
 
     <div v-if="!householdStore.household && !householdStore.loading" class="empty-state">
       <p>Configura primeiro o teu household.</p>
-      <router-link to="/household" class="link">Ir para Household</router-link>
+      <router-link to="/dashboard" class="link">Ir para o painel</router-link>
     </div>
 
     <div v-else-if="householdStore.loading && !householdStore.household" class="loading-state">

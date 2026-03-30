@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { useSubscriptionStore } from '@/stores/subscription'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -36,7 +37,7 @@ const router = createRouter({
           path: 'household',
           name: 'household-settings',
           component: () => import('@/views/HouseholdSettingsView.vue'),
-          meta: { requiresAuth: true },
+          meta: { requiresAuth: true, requiresCouplePlan: true },
         },
         {
           path: 'accounts',
@@ -79,7 +80,7 @@ const router = createRouter({
   ],
 })
 
-router.beforeEach((to, _from, next) => {
+router.beforeEach(async (to, _from, next) => {
   const authStore = useAuthStore()
   authStore.loadFromStorage()
 
@@ -94,11 +95,29 @@ router.beforeEach((to, _from, next) => {
 
   if (to.meta.requiresAuth && !isAuthenticated) {
     next({ name: 'login', query: { redirect: to.fullPath } })
-  } else if (to.meta.guestOnly && isAuthenticated) {
-    next({ name: 'dashboard' })
-  } else {
-    next()
+    return
   }
+  if (to.meta.guestOnly && isAuthenticated) {
+    next({ name: 'dashboard' })
+    return
+  }
+
+  if (to.meta.requiresCouplePlan && isAuthenticated) {
+    const subscriptionStore = useSubscriptionStore()
+    if (!subscriptionStore.subscription) {
+      try {
+        await subscriptionStore.fetchSubscription()
+      } catch {
+        /* ignore */
+      }
+    }
+    if (subscriptionStore.plan !== 'Couple') {
+      next({ name: 'dashboard' })
+      return
+    }
+  }
+
+  next()
 })
 
 export default router
