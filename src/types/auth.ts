@@ -29,6 +29,7 @@ export interface RegisterRequest {
   firstName: string
   lastName: string
   gender?: Gender
+  inviteToken?: string
 }
 
 export interface UpdateProfileRequest {

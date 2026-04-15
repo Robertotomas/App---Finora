@@ -1,4 +1,5 @@
 import api from './client'
+import type { AuthResponse } from '@/types/auth'
 import type { Household, HouseholdMember, SetPrimaryAccountRequest, UpdateHouseholdRequest } from '@/types/household'
 
 export const householdApi = {
@@ -13,4 +14,6 @@ export const householdApi = {
 
   setPrimaryAccount: (data: SetPrimaryAccountRequest) =>
     api.put<Household>('/api/household/me/primary-account', data),
+
+  leaveCouple: () => api.post<AuthResponse>('/api/household/me/leave-couple'),
 }

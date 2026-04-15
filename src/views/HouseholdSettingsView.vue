@@ -1,29 +1,34 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { useHouseholdStore } from '@/stores/household'
 import { useAuthStore } from '@/stores/auth'
+import { coupleInvitationsApi } from '@/api/coupleInvitations'
+import { useSubscriptionStore } from '@/stores/subscription'
+import type { HouseholdMember } from '@/types/household'
 
+const router = useRouter()
 const householdStore = useHouseholdStore()
 const authStore = useAuthStore()
+const subscriptionStore = useSubscriptionStore()
 
 const inviteEmail = ref('')
 const inviteLoading = ref(false)
 const inviteError = ref('')
-const upgradeLoading = ref(false)
 const leaveModalOpen = ref(false)
 const leaveLoading = ref(false)
+const leaveError = ref('')
 
-// Placeholder - API does not support members/invitations yet
 const invitations = ref<{ email: string; status: string }[]>([])
 
-// Show current user as member when Couple plan
-const members = computed(() => {
-  const list: { email: string; status: string }[] = []
-  if (householdStore.isCouple && authStore.user) {
-    list.push({ email: authStore.user.email, status: 'Ativo' })
-  }
-  return list
-})
+function memberLabel(m: HouseholdMember) {
+  const name = `${m.firstName ?? ''} ${m.lastName ?? ''}`.trim()
+  return name || m.email
+}
+
+function isCurrentUser(m: HouseholdMember) {
+  return authStore.user?.id === m.id
+}
 
 onMounted(async () => {
   try {
@@ -33,17 +38,6 @@ onMounted(async () => {
   }
 })
 
-async function handleUpgrade() {
-  upgradeLoading.value = true
-  try {
-    await householdStore.upgradeToCouple()
-  } catch {
-    // Error shown in store
-  } finally {
-    upgradeLoading.value = false
-  }
-}
-
 async function handleInvite(e: Event) {
   e.preventDefault()
   if (!inviteEmail.value.trim()) return
@@ -51,8 +45,13 @@ async function handleInvite(e: Event) {
   inviteLoading.value = true
   inviteError.value = ''
   try {
-    // API does not support invite yet - show placeholder message
-    inviteError.value = 'Convite de membros será disponibilizado em breve.'
+    await coupleInvitationsApi.create(inviteEmail.value.trim())
+    inviteEmail.value = ''
+    await subscriptionStore.fetchSubscription()
+    await householdStore.fetchHousehold()
+  } catch (err: unknown) {
+    const e = err as { response?: { data?: { message?: string } } }
+    inviteError.value = e.response?.data?.message ?? 'Não foi possível enviar o convite.'
   } finally {
     inviteLoading.value = false
   }
@@ -64,14 +63,19 @@ function openLeaveModal() {
 
 function closeLeaveModal() {
   leaveModalOpen.value = false
+  leaveError.value = ''
 }
 
 async function handleLeave() {
   leaveLoading.value = true
+  leaveError.value = ''
   try {
-    // API does not support leave yet
+    await householdStore.leaveCoupleHousehold()
     closeLeaveModal()
-    // Placeholder: feature coming soon - would call API and redirect
+    await subscriptionStore.fetchSubscription()
+    await router.push({ name: 'subscription' })
+  } catch {
+    leaveError.value = householdStore.error ?? 'Não foi possível sair.'
   } finally {
     leaveLoading.value = false
   }
@@ -110,27 +114,31 @@ async function handleLeave() {
             {{ householdStore.isIndividual ? 'Individual' : 'Plano para casal' }}
           </p>
         </div>
-        <div v-if="householdStore.isIndividual" class="upgrade-section">
-          <button
-            type="button"
-            class="btn-upgrade"
-            :disabled="upgradeLoading"
-            @click="handleUpgrade"
-          >
-            {{ upgradeLoading ? 'A processar...' : 'Upgrade to Couple Plan' }}
-          </button>
-        </div>
+        <p v-if="householdStore.isIndividual" class="plan-hint">
+          Para o plano Couple com convite, usa a secção abaixo ou a página Subscrição.
+        </p>
       </div>
 
-      <div v-if="householdStore.isCouple" class="card members-card">
+      <div v-if="householdStore.household" class="card members-card">
         <h2>Membros</h2>
+        <p v-if="householdStore.membersLoading" class="members-hint">A carregar membros…</p>
         <ul class="members-list">
-          <li v-for="m in members" :key="m.email" class="member-item">
-            <span class="member-email">{{ m.email }}</span>
-            <span class="member-status">{{ m.status }}</span>
+          <li
+            v-for="m in householdStore.members"
+            :key="m.id"
+            class="member-item"
+          >
+            <div class="member-info">
+              <span class="member-name">{{ memberLabel(m) }}</span>
+              <span class="member-email">{{ m.email }}</span>
+            </div>
+            <span class="member-status">{{ isCurrentUser(m) ? 'Tu' : 'Ativo' }}</span>
           </li>
-          <li v-if="members.length === 0" class="empty-state">
-            Ainda não há outros membros. Convida alguém abaixo.
+          <li
+            v-if="!householdStore.membersLoading && householdStore.members.length === 0"
+            class="empty-state"
+          >
+            Ainda não há membros listados. Convida alguém abaixo.
           </li>
         </ul>
 
@@ -144,8 +152,12 @@ async function handleLeave() {
           </ul>
         </div>
 
-        <form class="invite-form" @submit="handleInvite">
-          <h3>Convidar membro</h3>
+        <form
+          v-if="!householdStore.membersLoading && householdStore.members.length < 2"
+          class="invite-form"
+          @submit="handleInvite"
+        >
+          <h3>Convidar membro (plano Couple após envio bem-sucedido)</h3>
           <div v-if="inviteError" class="form-error">{{ inviteError }}</div>
           <div class="form-row">
             <input
@@ -162,19 +174,27 @@ async function handleLeave() {
         </form>
       </div>
 
-      <div class="card danger-card">
+      <div v-if="householdStore.isCouple" class="card danger-card">
         <h2>Zona de perigo</h2>
-        <p class="danger-text">Sair do household removerá o teu acesso a todos os dados partilhados.</p>
+        <p class="danger-text">
+          Sair do plano casal cancela a subscrição partilhada e passam ambos para o plano Free.
+          Se saíres com outra pessoa no agregado, ficas num agregado individual novo (sem as contas
+          partilhadas); a outra pessoa mantém os dados no agregado original.
+        </p>
         <button type="button" class="btn-leave" @click="openLeaveModal">
-          Sair do household
+          Sair do plano casal
         </button>
       </div>
     </div>
 
     <div v-if="leaveModalOpen" class="modal-overlay" @click.self="closeLeaveModal">
       <div class="modal">
-        <h3>Sair do household?</h3>
-        <p>Esta ação não pode ser revertida. Os teus dados serão removidos do household.</p>
+        <h3>Sair do plano casal?</h3>
+        <p>
+          O plano partilhado será cancelado e ambos ficam no Free. Se houver outra pessoa no agregado,
+          deixas de ver as contas desse agregado.
+        </p>
+        <p v-if="leaveError" class="form-error">{{ leaveError }}</p>
         <div class="modal-actions">
           <button type="button" class="btn-cancel" @click="closeLeaveModal">
             Cancelar
@@ -286,31 +306,11 @@ async function handleLeave() {
   margin: 0;
 }
 
-.upgrade-section {
-  padding-top: 1rem;
-  border-top: 1px solid #f1f5f9;
-}
-
-.btn-upgrade {
-  width: 100%;
-  padding: 0.75rem 1rem;
-  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
-  color: white;
-  border: none;
-  border-radius: 8px;
-  font-weight: 600;
-  font-size: 0.9375rem;
-  cursor: pointer;
-  transition: opacity 0.2s;
-}
-
-.btn-upgrade:hover:not(:disabled) {
-  opacity: 0.95;
-}
-
-.btn-upgrade:disabled {
-  opacity: 0.7;
-  cursor: not-allowed;
+.plan-hint {
+  font-size: 0.875rem;
+  color: #64748b;
+  margin: 0.75rem 0 0 0;
+  line-height: 1.4;
 }
 
 .members-list,
@@ -318,6 +318,12 @@ async function handleLeave() {
   list-style: none;
   padding: 0;
   margin: 0 0 1.5rem 0;
+}
+
+.members-hint {
+  font-size: 0.875rem;
+  color: #64748b;
+  margin: 0 0 0.75rem 0;
 }
 
 .member-item,
@@ -331,10 +337,23 @@ async function handleLeave() {
   margin-bottom: 0.5rem;
 }
 
+.member-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-width: 0;
+}
+
+.member-name {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #0f172a;
+}
+
 .member-email,
 .invitation-item span:first-child {
-  font-size: 0.875rem;
-  color: #334155;
+  font-size: 0.8125rem;
+  color: #64748b;
 }
 
 .member-status,

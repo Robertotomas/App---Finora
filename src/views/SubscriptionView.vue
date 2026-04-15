@@ -2,8 +2,14 @@
 import { computed, onMounted, ref } from 'vue'
 import { useSubscriptionStore } from '@/stores/subscription'
 import type { SubscriptionPlan } from '@/types/subscription'
+import { coupleInvitationsApi } from '@/api/coupleInvitations'
+import { authApi } from '@/api/auth'
+import { useAuthStore } from '@/stores/auth'
+import { useHouseholdStore } from '@/stores/household'
 
 const subscriptionStore = useSubscriptionStore()
+const authStore = useAuthStore()
+const householdStore = useHouseholdStore()
 const upgrading = ref<SubscriptionPlan | null>(null)
 
 // Couple flow: pedir email antes de confirmar o upgrade
@@ -11,6 +17,11 @@ const coupleInviteOpen = ref(false)
 const coupleInviteEmail = ref('')
 const coupleInviteError = ref('')
 const coupleInviteLoading = ref(false)
+
+const partnerOtp = ref('')
+const partnerOtpError = ref('')
+const partnerOtpSuccess = ref('')
+const partnerOtpLoading = ref(false)
 
 const planCards = [
   {
@@ -99,15 +110,43 @@ async function confirmCoupleInvite() {
 
   coupleInviteLoading.value = true
   try {
-    // API atual não tem endpoint de convite; o que fazemos aqui é: upgrade para Couple.
-    // O envio do convite pode ser implementado mais tarde via backend.
-    upgrading.value = 'Couple'
-    await subscriptionStore.upgrade('Couple')
+    await coupleInvitationsApi.create(email)
     await subscriptionStore.fetchSubscription()
+    try {
+      await householdStore.fetchHousehold()
+    } catch {
+      // opcional: household pode ainda não estar em cache
+    }
     coupleInviteOpen.value = false
+  } catch (e: unknown) {
+    const err = e as { response?: { data?: { message?: string } } }
+    coupleInviteError.value = err.response?.data?.message ?? 'Não foi possível enviar o convite.'
   } finally {
-    upgrading.value = null
     coupleInviteLoading.value = false
+  }
+}
+
+async function submitPartnerOtp() {
+  partnerOtpError.value = ''
+  partnerOtpSuccess.value = ''
+  const code = partnerOtp.value.trim().replace(/\s/g, '')
+  if (code.length !== 6 || !/^\d{6}$/.test(code)) {
+    partnerOtpError.value = 'Indica o código de 6 dígitos enviado por email.'
+    return
+  }
+  partnerOtpLoading.value = true
+  try {
+    await coupleInvitationsApi.verifyOtp(code)
+    partnerOtp.value = ''
+    partnerOtpSuccess.value = 'Conta associada ao agregado do convite.'
+    const { data } = await authApi.getProfile()
+    authStore.applyUserFromProfileResponse(data)
+    await subscriptionStore.fetchSubscription()
+  } catch (e: unknown) {
+    const err = e as { response?: { data?: { message?: string } } }
+    partnerOtpError.value = err.response?.data?.message ?? 'Código inválido ou expirado.'
+  } finally {
+    partnerOtpLoading.value = false
   }
 }
 
@@ -152,8 +191,8 @@ onMounted(async () => {
       <div class="couple-invite-modal">
         <h2 class="couple-invite-title">Enviar convite para Couple</h2>
         <p class="couple-invite-text">
-          Introduz o email da pessoa que queres convidar. Depois de confirmares, vamos atualizar o teu plano para
-          <strong>Couple</strong>.
+          Introduz o email da pessoa que queres convidar. O plano <strong>Couple</strong> só é ativado depois de o
+          convite ser enviado com sucesso.
         </p>
 
         <label class="field">
@@ -189,6 +228,35 @@ onMounted(async () => {
           </button>
         </div>
       </div>
+    </div>
+
+    <div class="partner-otp-card">
+      <h2 class="partner-otp-title">Aceitar convite (conta existente)</h2>
+      <p class="partner-otp-text">
+        Se recebeste um código por email para te juntares ao agregado de outra pessoa, introduz-o aqui (depois de iniciares sessão com o mesmo email).
+      </p>
+      <div class="partner-otp-row">
+        <input
+          v-model="partnerOtp"
+          type="text"
+          inputmode="numeric"
+          maxlength="6"
+          class="partner-otp-input"
+          placeholder="000000"
+          :disabled="partnerOtpLoading"
+          aria-label="Código de 6 dígitos"
+        />
+        <button
+          type="button"
+          class="btn-plan"
+          :disabled="partnerOtpLoading"
+          @click="submitPartnerOtp"
+        >
+          {{ partnerOtpLoading ? 'A validar…' : 'Validar código' }}
+        </button>
+      </div>
+      <p v-if="partnerOtpError" class="partner-otp-msg partner-otp-msg-error">{{ partnerOtpError }}</p>
+      <p v-if="partnerOtpSuccess" class="partner-otp-msg partner-otp-msg-ok">{{ partnerOtpSuccess }}</p>
     </div>
 
     <div class="plans-grid">
@@ -438,6 +506,60 @@ onMounted(async () => {
 .btn-secondary:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+.partner-otp-card {
+  margin-bottom: 1.5rem;
+  padding: 1rem 1.1rem;
+  border-radius: 14px;
+  border: 1px solid #2a2a2f;
+  background: rgba(15, 23, 42, 0.35);
+  color: #e2e8f0;
+}
+
+.partner-otp-title {
+  margin: 0 0 0.5rem 0;
+  font-size: 1rem;
+  font-weight: 750;
+  color: #f8fafc;
+}
+
+.partner-otp-text {
+  margin: 0 0 0.85rem 0;
+  font-size: 0.86rem;
+  color: #94a3b8;
+  line-height: 1.45;
+}
+
+.partner-otp-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  align-items: center;
+}
+
+.partner-otp-input {
+  letter-spacing: 0.2em;
+  font-size: 1.1rem;
+  padding: 0.55rem 0.75rem;
+  border-radius: 10px;
+  border: 1px solid #2a2a2f;
+  background: #0f1013;
+  color: #f8fafc;
+  width: 8rem;
+}
+
+.partner-otp-msg {
+  margin: 0.65rem 0 0 0;
+  font-size: 0.86rem;
+}
+
+.partner-otp-msg-error {
+  color: #fecaca;
+}
+
+.partner-otp-msg-ok {
+  color: #a7f3d0;
 }
 </style>
 
