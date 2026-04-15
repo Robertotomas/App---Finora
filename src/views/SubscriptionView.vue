@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { useSubscriptionStore } from '@/stores/subscription'
 import type { SubscriptionPlan } from '@/types/subscription'
 import { coupleInvitationsApi } from '@/api/coupleInvitations'
@@ -7,6 +8,7 @@ import { useAuthStore } from '@/stores/auth'
 import { userFromProfileResponse } from '@/types/auth'
 import { useHouseholdStore } from '@/stores/household'
 
+const router = useRouter()
 const subscriptionStore = useSubscriptionStore()
 const authStore = useAuthStore()
 const householdStore = useHouseholdStore()
@@ -82,11 +84,20 @@ async function choosePlan(plan: SubscriptionPlan) {
     coupleInviteOpen.value = true
     return
   }
+  const wasCouple = currentPlan.value === 'Couple'
   upgrading.value = plan
   try {
     await subscriptionStore.upgrade(plan)
     // Garante limites (ex.: objectivesEnabled) alinhados com o servidor antes de navegar para Objetivos/Dashboard.
     await subscriptionStore.fetchSubscription()
+    if (wasCouple && (plan === 'Free' || plan === 'Pro')) {
+      try {
+        await householdStore.fetchHousehold()
+      } catch {
+        /* household pode falhar brevemente; o redirect atualiza a vista na mesma */
+      }
+      await router.push({ name: 'household-settings' })
+    }
   } finally {
     upgrading.value = null
   }

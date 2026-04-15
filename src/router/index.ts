@@ -1,6 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import { useSubscriptionStore } from '@/stores/subscription'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -37,7 +36,7 @@ const router = createRouter({
           path: 'household',
           name: 'household-settings',
           component: () => import('@/views/HouseholdSettingsView.vue'),
-          meta: { requiresAuth: true, requiresCouplePlan: true },
+          meta: { requiresAuth: true },
         },
         {
           path: 'accounts',
@@ -100,21 +99,6 @@ router.beforeEach(async (to, _from, next) => {
   if (to.meta.guestOnly && isAuthenticated) {
     next({ name: 'dashboard' })
     return
-  }
-
-  if (to.meta.requiresCouplePlan && isAuthenticated) {
-    const subscriptionStore = useSubscriptionStore()
-    if (!subscriptionStore.subscription) {
-      try {
-        await subscriptionStore.fetchSubscription()
-      } catch {
-        /* ignore */
-      }
-    }
-    if (subscriptionStore.plan !== 'Couple') {
-      next({ name: 'dashboard' })
-      return
-    }
   }
 
   next()

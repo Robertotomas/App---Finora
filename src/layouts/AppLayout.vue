@@ -82,8 +82,10 @@ function goToHousehold() {
   router.push({ name: 'household-settings' })
 }
 
-/** Household só no menu do utilizador, com plano Couple ativo (ver rota + item). */
-const showHouseholdInUserMenu = computed(() => subscriptionStore.plan === 'Couple')
+/** Household: plano Couple OU agregado ainda tipo casal (ex.: após mudar para Free/Pro — precisas disto para sair do casal). */
+const showHouseholdInUserMenu = computed(
+  () => subscriptionStore.plan === 'Couple' || householdStore.isCouple,
+)
 
 const navItems = [
   { to: '/dashboard', label: 'Dashboard', iconImg: iconDashboard },
