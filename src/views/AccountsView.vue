@@ -26,6 +26,8 @@ const accountToDelete = ref<Account | null>(null)
 
 const actionLoading = ref(false)
 const accountLimitModalOpen = ref(false)
+const accountDeleteBlockedModalOpen = ref(false)
+const accountDeleteBlockedMessage = ref('')
 
 const needsPrimarySelection = computed(
   () => subscriptionStore.limits.needsPrimaryAccountSelection === true
@@ -162,11 +164,24 @@ async function handleDelete() {
     await accountsStore.deleteAccount(accountToDelete.value.id)
     await subscriptionStore.fetchSubscription()
     closeDeleteModal()
-  } catch {
-    // Error shown in store
+  } catch (e: unknown) {
+    const err = e as { response?: { status: number; data?: { code?: string; message?: string } } }
+    if (err.response?.status === 400 && err.response?.data?.code === 'ACCOUNT_HAS_MOVEMENTS') {
+      accountsStore.clearError()
+      accountDeleteBlockedMessage.value =
+        err.response.data.message ??
+        'Não é possível eliminar esta conta enquanto tiver movimentos associados. Remove-os em Movimentos e tenta de novo.'
+      accountDeleteBlockedModalOpen.value = true
+      closeDeleteModal()
+    }
   } finally {
     actionLoading.value = false
   }
+}
+
+function closeDeleteBlockedModal() {
+  accountDeleteBlockedModalOpen.value = false
+  accountDeleteBlockedMessage.value = ''
 }
 
 function formatBalance(balance: number, currency: string): string {
@@ -351,6 +366,26 @@ function formatBalance(balance: number, currency: string): string {
       @close="closeDeleteModal"
       @confirm="handleDelete"
     />
+
+    <BaseModal
+      v-if="accountDeleteBlockedModalOpen"
+      title="Não é possível eliminar"
+      @close="closeDeleteBlockedModal"
+    >
+      <div class="locked-modal-body">
+        <p>{{ accountDeleteBlockedMessage }}</p>
+        <div class="locked-modal-actions">
+          <button type="button" class="btn-secondary" @click="closeDeleteBlockedModal">Fechar</button>
+          <router-link
+            :to="{ name: 'transactions' }"
+            class="locked-modal-cta"
+            @click="closeDeleteBlockedModal"
+          >
+            Ir para Movimentos
+          </router-link>
+        </div>
+      </div>
+    </BaseModal>
 
     <BaseModal
       v-if="accountLimitModalOpen"

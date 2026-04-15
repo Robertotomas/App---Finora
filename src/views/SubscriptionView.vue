@@ -19,6 +19,7 @@ const coupleInviteError = ref('')
 const coupleInviteLoading = ref(false)
 
 const partnerOtp = ref('')
+const partnerMigratePersonalData = ref(true)
 const partnerOtpError = ref('')
 const partnerOtpSuccess = ref('')
 const partnerOtpLoading = ref(false)
@@ -136,7 +137,7 @@ async function submitPartnerOtp() {
   }
   partnerOtpLoading.value = true
   try {
-    const { data } = await coupleInvitationsApi.verifyOtp(code)
+    const { data } = await coupleInvitationsApi.verifyOtp(code, partnerMigratePersonalData.value)
     partnerOtp.value = ''
     authStore.setAuth(data.accessToken, userFromProfileResponse(data.user))
     partnerOtpSuccess.value = 'Conta associada ao agregado do convite.'
@@ -234,6 +235,13 @@ onMounted(async () => {
       <p class="partner-otp-text">
         Se recebeste um código por email para te juntares ao agregado de outra pessoa, introduz-o aqui (depois de iniciares sessão com o mesmo email).
       </p>
+      <label class="partner-otp-migrate">
+        <input v-model="partnerMigratePersonalData" type="checkbox" :disabled="partnerOtpLoading" />
+        <span>
+          Levar os meus dados (contas, movimentos, recorrentes e objetivos) para o agregado do convite.
+          Se desmarcares, o teu agregado atual tem de estar vazio (sem contas nem movimentos).
+        </span>
+      </label>
       <div class="partner-otp-row">
         <input
           v-model="partnerOtp"
@@ -528,6 +536,22 @@ onMounted(async () => {
   font-size: 0.86rem;
   color: #94a3b8;
   line-height: 1.45;
+}
+
+.partner-otp-migrate {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+  margin: 0 0 0.85rem 0;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: #cbd5e1;
+  cursor: pointer;
+}
+
+.partner-otp-migrate input {
+  margin-top: 0.2rem;
+  flex-shrink: 0;
 }
 
 .partner-otp-row {

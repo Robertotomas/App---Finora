@@ -1,11 +1,21 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { authApi } from '@/api/auth'
 import type { User } from '@/types/auth'
 import { userFromProfileResponse } from '@/types/auth'
 
 const authStore = useAuthStore()
+
+const coupleProfileHint = computed(() => {
+  const u = authStore.user
+  if (!u?.isCoupleGuest) return ''
+  if (u.coupleJoinDataMigrated === null || u.coupleJoinDataMigrated === undefined)
+    return 'Conta de parceiro convidado (registada por convite).'
+  if (u.coupleJoinDataMigrated === true)
+    return 'Os teus dados do agregado anterior foram integrados neste household.'
+  return 'Entraste no agregado do convite sem migrar dados anteriores (ou não tinhas dados a migrar).'
+})
 
 const firstName = ref('')
 const lastName = ref('')
@@ -95,6 +105,7 @@ async function handleSubmit() {
     </div>
 
     <div v-else class="content">
+      <p v-if="coupleProfileHint" class="couple-profile-hint">{{ coupleProfileHint }}</p>
       <form class="profile-card" @submit.prevent="handleSubmit">
         <div v-if="error" class="form-error">{{ error }}</div>
         <div v-if="success" class="form-success">Alterações guardadas.</div>
@@ -169,6 +180,17 @@ async function handleSubmit() {
   margin: 0;
   font-size: 0.9375rem;
   color: var(--color-text-muted);
+}
+
+.couple-profile-hint {
+  margin: 0 0 1rem 0;
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+  line-height: 1.45;
+  color: var(--color-text);
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--app-radius-md, 12px);
 }
 
 .loading-state {

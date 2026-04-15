@@ -14,6 +14,6 @@ export const coupleInvitationsApi = {
 
   create: (email: string) => api.post('/api/couple-invitations', { email }),
 
-  verifyOtp: (code: string) =>
-    api.post<AuthResponse>('/api/couple-invitations/verify-otp', { code }),
+  verifyOtp: (code: string, migratePersonalData: boolean) =>
+    api.post<AuthResponse>('/api/couple-invitations/verify-otp', { code, migratePersonalData }),
 }

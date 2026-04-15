@@ -9,6 +9,10 @@ export interface User {
   householdId?: string
   /** IANA timezone (e.g. Europe/Lisbon) for monthly report scheduling */
   timeZoneId?: string | null
+  /** Parceiro convidado por link/OTP (plano Couple) */
+  isCoupleGuest?: boolean
+  /** Se uniste por OTP: se os dados do agregado anterior foram migrados; omitido no registo só por link */
+  coupleJoinDataMigrated?: boolean | null
 }
 
 export interface AuthResponse {
@@ -49,6 +53,8 @@ export function userFromProfileResponse(data: unknown): User {
   else if (g === 1 || g === 'Female') gender = 1
   const hid = pick('householdId')
   const tz = pick('timeZoneId')
+  const guest = pick('isCoupleGuest')
+  const migrated = pick('coupleJoinDataMigrated')
   return {
     id: String(pick('id') ?? ''),
     email: String(pick('email') ?? ''),
@@ -57,5 +63,12 @@ export function userFromProfileResponse(data: unknown): User {
     gender,
     householdId: hid != null && hid !== '' ? String(hid) : undefined,
     timeZoneId: tz != null && String(tz) !== '' ? String(tz) : null,
+    isCoupleGuest: guest === true,
+    coupleJoinDataMigrated:
+      migrated === null || migrated === undefined
+        ? null
+        : migrated === true
+          ? true
+          : false
   }
 }
