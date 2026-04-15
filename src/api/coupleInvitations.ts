@@ -1,4 +1,5 @@
 import api from './client'
+import type { AuthResponse } from '@/types/auth'
 
 export interface ValidateInviteResponse {
   valid: boolean
@@ -13,5 +14,6 @@ export const coupleInvitationsApi = {
 
   create: (email: string) => api.post('/api/couple-invitations', { email }),
 
-  verifyOtp: (code: string) => api.post('/api/couple-invitations/verify-otp', { code }),
+  verifyOtp: (code: string) =>
+    api.post<AuthResponse>('/api/couple-invitations/verify-otp', { code }),
 }

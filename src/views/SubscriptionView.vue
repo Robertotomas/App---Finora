@@ -3,8 +3,8 @@ import { computed, onMounted, ref } from 'vue'
 import { useSubscriptionStore } from '@/stores/subscription'
 import type { SubscriptionPlan } from '@/types/subscription'
 import { coupleInvitationsApi } from '@/api/coupleInvitations'
-import { authApi } from '@/api/auth'
 import { useAuthStore } from '@/stores/auth'
+import { userFromProfileResponse } from '@/types/auth'
 import { useHouseholdStore } from '@/stores/household'
 
 const subscriptionStore = useSubscriptionStore()
@@ -136,12 +136,11 @@ async function submitPartnerOtp() {
   }
   partnerOtpLoading.value = true
   try {
-    await coupleInvitationsApi.verifyOtp(code)
+    const { data } = await coupleInvitationsApi.verifyOtp(code)
     partnerOtp.value = ''
+    authStore.setAuth(data.accessToken, userFromProfileResponse(data.user))
     partnerOtpSuccess.value = 'Conta associada ao agregado do convite.'
-    const { data } = await authApi.getProfile()
-    authStore.applyUserFromProfileResponse(data)
-    await subscriptionStore.fetchSubscription()
+    await Promise.all([subscriptionStore.fetchSubscription(), householdStore.fetchHousehold()])
   } catch (e: unknown) {
     const err = e as { response?: { data?: { message?: string } } }
     partnerOtpError.value = err.response?.data?.message ?? 'Código inválido ou expirado.'
