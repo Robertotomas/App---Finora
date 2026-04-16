@@ -13,6 +13,7 @@ import iconTransactions from '@/assets/images/icon-transactions.png'
 import iconObjectives from '@/assets/images/icon-objectives.png'
 import iconReports from '@/assets/images/icon-reports.png'
 import iconFinoraFlow from '@/assets/images/finoraflow-icon.png'
+import PartnerLeftModal from '@/components/PartnerLeftModal.vue'
 
 const authStore = useAuthStore()
 const themeStore = useThemeStore()
@@ -84,7 +85,10 @@ function goToHousehold() {
 
 /** Household: plano Couple OU agregado ainda tipo casal (ex.: após mudar para Free/Pro — precisas disto para sair do casal). */
 const showHouseholdInUserMenu = computed(
-  () => subscriptionStore.plan === 'Couple' || householdStore.isCouple,
+  () =>
+    subscriptionStore.plan === 'Couple' ||
+    householdStore.isCouple ||
+    householdStore.hasPartnerLeftNotice,
 )
 
 const navItems = [
@@ -239,6 +243,8 @@ function isActive(path: string) {
         <RouterView />
       </main>
     </div>
+
+    <PartnerLeftModal v-if="authStore.isAuthenticated" />
   </div>
 </template>
 

@@ -23,6 +23,20 @@ function storageKey(householdId: string, year: number, month: number): string {
   return `${householdId}-${year}-${month}`
 }
 
+/** Remove todos os orçamentos mensais locais deste agregado (ex.: após reset financeiro no servidor). */
+export function clearAllBudgetsForHousehold(householdId: string) {
+  const prefix = `${householdId}-`
+  const store = loadFromStorage()
+  let changed = false
+  for (const k of Object.keys(store)) {
+    if (k.startsWith(prefix)) {
+      delete store[k]
+      changed = true
+    }
+  }
+  if (changed) saveToStorage(store)
+}
+
 export function useMonthlyBudget() {
   const budgetStore = ref<BudgetStore>(loadFromStorage())
 

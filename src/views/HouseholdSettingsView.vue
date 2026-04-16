@@ -2,7 +2,6 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useHouseholdStore } from '@/stores/household'
-import { useAccountsStore } from '@/stores/accounts'
 import { useAuthStore } from '@/stores/auth'
 import { coupleInvitationsApi } from '@/api/coupleInvitations'
 import { useSubscriptionStore } from '@/stores/subscription'
@@ -10,7 +9,6 @@ import type { HouseholdMember } from '@/types/household'
 
 const router = useRouter()
 const householdStore = useHouseholdStore()
-const accountsStore = useAccountsStore()
 const authStore = useAuthStore()
 const subscriptionStore = useSubscriptionStore()
 
@@ -21,13 +19,6 @@ const leaveModalOpen = ref(false)
 const leaveAcknowledged = ref(false)
 const leaveLoading = ref(false)
 const leaveError = ref('')
-
-const resetModalOpen = ref(false)
-const resetStep = ref<1 | 2>(1)
-const resetPhrase = ref('')
-const resetLoading = ref(false)
-const resetError = ref('')
-const partnerAssistError = ref('')
 
 const invitations = ref<{ email: string; status: string }[]>([])
 
@@ -76,43 +67,6 @@ function closeLeaveModal() {
   leaveModalOpen.value = false
   leaveError.value = ''
   leaveAcknowledged.value = false
-}
-
-function openResetModal() {
-  resetStep.value = 1
-  resetPhrase.value = ''
-  resetError.value = ''
-  resetModalOpen.value = true
-}
-
-function closeResetModal() {
-  resetModalOpen.value = false
-  resetStep.value = 1
-  resetPhrase.value = ''
-  resetError.value = ''
-}
-
-async function handleDismissPartnerNotice() {
-  partnerAssistError.value = ''
-  try {
-    await householdStore.dismissPartnerLeftNotice()
-  } catch {
-    partnerAssistError.value = householdStore.error ?? 'Não foi possível atualizar.'
-  }
-}
-
-async function handleConfirmReset() {
-  resetLoading.value = true
-  resetError.value = ''
-  try {
-    await householdStore.resetFinancialData(resetPhrase.value.trim())
-    await accountsStore.fetchAccounts().catch(() => {})
-    closeResetModal()
-  } catch {
-    resetError.value = householdStore.error ?? 'Não foi possível limpar os dados.'
-  } finally {
-    resetLoading.value = false
-  }
 }
 
 async function handleLeave() {
@@ -223,28 +177,6 @@ async function handleLeave() {
         </form>
       </div>
 
-      <div v-if="householdStore.hasPartnerLeftNotice" class="card partner-notice-card">
-        <h2>A outra pessoa saiu do agregado casal</h2>
-        <p class="partner-notice-text">
-          Todo o histórico deste agregado (contas, movimentos, objetivos, relatórios) continua aqui.
-          Podes mantê-lo ou apagar tudo e recomeçar do zero. Se mantiveres, podes fechar este aviso.
-        </p>
-        <p v-if="partnerAssistError" class="form-error">{{ partnerAssistError }}</p>
-        <div class="partner-notice-actions">
-          <button
-            type="button"
-            class="btn-keep-data"
-            :disabled="householdStore.loading"
-            @click="handleDismissPartnerNotice"
-          >
-            Manter dados e fechar aviso
-          </button>
-          <button type="button" class="btn-reset-open" @click="openResetModal">
-            Apagar tudo e recomeçar…
-          </button>
-        </div>
-      </div>
-
       <div v-if="householdStore.isCouple" class="card danger-card">
         <h2>Zona de perigo</h2>
         <p class="danger-text">
@@ -268,8 +200,7 @@ async function handleLeave() {
             <strong>mantém</strong> todo o histórico (contas e movimentos) no agregado onde ficou.
           </li>
           <li>
-            Quem fica pode, em seguida, manter esses dados ou apagar tudo na página Household, se
-            preferir recomeçar.
+            Quem fica vê um aviso ao iniciar sessão para manter os dados ou apagar tudo e recomeçar.
           </li>
         </ul>
         <label class="leave-ack">
@@ -290,50 +221,6 @@ async function handleLeave() {
             {{ leaveLoading ? 'A processar...' : 'Confirmar saída' }}
           </button>
         </div>
-      </div>
-    </div>
-
-    <div v-if="resetModalOpen" class="modal-overlay" @click.self="closeResetModal">
-      <div class="modal modal-reset">
-        <template v-if="resetStep === 1">
-          <h3>Apagar todos os dados deste agregado?</h3>
-          <p class="reset-warn">
-            Isto remove <strong>todas</strong> as contas, movimentos, recorrentes, objetivos de poupança
-            e relatórios mensais deste agregado. <strong>Não pode ser anulado.</strong>
-          </p>
-          <div class="modal-actions">
-            <button type="button" class="btn-cancel" @click="closeResetModal">Cancelar</button>
-            <button type="button" class="btn-confirm-leave" @click="resetStep = 2">
-              Continuar
-            </button>
-          </div>
-        </template>
-        <template v-else>
-          <h3>Confirmação final</h3>
-          <p class="reset-warn">
-            Para confirmar, escreve <strong>RECOMECAR</strong> (em maiúsculas, tal como está).
-          </p>
-          <input
-            v-model="resetPhrase"
-            type="text"
-            class="input reset-input"
-            autocomplete="off"
-            placeholder="RECOMECAR"
-            aria-label="Frase de confirmação"
-          />
-          <p v-if="resetError" class="form-error">{{ resetError }}</p>
-          <div class="modal-actions">
-            <button type="button" class="btn-cancel" @click="resetStep = 1">Voltar</button>
-            <button
-              type="button"
-              class="btn-confirm-leave"
-              :disabled="resetLoading || resetPhrase.trim() !== 'RECOMECAR'"
-              @click="handleConfirmReset"
-            >
-              {{ resetLoading ? 'A apagar...' : 'Apagar definitivamente' }}
-            </button>
-          </div>
-        </template>
       </div>
     </div>
   </div>
@@ -600,10 +487,6 @@ async function handleLeave() {
   max-width: min(520px, 100%);
 }
 
-.modal-reset {
-  max-width: min(440px, 100%);
-}
-
 .leave-summary {
   margin: 0 0 1rem 1.1rem;
   padding: 0;
@@ -634,77 +517,6 @@ async function handleLeave() {
 .leave-ack input {
   margin-top: 0.2rem;
   flex-shrink: 0;
-}
-
-.partner-notice-card {
-  border-color: #fcd34d;
-  background: linear-gradient(180deg, #fffbeb 0%, var(--color-bg-card) 100%);
-}
-
-.partner-notice-card h2 {
-  color: #b45309;
-  font-size: 1rem;
-}
-
-.partner-notice-text {
-  font-size: 0.875rem;
-  color: #64748b;
-  margin: 0 0 1rem 0;
-  line-height: 1.5;
-}
-
-.partner-notice-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-}
-
-.btn-keep-data {
-  padding: 0.5rem 1rem;
-  background: #166534;
-  color: white;
-  border: none;
-  border-radius: 8px;
-  font-size: 0.875rem;
-  font-weight: 500;
-  cursor: pointer;
-}
-
-.btn-keep-data:hover:not(:disabled) {
-  background: #14532d;
-}
-
-.btn-keep-data:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.btn-reset-open {
-  padding: 0.5rem 1rem;
-  background: transparent;
-  color: #dc2626;
-  border: 1px solid #fecaca;
-  border-radius: 8px;
-  font-size: 0.875rem;
-  cursor: pointer;
-}
-
-.btn-reset-open:hover {
-  background: #fef2f2;
-}
-
-.reset-warn {
-  font-size: 0.875rem;
-  color: #64748b;
-  margin: 0 0 1rem 0;
-  line-height: 1.5;
-}
-
-.reset-input {
-  width: 100%;
-  margin-bottom: 1rem;
-  font-family: ui-monospace, monospace;
-  letter-spacing: 0.02em;
 }
 
 .modal h3 {
