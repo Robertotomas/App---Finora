@@ -14,6 +14,9 @@ export const useHouseholdStore = defineStore('household', () => {
 
   const isIndividual = computed(() => household.value?.type === 0)
   const isCouple = computed(() => household.value?.type === 1)
+  const hasPartnerLeftNotice = computed(
+    () => !!household.value?.partnerLeftNoticeAtUtc,
+  )
 
   async function fetchHousehold() {
     loading.value = true
@@ -24,7 +27,8 @@ export const useHouseholdStore = defineStore('household', () => {
         id: data.id,
         type: data.type,
         name: data.name,
-        primaryAccountId: data.primaryAccountId ?? undefined
+        primaryAccountId: data.primaryAccountId ?? undefined,
+        partnerLeftNoticeAtUtc: data.partnerLeftNoticeAtUtc ?? undefined,
       }
       await fetchMembers()
       return data
@@ -55,6 +59,50 @@ export const useHouseholdStore = defineStore('household', () => {
       members.value = []
     } finally {
       membersLoading.value = false
+    }
+  }
+
+  async function dismissPartnerLeftNotice() {
+    loading.value = true
+    error.value = null
+    try {
+      const { data } = await householdApi.dismissPartnerLeftNotice()
+      household.value = {
+        id: data.id,
+        type: data.type,
+        name: data.name,
+        primaryAccountId: data.primaryAccountId ?? undefined,
+        partnerLeftNoticeAtUtc: data.partnerLeftNoticeAtUtc ?? undefined,
+      }
+      return data
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { message?: string } } }
+      error.value = err.response?.data?.message ?? 'Não foi possível atualizar.'
+      throw e
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function resetFinancialData(confirmPhrase: string) {
+    loading.value = true
+    error.value = null
+    try {
+      const { data } = await householdApi.resetFinancialData(confirmPhrase)
+      household.value = {
+        id: data.id,
+        type: data.type,
+        name: data.name,
+        primaryAccountId: data.primaryAccountId ?? undefined,
+        partnerLeftNoticeAtUtc: data.partnerLeftNoticeAtUtc ?? undefined,
+      }
+      return data
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { message?: string } } }
+      error.value = err.response?.data?.message ?? 'Não foi possível limpar os dados.'
+      throw e
+    } finally {
+      loading.value = false
     }
   }
 
@@ -124,8 +172,11 @@ export const useHouseholdStore = defineStore('household', () => {
     error,
     isIndividual,
     isCouple,
+    hasPartnerLeftNotice,
     fetchHousehold,
     fetchMembers,
+    dismissPartnerLeftNotice,
+    resetFinancialData,
     leaveCoupleHousehold,
     upgradeToCouple,
     updateHousehold,

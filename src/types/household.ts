@@ -8,6 +8,8 @@ export interface Household {
   type: HouseholdType
   name: string
   primaryAccountId?: string | null
+  /** Set when the other member left a Couple household; remaining user may dismiss or reset data. */
+  partnerLeftNoticeAtUtc?: string | null
 }
 
 export interface SetPrimaryAccountRequest {

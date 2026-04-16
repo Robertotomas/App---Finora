@@ -16,4 +16,12 @@ export const householdApi = {
     api.put<Household>('/api/household/me/primary-account', data),
 
   leaveCouple: () => api.post<AuthResponse>('/api/household/me/leave-couple'),
+
+  dismissPartnerLeftNotice: () =>
+    api.post<Household>('/api/household/me/dismiss-partner-left-notice'),
+
+  resetFinancialData: (confirmPhrase: string) =>
+    api.post<Household>('/api/household/me/reset-financial-data', {
+      confirmPhrase,
+    }),
 }
