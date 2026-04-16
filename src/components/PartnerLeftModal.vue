@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 import { useHouseholdStore } from '@/stores/household'
 import { clearAllBudgetsForHousehold } from '@/composables/useMonthlyBudget'
 
@@ -13,6 +13,14 @@ const resetPhrase = ref('')
 const actionLoading = ref(false)
 const errorMsg = ref('')
 
+const dialogRef = ref<HTMLElement | null>(null)
+const continueAckCheckboxRef = ref<HTMLInputElement | null>(null)
+const resetInputRef = ref<HTMLInputElement | null>(null)
+
+let lastActiveElement: HTMLElement | null = null
+let prevBodyOverflow = ''
+let prevBodyPaddingRight = ''
+
 /** Não usar `householdStore.loading` aqui — durante dismiss/reset o loading global escondia o modal. */
 const visible = computed(
   () => !!householdStore.household && householdStore.hasPartnerLeftNotice,
@@ -20,10 +28,43 @@ const visible = computed(
 
 watch(visible, (show) => {
   if (show) {
+    // Scroll lock + foco (acessibilidade)
+    prevBodyOverflow = document.body.style.overflow
+    prevBodyPaddingRight = document.body.style.paddingRight
+    lastActiveElement = document.activeElement as HTMLElement | null
+
+    const scrollbarWidth =
+      window.innerWidth - document.documentElement.clientWidth
+    document.body.style.overflow = 'hidden'
+    if (scrollbarWidth > 0) document.body.style.paddingRight = `${scrollbarWidth}px`
+
     phase.value = 'main'
     continueAck.value = false
     resetPhrase.value = ''
     errorMsg.value = ''
+
+    void nextTick(() => {
+      const el =
+        dialogRef.value?.querySelector<HTMLElement>(
+          'button, input, select, textarea, a[href], [tabindex]:not([tabindex="-1"])',
+        ) ?? null
+      el?.focus()
+    })
+  } else {
+    // Restore scroll lock + devolve foco ao elemento que abriu o modal
+    document.body.style.overflow = prevBodyOverflow
+    document.body.style.paddingRight = prevBodyPaddingRight
+    void nextTick(() => lastActiveElement?.focus?.())
+  }
+})
+
+watch(phase, async (p) => {
+  if (!visible.value) return
+  await nextTick()
+  if (p === 'continueAck') {
+    continueAckCheckboxRef.value?.focus()
+  } else if (p === 'reset2') {
+    resetInputRef.value?.focus()
   }
 })
 
@@ -84,7 +125,7 @@ async function confirmReset() {
       aria-modal="true"
       aria-labelledby="partner-left-title"
     >
-      <div class="partner-dialog">
+      <div class="partner-dialog" ref="dialogRef">
         <!-- Escolha inicial -->
         <template v-if="phase === 'main'">
           <div class="partner-icon" aria-hidden="true">👋</div>
@@ -112,7 +153,11 @@ async function confirmReset() {
             aparecer.
           </p>
           <label class="partner-check">
-            <input v-model="continueAck" type="checkbox" />
+            <input
+              ref="continueAckCheckboxRef"
+              v-model="continueAck"
+              type="checkbox"
+            />
             <span>Confirmo que quero manter os dados deste agregado.</span>
           </label>
           <p v-if="errorMsg" class="partner-error">{{ errorMsg }}</p>
@@ -161,6 +206,7 @@ async function confirmReset() {
             Para apagar definitivamente, escreve <strong>RECOMECAR</strong> (maiúsculas, tal como está).
           </p>
           <input
+            ref="resetInputRef"
             v-model="resetPhrase"
             type="text"
             class="partner-input"
