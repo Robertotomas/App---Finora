@@ -81,7 +81,7 @@ async function loadObjectivesPreview() {
     const { data } = await objectivesApi.getOverview()
     const all = mapActiveObjectivesFromOverview(data)
     objectivesActiveTotal.value = all.length
-    objectivesPreview.value = all.slice(0, 4)
+    objectivesPreview.value = all.slice(0, 3)
   } catch {
     objectivesPreview.value = []
     objectivesActiveTotal.value = 0
@@ -119,7 +119,6 @@ const navYears = computed(() => {
 async function onPeriodChange() {
   periodChangeLoading.value = true
   await nextTick()
-  dashboardContentRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   try {
     dashboard.setPeriod(selectedYear.value, selectedMonth.value)
     dashboard.invalidateCache()
@@ -177,7 +176,6 @@ function formatCurrency(value: number, currency: string): string {
   }).format(value)
 }
 
-const formattedBalance = computed(() => formatCurrency(dashboard.totalBalance.value, dashboard.currency.value))
 const formattedIncome = computed(() => formatCurrency(dashboard.monthlyIncome.value, dashboard.currency.value))
 const formattedExpenses = computed(() => formatCurrency(dashboard.monthlyExpenses.value, dashboard.currency.value))
 const formattedSavings = computed(() => formatCurrency(dashboard.monthlySavings.value, dashboard.currency.value))
@@ -200,19 +198,15 @@ const periodLabel = computed(() => {
   return `${MONTH_NAMES[selectedMonth.value]} ${selectedYear.value}`
 })
 
-const accountsToShow = computed(() => {
-  const fromDashboard = dashboard.accountBalancesAtPeriod.value
-  if (fromDashboard.length > 0) {
-    return fromDashboard.map(a => ({
-      id: a.accountId,
-      name: a.name,
-      type: a.type,
-      balance: a.balance,
-      currency: a.currency
-    }))
-  }
-  return accountsStore.accounts
-})
+/* Contas e património: sempre dados atuais (não afetados pelo filtro) */
+const accountsToShow = computed(() => accountsStore.accounts)
+
+const currentTotalBalance = computed(() =>
+  accountsStore.accounts.reduce((sum, a) => sum + a.balance, 0)
+)
+const formattedCurrentBalance = computed(() =>
+  formatCurrency(currentTotalBalance.value, dashboard.currency.value)
+)
 
 const hasChartData = computed(
   () => dashboard.monthlyIncome.value > 0 || dashboard.monthlyExpenses.value > 0
@@ -403,7 +397,7 @@ const showContent = computed(() =>
         <div class="patrimonio-top">
           <div class="patrimonio-info">
             <span class="patrimonio-label">PATRIMÔNIO TOTAL</span>
-            <p class="patrimonio-value">{{ formattedBalance }}</p>
+            <p class="patrimonio-value">{{ formattedCurrentBalance }}</p>
             <span class="patrimonio-date">{{ todayLabel }}</span>
           </div>
           <div class="patrimonio-periods">
@@ -438,7 +432,7 @@ const showContent = computed(() =>
             <NetWorthChart
               v-else-if="chartTrendData.length > 0"
               :trend-data="chartTrendData"
-              :current-balance="dashboard.totalBalance.value"
+              :current-balance="currentTotalBalance"
               :currency="dashboard.currency.value"
             />
             <div v-else class="patrimonio-chart-empty">
@@ -448,7 +442,110 @@ const showContent = computed(() =>
         </div>
       </div>
 
-      <!-- ═══ Summary Cards (Receitas / Despesas / Poupança) ═══ -->
+      <!-- ═══ STATIC GRID: Contas + Objetivos (dados atuais) ═══ -->
+      <div class="static-grid">
+        <!-- Card: Contas -->
+        <div class="dashboard-section-card static-card">
+          <div class="static-card-header">
+            <h2 class="section-title">Contas</h2>
+            <router-link :to="{ name: 'accounts' }" class="static-card-link">Ver todas</router-link>
+          </div>
+          <div v-if="accountsToShow.length > 0" class="accounts-list">
+            <router-link
+              v-for="account in accountsToShow.slice(0, 4)"
+              :key="account.id"
+              :to="{ name: 'accounts' }"
+              class="account-row"
+            >
+              <div class="account-row-info">
+                <span v-if="isCreditCard(account.type)" class="account-row-icon" aria-hidden="true">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/>
+                  </svg>
+                </span>
+                <div>
+                  <p class="account-row-name">{{ account.name }}</p>
+                  <span class="account-row-type">{{ accountTypeLabel(account.type) }}</span>
+                </div>
+              </div>
+              <span class="account-row-balance" :class="{ negative: account.balance < 0 }">
+                {{ formatCurrency(account.balance, account.currency) }}
+              </span>
+            </router-link>
+          </div>
+          <div v-else class="static-card-empty">
+            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="static-card-empty-icon"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
+            <p>Veja o saldo das suas contas num só lugar</p>
+            <router-link to="/accounts" class="static-card-action">Adicionar</router-link>
+          </div>
+        </div>
+
+        <!-- Card: Objetivos -->
+        <div class="dashboard-section-card static-card">
+          <div class="static-card-header">
+            <h2 class="section-title">Objetivos de poupança</h2>
+            <router-link :to="{ name: 'objectives' }" class="static-card-link">Ver todos</router-link>
+          </div>
+          <div
+            class="dashboard-objectives-body-wrap"
+            :class="{
+              'dashboard-objectives-body-wrap--locked':
+                !subscriptionStore.canAccessObjectives && objectivesPreview.length > 0,
+            }"
+          >
+            <div class="dashboard-objectives-body-inner">
+              <div v-if="objectivesLoading" class="objectives-preview-skeleton">
+                <span class="objectives-preview-loading">A carregar objetivos…</span>
+              </div>
+              <div v-else-if="objectivesPreview.length > 0" class="objectives-preview-block">
+                <div class="objectives-list">
+                  <router-link
+                    v-for="goal in objectivesPreview"
+                    :key="goal.id"
+                    :to="{ name: 'objectives' }"
+                    class="objective-row"
+                  >
+                    <div class="objective-row-top">
+                      <span class="objective-row-name">{{ goal.name }}</span>
+                      <span class="objective-row-amounts">
+                        {{ formatCurrency(goal.allocatedAmount, dashboard.currency.value) }} / {{ formatCurrency(goal.targetAmount, dashboard.currency.value) }}
+                      </span>
+                    </div>
+                    <div class="objective-preview-track" role="progressbar" :aria-valuenow="goal.progressPercent" aria-valuemin="0" aria-valuemax="100">
+                      <div class="objective-preview-fill" :style="{ width: `${Math.min(100, goal.progressPercent)}%` }" />
+                    </div>
+                    <p class="objective-preview-meta">
+                      <span>{{ goal.progressPercent.toFixed(0) }}%</span>
+                      <span v-if="goal.targetDate" class="objective-preview-date"> · Meta {{ formatObjectiveDate(goal.targetDate) }}</span>
+                    </p>
+                  </router-link>
+                </div>
+                <p v-if="objectivesMoreCount > 0" class="objectives-more-count">
+                  +{{ objectivesMoreCount }} {{ objectivesMoreCount === 1 ? 'objetivo ativo' : 'objetivos ativos' }}
+                </p>
+              </div>
+              <div v-else-if="objectivesLoaded" class="static-card-empty">
+                <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="static-card-empty-icon"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+                <p>Defina objetivos de poupança para acompanhar o progresso</p>
+                <router-link
+                  v-if="subscriptionStore.canAccessObjectives"
+                  :to="{ name: 'objectives' }"
+                  class="static-card-action"
+                >Criar objetivo</router-link>
+                <router-link v-else :to="{ name: 'subscription' }" class="static-card-action">Ver planos</router-link>
+              </div>
+            </div>
+            <div v-if="!subscriptionStore.canAccessObjectives && objectivesPreview.length > 0" class="dashboard-objectives-lock-overlay">
+              <div class="dashboard-objectives-lock-panel">
+                <p class="dashboard-objectives-lock-text">Atualize o plano para visualização completa</p>
+                <router-link :to="{ name: 'subscription' }" class="btn-add-objective dashboard-objectives-lock-cta">Ver planos</router-link>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ FILTERED SECTIONS (dados dinâmicos por período) ═══ -->
       <div class="dashboard-section-card">
         <div class="section-header-row">
           <h2 class="section-title">{{ periodLabel || 'Resumo' }}</h2>
@@ -491,117 +588,7 @@ const showContent = computed(() =>
             <p class="card-subtitle">{{ periodLabel }}</p>
           </div>
         </div>
-
-        <div class="dashboard-objectives">
-          <div class="dashboard-objectives-header">
-            <h3 class="dashboard-objectives-title">Objetivos de poupança</h3>
-            <router-link
-              :to="{ name: 'objectives' }"
-              class="dashboard-objectives-link"
-            >Ver todos</router-link>
-          </div>
-          <div
-            class="dashboard-objectives-body-wrap"
-            :class="{
-              'dashboard-objectives-body-wrap--locked':
-                !subscriptionStore.canAccessObjectives && objectivesPreview.length > 0,
-            }"
-          >
-            <div class="dashboard-objectives-body-inner">
-              <div v-if="objectivesLoading" class="objectives-preview-skeleton">
-                <span class="objectives-preview-loading">A carregar objetivos…</span>
-              </div>
-              <div
-                v-else-if="objectivesPreview.length > 0"
-                class="objectives-preview-block"
-              >
-                <div class="objectives-preview-grid">
-                  <router-link
-                    v-for="goal in objectivesPreview"
-                    :key="goal.id"
-                    :to="{ name: 'objectives' }"
-                    class="objective-preview-card"
-                  >
-                    <p class="objective-preview-name">{{ goal.name }}</p>
-                    <p class="objective-preview-amounts">
-                      {{ formatCurrency(goal.allocatedAmount, dashboard.currency.value) }} /
-                      {{ formatCurrency(goal.targetAmount, dashboard.currency.value) }}
-                    </p>
-                    <div class="objective-preview-track" role="progressbar" :aria-valuenow="goal.progressPercent" aria-valuemin="0" aria-valuemax="100">
-                      <div class="objective-preview-fill" :style="{ width: `${Math.min(100, goal.progressPercent)}%` }" />
-                    </div>
-                    <p class="objective-preview-meta">
-                      <span>{{ goal.progressPercent.toFixed(0) }}%</span>
-                      <span v-if="goal.targetDate" class="objective-preview-date"> · Meta {{ formatObjectiveDate(goal.targetDate) }}</span>
-                    </p>
-                  </router-link>
-                </div>
-                <p v-if="objectivesMoreCount > 0" class="objectives-more-count">
-                  +{{ objectivesMoreCount }}
-                  {{ objectivesMoreCount === 1 ? 'objetivo ativo' : 'objetivos ativos' }}
-                </p>
-              </div>
-              <div
-                v-else-if="objectivesLoaded"
-                class="objectives-preview-empty"
-              >
-                <p class="objectives-preview-empty-text">Ainda não tens objetivos ativos.</p>
-                <router-link
-                  v-if="subscriptionStore.canAccessObjectives"
-                  :to="{ name: 'objectives' }"
-                  class="btn-add-objective"
-                >+ Criar objetivo</router-link>
-                <router-link
-                  v-else
-                  :to="{ name: 'subscription' }"
-                  class="btn-add-objective"
-                >Ver planos</router-link>
-              </div>
-            </div>
-            <div
-              v-if="!subscriptionStore.canAccessObjectives && objectivesPreview.length > 0"
-              class="dashboard-objectives-lock-overlay"
-            >
-              <div class="dashboard-objectives-lock-panel">
-                <p class="dashboard-objectives-lock-text">Atualize o plano para visualização completa</p>
-                <router-link :to="{ name: 'subscription' }" class="btn-add-objective dashboard-objectives-lock-cta">Ver planos</router-link>
-              </div>
-            </div>
-          </div>
-        </div>
         </template>
-      </div>
-
-      <div class="dashboard-section-card">
-        <h2 class="section-title">Contas</h2>
-        <div v-if="accountsToShow.length > 0" class="accounts-grid">
-          <router-link
-            v-for="account in accountsToShow"
-            :key="account.id"
-            :to="{ name: 'accounts' }"
-            class="account-card-link"
-          >
-            <div class="account-card">
-              <div class="account-card-header">
-                <span v-if="isCreditCard(account.type)" class="account-card-icon" aria-hidden="true">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <rect width="20" height="14" x="2" y="5" rx="2"/>
-                    <line x1="2" x2="22" y1="10" y2="10"/>
-                  </svg>
-                </span>
-                <p class="account-card-name">{{ account.name }}</p>
-              </div>
-              <p class="account-card-balance" :class="{ negative: account.balance < 0 }">
-                {{ formatCurrency(account.balance, account.currency) }}
-              </p>
-              <span class="account-card-type">{{ accountTypeLabel(account.type) }}</span>
-            </div>
-          </router-link>
-        </div>
-        <div v-else class="section-empty">
-          <p class="section-empty-text">Ainda não tens contas.</p>
-          <router-link to="/accounts" class="btn-section-add">Adicionar a sua primeira conta</router-link>
-        </div>
       </div>
 
       <div class="dashboard-section-card">
@@ -949,43 +936,6 @@ html.dark .section-title::before {
   gap: 1.25rem;
 }
 
-.dashboard-objectives {
-  margin-top: 1.35rem;
-  padding-top: 1.25rem;
-  border-top: 1px solid var(--color-border);
-}
-
-.dashboard-objectives-header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  margin-bottom: 0.875rem;
-}
-
-.dashboard-objectives-title {
-  margin: 0;
-  font-size: 0.9375rem;
-  font-weight: 650;
-  color: var(--color-text);
-  letter-spacing: -0.02em;
-}
-
-.dashboard-objectives-link {
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: #166534;
-  text-decoration: none;
-}
-
-.dashboard-objectives-link:hover {
-  text-decoration: underline;
-}
-
-html.dark .dashboard-objectives-link {
-  color: #4ade80;
-}
 
 .dashboard-objectives-body-wrap {
   position: relative;
@@ -1044,43 +994,6 @@ html.dark .dashboard-objectives-lock-overlay {
   line-height: 1.4;
 }
 
-.objectives-preview-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 0.75rem;
-}
-
-.objective-preview-card {
-  display: block;
-  padding: 1rem 1.125rem;
-  border-radius: 10px;
-  border: 1px solid var(--color-border);
-  background: var(--color-bg);
-  text-decoration: none;
-  color: inherit;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
-}
-
-.objective-preview-card:hover {
-  border-color: rgba(22, 101, 52, 0.4);
-  box-shadow: 0 2px 8px rgba(22, 101, 52, 0.1);
-  transform: translateY(-1px);
-}
-
-.objective-preview-name {
-  margin: 0 0 0.35rem;
-  font-size: 0.875rem;
-  font-weight: 650;
-  color: var(--color-text);
-  line-height: 1.3;
-}
-
-.objective-preview-amounts {
-  margin: 0 0 0.5rem;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: var(--color-text-muted);
-}
 
 .objective-preview-track {
   width: 100%;
@@ -1197,81 +1110,6 @@ html.dark .dashboard-objectives-lock-overlay {
 .summary-cards-fallback .card-balance .card-value { color: var(--color-text); }
 
 
-.accounts-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 1.25rem;
-}
-
-.account-card-link {
-  text-decoration: none;
-  color: inherit;
-}
-
-.account-card {
-  background: var(--color-bg-card);
-  border-radius: 12px;
-  padding: 1.125rem 1.25rem;
-  box-shadow: var(--app-shadow-card, 0 1px 3px rgba(0, 0, 0, 0.06));
-  border: 1px solid var(--color-border);
-  border-top: 3px solid #166534;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
-}
-
-.account-card-link:hover .account-card {
-  border-top-color: #15803d;
-  box-shadow: var(--app-shadow-card-hover, 0 4px 16px rgba(0, 0, 0, 0.1));
-  transform: translateY(-2px);
-}
-
-html.dark .account-card {
-  border-top-color: #4ade80;
-}
-
-.account-card-header {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-bottom: 0.5rem;
-}
-
-.account-card-icon {
-  display: inline-flex;
-  width: 24px;
-  height: 24px;
-  flex-shrink: 0;
-  color: var(--color-text);
-}
-
-.account-card-icon svg {
-  width: 100%;
-  height: 100%;
-}
-
-.account-card-name {
-  font-size: 0.9375rem;
-  font-weight: 600;
-  color: var(--color-text);
-  margin: 0;
-}
-
-.account-card-balance {
-  font-size: 1.25rem;
-  font-weight: 700;
-  color: var(--color-text);
-  margin: 0;
-}
-
-.account-card-balance.negative {
-  color: var(--color-expense);
-}
-
-.account-card-type {
-  display: inline-block;
-  font-size: 0.75rem;
-  color: var(--color-text-muted);
-  margin-top: 0.5rem;
-}
 
 .comparison-grid {
   display: grid;
@@ -1364,6 +1202,214 @@ html.dark .account-card {
 
 .chart-card-full {
   grid-column: 1 / -1;
+}
+
+/* ═══ STATIC GRID (Contas + Objetivos) ═══ */
+.static-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.25rem;
+}
+
+.static-card {
+  display: flex;
+  flex-direction: column;
+  padding: 1.125rem 1.25rem;
+}
+
+.static-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.625rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 2px solid var(--color-border);
+}
+
+.static-card-header .section-title {
+  margin: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.static-card-link {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #166534;
+  text-decoration: none;
+  flex-shrink: 0;
+}
+
+.static-card-link:hover {
+  text-decoration: underline;
+}
+
+html.dark .static-card-link {
+  color: #4ade80;
+}
+
+/* Account rows inside static card */
+.accounts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.account-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.5rem 0.25rem;
+  text-decoration: none;
+  color: inherit;
+  border-bottom: 1px solid var(--color-border);
+  transition: background 0.15s;
+}
+
+.account-row:last-child {
+  border-bottom: none;
+}
+
+.account-row:hover {
+  background: var(--color-table-row-hover);
+}
+
+.account-row-info {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  min-width: 0;
+}
+
+.account-row-icon {
+  display: inline-flex;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  color: var(--color-text-muted);
+}
+
+.account-row-name {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-text);
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.account-row-type {
+  font-size: 0.6875rem;
+  color: var(--color-text-muted);
+}
+
+.account-row-balance {
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: var(--color-text);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.account-row-balance.negative {
+  color: var(--color-expense);
+}
+
+/* Objectives rows inside static card */
+.objectives-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.objective-row {
+  display: block;
+  padding: 0.5rem 0.625rem;
+  border-radius: 8px;
+  border: 1px solid var(--color-border);
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.15s, transform 0.15s;
+}
+
+.objective-row:hover {
+  border-color: rgba(22, 101, 52, 0.35);
+  transform: translateY(-1px);
+}
+
+.objective-row-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin-bottom: 0.375rem;
+}
+
+.objective-row-name {
+  font-size: 0.875rem;
+  font-weight: 650;
+  color: var(--color-text);
+}
+
+.objective-row-amounts {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+/* Empty state for static cards */
+.static-card-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 1rem 0.75rem;
+  gap: 0.375rem;
+}
+
+.static-card-empty-icon {
+  color: var(--color-text-muted);
+  opacity: 0.4;
+}
+
+.static-card-empty p {
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+  margin: 0;
+  max-width: 22rem;
+  line-height: 1.5;
+}
+
+.static-card-action {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #166534;
+  text-decoration: none;
+  margin-top: 0.25rem;
+}
+
+.static-card-action:hover {
+  text-decoration: underline;
+}
+
+html.dark .static-card-action {
+  color: #4ade80;
+}
+
+@media (max-width: 768px) {
+  .static-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .static-card {
+    min-height: auto;
+  }
 }
 
 /* ═══ PATRIMONIO HERO ═══ */
