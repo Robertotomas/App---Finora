@@ -6,6 +6,8 @@ import { objectivesApi } from '@/api/objectives'
 import { useHouseholdStore } from '@/stores/household'
 import { useAccountsStore } from '@/stores/accounts'
 import { useSubscriptionStore } from '@/stores/subscription'
+import { useTransactionsStore } from '@/stores/transactions'
+import { TransactionType, TRANSACTION_CATEGORY_LABELS } from '@/types/transaction'
 import { useDashboard } from '@/composables/useDashboard'
 import { useMonthlyBudget } from '@/composables/useMonthlyBudget'
 import { ACCOUNT_TYPE_LABELS, AccountType } from '@/types/account'
@@ -21,13 +23,13 @@ import DashboardSkeleton from '@/components/DashboardSkeleton.vue'
 import ExpensesPieChart from '@/components/charts/ExpensesPieChart.vue'
 import IncomePieChart from '@/components/charts/IncomePieChart.vue'
 import MonthlyLineChart from '@/components/charts/MonthlyLineChart.vue'
-import BudgetProgressChart from '@/components/charts/BudgetProgressChart.vue'
 import NetWorthChart from '@/components/charts/NetWorthChart.vue'
 import MonthYearNavigator from '@/components/MonthYearNavigator.vue'
 
 const householdStore = useHouseholdStore()
 const accountsStore = useAccountsStore()
 const subscriptionStore = useSubscriptionStore()
+const transactionsStore = useTransactionsStore()
 const dashboard = useDashboard()
 const budget = useMonthlyBudget()
 const mounted = ref(false)
@@ -162,6 +164,7 @@ onMounted(async () => {
             loadObjectivesPreview(),
             subscriptionStore.fetchSubscription(),
             fetchChartTrend(),
+            transactionsStore.fetchTransactions(),
           ])
         }
       })(),
@@ -194,6 +197,12 @@ function formatCurrency(value: number, currency: string): string {
 const formattedIncome = computed(() => formatCurrency(dashboard.monthlyIncome.value, dashboard.currency.value))
 const formattedExpenses = computed(() => formatCurrency(dashboard.monthlyExpenses.value, dashboard.currency.value))
 const formattedSavings = computed(() => formatCurrency(dashboard.monthlySavings.value, dashboard.currency.value))
+
+const recentTransactions = computed(() => {
+  const txs = [...transactionsStore.transactions]
+  txs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+  return txs.slice(0, 5)
+})
 
 const expensesForChart = computed<ExpenseByCategory[]>(() => dashboard.expensesForChart?.value ?? [])
 const incomeForChart = computed<IncomeByCategory[]>(() => dashboard.incomeForChart?.value ?? [])
@@ -264,10 +273,6 @@ const hasBudgetForPeriod = computed(() => {
   }
   return budget.hasBudget(hid, selectedYear.value, selectedMonth.value)
 })
-
-const hasExpectedValuesForProgress = computed(() =>
-  budgetForPeriod.value.expectedIncome > 0 || budgetForPeriod.value.expectedExpenses > 0
-)
 
 const savingsRate = computed(() => {
   const inc = dashboard.monthlyIncome.value
@@ -581,6 +586,41 @@ const showContent = computed(() =>
             </div>
           </div>
         </div>
+
+        <!-- Card: Últimos movimentos -->
+        <div class="dashboard-section-card static-card">
+          <div class="static-card-header">
+            <h2 class="section-title">Últimos movimentos</h2>
+            <router-link :to="{ name: 'transactions' }" class="static-card-link">Ver todos</router-link>
+          </div>
+          <div v-if="recentTransactions.length > 0" class="movements-list">
+            <router-link
+              v-for="tx in recentTransactions"
+              :key="tx.id"
+              :to="{ name: 'transactions' }"
+              class="movement-row"
+            >
+              <div class="movement-row-left">
+                <span class="movement-row-icon" :class="tx.type === TransactionType.Income ? 'income' : 'expense'">
+                  <svg v-if="tx.type === TransactionType.Income" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 11 12 6 7 11"/><line x1="12" x2="12" y1="6" y2="18"/></svg>
+                  <svg v-else xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="7 13 12 18 17 13"/><line x1="12" x2="12" y1="18" y2="6"/></svg>
+                </span>
+                <div>
+                  <p class="movement-row-desc">{{ tx.description || TRANSACTION_CATEGORY_LABELS[tx.category] || 'Transação' }}</p>
+                  <span class="movement-row-date">{{ new Date(tx.date).toLocaleDateString('pt-PT', { day: '2-digit', month: 'short' }) }}</span>
+                </div>
+              </div>
+              <span class="movement-row-amount" :class="tx.type === TransactionType.Income ? 'income' : 'expense'">
+                {{ hideValues ? '••••• €' : `${tx.type === TransactionType.Income ? '+' : '-'} ${formatCurrency(tx.amount, dashboard.currency.value)}` }}
+              </span>
+            </router-link>
+          </div>
+          <div v-else class="static-card-empty">
+            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="static-card-empty-icon"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+            <p>Nenhum movimento registado</p>
+            <router-link to="/transactions" class="static-card-action">Adicionar</router-link>
+          </div>
+        </div>
       </div>
 
       <!-- ═══ FILTERED SECTIONS (dados dinâmicos por período) ═══ -->
@@ -698,16 +738,6 @@ const showContent = computed(() =>
       <div class="dashboard-section-card">
         <h2 class="section-title">Transações e gráficos</h2>
         <div v-if="hasChartData" class="charts-section-inner">
-          <div v-if="hasBudgetForPeriod && hasExpectedValuesForProgress" class="chart-card chart-card-full">
-            <h3 class="chart-title">Progresso até ao esperado</h3>
-            <BudgetProgressChart
-              :real-income="dashboard.monthlyIncome.value"
-              :expected-income="budgetForPeriod.expectedIncome"
-              :real-expenses="dashboard.monthlyExpenses.value"
-              :expected-expenses="budgetForPeriod.expectedExpenses"
-              :format-currency="(v) => formatCurrency(v, dashboard.currency.value)"
-            />
-          </div>
           <div v-if="hasExpensesForChart" class="chart-card">
             <h3 class="chart-title">Despesas por categoria</h3>
             <ExpensesPieChart :data="expensesForChart" />
@@ -1251,14 +1281,10 @@ html.dark .objectives-completed-badge {
   margin: 0 0 1rem 0;
 }
 
-.chart-card-full {
-  grid-column: 1 / -1;
-}
-
-/* ═══ STATIC GRID (Contas + Objetivos) ═══ */
+/* ═══ STATIC GRID (Contas + Objetivos + Movimentos) ═══ */
 .static-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr;
   gap: 1.25rem;
 }
 
@@ -1451,6 +1477,109 @@ html.dark .static-card-link {
 
 html.dark .static-card-action {
   color: #4ade80;
+}
+
+/* Movement rows inside static card */
+.movements-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.movement-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.375rem 0.125rem;
+  text-decoration: none;
+  color: inherit;
+  border-bottom: 1px solid var(--color-border);
+  transition: background 0.15s;
+}
+
+.movement-row:last-child {
+  border-bottom: none;
+}
+
+.movement-row:hover {
+  background: var(--color-table-row-hover);
+}
+
+.movement-row-left {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.movement-row-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+
+.movement-row-icon.income {
+  background: rgba(5, 150, 105, 0.12);
+  color: #059669;
+}
+
+.movement-row-icon.expense {
+  background: rgba(220, 38, 38, 0.10);
+  color: #dc2626;
+}
+
+html.dark .movement-row-icon.income {
+  background: rgba(74, 222, 128, 0.15);
+  color: #4ade80;
+}
+
+html.dark .movement-row-icon.expense {
+  background: rgba(248, 113, 113, 0.15);
+  color: #f87171;
+}
+
+.movement-row-desc {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 140px;
+}
+
+.movement-row-date {
+  font-size: 0.6875rem;
+  color: var(--color-text-secondary, #94a3b8);
+}
+
+.movement-row-amount {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.movement-row-amount.income {
+  color: #059669;
+}
+
+.movement-row-amount.expense {
+  color: #dc2626;
+}
+
+html.dark .movement-row-amount.income {
+  color: #4ade80;
+}
+
+html.dark .movement-row-amount.expense {
+  color: #f87171;
 }
 
 @media (max-width: 768px) {
