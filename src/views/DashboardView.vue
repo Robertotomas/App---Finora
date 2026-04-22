@@ -474,7 +474,7 @@ const showContent = computed(() =>
         <!-- Card: Contas -->
         <div class="dashboard-section-card static-card">
           <div class="static-card-header">
-            <h2 class="section-title">Contas</h2>
+            <h2 class="section-title">Contas bancárias</h2>
             <router-link :to="{ name: 'accounts' }" class="static-card-link" title="Ver todas"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></router-link>
           </div>
           <div v-if="accountsToShow.length > 0" class="accounts-list">
@@ -656,6 +656,21 @@ const showContent = computed(() =>
             <p class="card-subtitle">% da receita real poupada</p>
           </div>
         </div>
+        <!-- Gráficos de movimentos (dentro do mesmo card) -->
+        <div v-if="hasChartData" class="charts-section-inner">
+          <div v-if="hasExpensesForChart" class="chart-card">
+            <h3 class="chart-title">Despesas por categoria</h3>
+            <ExpensesPieChart :data="expensesForChart" />
+          </div>
+          <div v-if="hasIncomeForChart" class="chart-card">
+            <h3 class="chart-title">Receitas por categoria</h3>
+            <IncomePieChart :data="incomeForChart" />
+          </div>
+          <div class="chart-card">
+            <h3 class="chart-title">Evolução mensal</h3>
+            <MonthlyLineChart :data="trendForChart" />
+          </div>
+        </div>
         </template>
       </div>
 
@@ -720,31 +735,6 @@ const showContent = computed(() =>
         </div>
       </div>
 
-      <div class="dashboard-section-card">
-        <h2 class="section-title">Transações e gráficos</h2>
-        <div v-if="hasChartData" class="charts-section-inner">
-          <div v-if="hasExpensesForChart" class="chart-card">
-            <h3 class="chart-title">Despesas por categoria</h3>
-            <ExpensesPieChart :data="expensesForChart" />
-          </div>
-          <div v-if="hasIncomeForChart" class="chart-card">
-            <h3 class="chart-title">Receitas por categoria</h3>
-            <IncomePieChart :data="incomeForChart" />
-          </div>
-          <div class="chart-card">
-            <h3 class="chart-title">Evolução mensal</h3>
-            <MonthlyLineChart :data="trendForChart" />
-          </div>
-        </div>
-        <div v-else-if="dashboard.monthHasNoStats" class="section-empty">
-          <p class="section-empty-text">Não há dados estatísticos para {{ periodLabel }}.</p>
-          <p class="section-empty-hint">Seleciona outro mês para ver receitas, despesas e gráficos.</p>
-        </div>
-        <div v-else class="section-empty">
-          <p class="section-empty-text">Os gráficos ficam disponíveis quando inserir dados.</p>
-          <router-link to="/transactions" class="btn-section-add">Adicionar a sua primeira transação</router-link>
-        </div>
-      </div>
 
     </div>
   </div>
@@ -981,7 +971,7 @@ html.dark .section-title::before {
   gap: 1rem;
   align-items: center;
   margin-bottom: 0.25rem;
-  padding: 0.5rem 0;
+  padding: 0;
 }
 
 .period-selector {
@@ -999,6 +989,7 @@ html.dark .section-title::before {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: 1.25rem;
+  margin-top: 0.75rem;
 }
 
 
@@ -1155,7 +1146,7 @@ html.dark .objectives-completed-badge {
   padding: 1.125rem 1.25rem 1.125rem 1.375rem;
   box-shadow: var(--app-shadow-card, 0 1px 3px rgba(0, 0, 0, 0.06));
   border: 1px solid var(--color-border);
-  border-left: 3px solid var(--color-border);
+  border-left: 1px solid var(--color-border);
   transition: box-shadow 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
 }
 
@@ -1189,12 +1180,10 @@ html.dark .objectives-completed-badge {
   font-weight: 500;
 }
 
-.summary-cards-fallback .card-income { border-left-color: var(--color-income); }
 .summary-cards-fallback .card-income .card-value { color: var(--color-income); }
-.summary-cards-fallback .card-expense { border-left-color: var(--color-expense); }
 .summary-cards-fallback .card-expense .card-value { color: var(--color-expense); }
-.summary-cards-fallback .card-savings { border-left-color: #2563eb; }
-.summary-cards-fallback .card-savings .card-value { color: var(--color-link-hover, #2563eb); }
+.summary-cards-fallback .card-savings .card-value { color: #2563eb; }
+html.dark .summary-cards-fallback .card-savings .card-value { color: #60a5fa; }
 .summary-cards-fallback .card-balance .card-value { color: var(--color-text); }
 
 
@@ -1265,6 +1254,9 @@ html.dark .objectives-completed-badge {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
   gap: 1.75rem;
+  margin-top: 1.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--color-border);
 }
 
 .chart-card {

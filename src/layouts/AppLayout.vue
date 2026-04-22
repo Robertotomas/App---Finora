@@ -583,8 +583,8 @@ html.dark .header-brand-img {
   height: 34px;
   object-fit: contain;
   border-radius: 50%;
-  border: 2px solid var(--color-border);
-  padding: 2px;
+  border: none;
+  padding: 0;
 }
 
 .user-dropdown {

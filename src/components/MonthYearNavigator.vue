@@ -290,7 +290,7 @@ function chooseAllPeriods() {
   gap: 0;
   border-radius: 10px;
   border: 1px solid var(--color-border);
-  background: var(--color-bg, #f8fafc);
+  background: #fff;
   box-shadow: none;
 }
 
