@@ -269,7 +269,6 @@ const hasExpectedValuesForProgress = computed(() =>
   budgetForPeriod.value.expectedIncome > 0 || budgetForPeriod.value.expectedExpenses > 0
 )
 
-const finalBalance = computed(() => dashboard.monthlyIncome.value - dashboard.monthlyExpenses.value)
 const savingsRate = computed(() => {
   const inc = dashboard.monthlyIncome.value
   const sav = dashboard.monthlySavings.value
@@ -320,6 +319,8 @@ const totalAllocatedToObjectives = computed(() =>
   objectivesReserved.value + objectivesPreview.value.reduce((s, g) => s + g.allocatedAmount, 0)
 )
 
+const hideValues = ref(false)
+
 const todayLabel = computed(() => {
   const d = new Date()
   return d.toLocaleDateString('pt-PT', { day: 'numeric', month: 'long', year: 'numeric' })
@@ -331,7 +332,11 @@ const chartPeriod = ref<ChartPeriod>('6M')
 const chartPeriods: ChartPeriod[] = ['YTD', '3M', '6M', '1A', '5A']
 
 const chartTrendMonths = computed(() => {
-  const map: Record<ChartPeriod, number> = { YTD: 12, '3M': 3, '6M': 6, '1A': 12, '5A': 60 }
+  if (chartPeriod.value === 'YTD') {
+    // January = month 1, so current month number = months since start of year (including current)
+    return new Date().getMonth() + 1
+  }
+  const map: Record<ChartPeriod, number> = { YTD: 0, '3M': 3, '6M': 6, '1A': 12, '5A': 60 }
   return map[chartPeriod.value]
 })
 
@@ -415,11 +420,17 @@ const showContent = computed(() =>
       <div class="patrimonio-hero">
         <div class="patrimonio-top">
           <div class="patrimonio-info">
-            <span class="patrimonio-label">PATRIMÔNIO TOTAL</span>
-            <p class="patrimonio-value">{{ formattedCurrentBalance }}</p>
+            <span class="patrimonio-label-row">
+              <span class="patrimonio-label">PATRIMÔNIO TOTAL</span>
+              <button class="patrimonio-eye-btn" @click="hideValues = !hideValues" :title="hideValues ? 'Mostrar valores' : 'Esconder valores'">
+                <svg v-if="!hideValues" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>
+                <svg v-else xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/></svg>
+              </button>
+            </span>
+            <p class="patrimonio-value">{{ hideValues ? '••••••' : formattedCurrentBalance }}</p>
             <span class="patrimonio-date">{{ todayLabel }}</span>
             <span v-if="totalAllocatedToObjectives > 0" class="patrimonio-reserved">
-              {{ formatCurrency(totalAllocatedToObjectives, dashboard.currency.value) }} reservado para objetivos
+              {{ hideValues ? '•••••' : formatCurrency(totalAllocatedToObjectives, dashboard.currency.value) }} reservado para objetivos
             </span>
           </div>
           <div class="patrimonio-periods">
@@ -442,7 +453,7 @@ const showContent = computed(() =>
             >
               <span class="patrimonio-cat-name">{{ group.label }}</span>
               <div class="patrimonio-cat-values">
-                <span class="patrimonio-cat-amount">{{ formatCurrency(group.value, dashboard.currency.value) }}</span>
+                <span class="patrimonio-cat-amount">{{ hideValues ? '••••• €' : formatCurrency(group.value, dashboard.currency.value) }}</span>
                 <span class="patrimonio-cat-percent">{{ group.percent.toFixed(2) }}% do total</span>
               </div>
             </div>
@@ -490,8 +501,8 @@ const showContent = computed(() =>
                   <span class="account-row-type">{{ accountTypeLabel(account.type) }}</span>
                 </div>
               </div>
-              <span class="account-row-balance" :class="{ negative: account.balance < 0 }">
-                {{ formatCurrency(account.balance, account.currency) }}
+              <span class="account-row-balance" :class="{ negative: !hideValues && account.balance < 0 }">
+                {{ hideValues ? '••••• €' : formatCurrency(account.balance, account.currency) }}
               </span>
             </router-link>
           </div>
@@ -530,7 +541,7 @@ const showContent = computed(() =>
                     <div class="objective-row-top">
                       <span class="objective-row-name">{{ goal.name }}</span>
                       <span class="objective-row-amounts">
-                        {{ formatCurrency(goal.allocatedAmount, dashboard.currency.value) }} / {{ formatCurrency(goal.targetAmount, dashboard.currency.value) }}
+                        {{ hideValues ? '••••• / •••••' : `${formatCurrency(goal.allocatedAmount, dashboard.currency.value)} / ${formatCurrency(goal.targetAmount, dashboard.currency.value)}` }}
                       </span>
                     </div>
                     <div class="objective-preview-track" role="progressbar" :aria-valuenow="goal.progressPercent" aria-valuemin="0" aria-valuemax="100">
@@ -601,18 +612,23 @@ const showContent = computed(() =>
         <div class="summary-cards summary-cards-fallback">
           <div class="card card-income">
             <p class="card-title">Receitas</p>
-            <p class="card-value">{{ formattedIncome }}</p>
+            <p class="card-value">{{ hideValues ? '••••• €' : formattedIncome }}</p>
             <p class="card-subtitle">{{ periodLabel }}</p>
           </div>
           <div class="card card-expense">
             <p class="card-title">Despesas</p>
-            <p class="card-value">{{ formattedExpenses }}</p>
+            <p class="card-value">{{ hideValues ? '••••• €' : formattedExpenses }}</p>
             <p class="card-subtitle">{{ periodLabel }}</p>
           </div>
           <div class="card card-savings">
             <p class="card-title">Poupança</p>
-            <p class="card-value">{{ formattedSavings }}</p>
+            <p class="card-value">{{ hideValues ? '••••• €' : formattedSavings }}</p>
             <p class="card-subtitle">{{ periodLabel }}</p>
+          </div>
+          <div class="card card-income">
+            <p class="card-title">Taxa de poupança</p>
+            <p class="card-value">{{ hideValues ? '•••' : formatPercent(savingsRate) }}</p>
+            <p class="card-subtitle">% da receita real poupada</p>
           </div>
         </div>
         </template>
@@ -625,15 +641,15 @@ const showContent = computed(() =>
             <h3 class="comparison-title">Receitas</h3>
             <div class="comparison-row">
               <span class="comparison-label">Esperado</span>
-              <span class="comparison-value expected">{{ formatCurrency(budgetForPeriod.expectedIncome, dashboard.currency.value) }}</span>
+              <span class="comparison-value expected">{{ hideValues ? '••••• €' : formatCurrency(budgetForPeriod.expectedIncome, dashboard.currency.value) }}</span>
             </div>
             <div class="comparison-row">
               <span class="comparison-label">Real</span>
               <span class="comparison-value" :class="{ 'above': dashboard.monthlyIncome.value > budgetForPeriod.expectedIncome, 'below': dashboard.monthlyIncome.value < budgetForPeriod.expectedIncome }">
-                {{ formattedIncome }}
+                {{ hideValues ? '••••• €' : formattedIncome }}
               </span>
             </div>
-            <div v-if="budgetForPeriod.expectedIncome > 0" class="comparison-diff">
+            <div v-if="budgetForPeriod.expectedIncome > 0 && !hideValues" class="comparison-diff">
               {{ dashboard.monthlyIncome.value >= budgetForPeriod.expectedIncome ? '✓' : '' }}
               {{ formatCurrency(dashboard.monthlyIncome.value - budgetForPeriod.expectedIncome, dashboard.currency.value) }}
               {{ dashboard.monthlyIncome.value >= budgetForPeriod.expectedIncome ? 'acima' : 'abaixo' }}
@@ -643,15 +659,15 @@ const showContent = computed(() =>
             <h3 class="comparison-title">Despesas</h3>
             <div class="comparison-row">
               <span class="comparison-label">Esperado</span>
-              <span class="comparison-value expected">{{ formatCurrency(budgetForPeriod.expectedExpenses, dashboard.currency.value) }}</span>
+              <span class="comparison-value expected">{{ hideValues ? '••••• €' : formatCurrency(budgetForPeriod.expectedExpenses, dashboard.currency.value) }}</span>
             </div>
             <div class="comparison-row">
               <span class="comparison-label">Real</span>
               <span class="comparison-value" :class="{ 'above': dashboard.monthlyExpenses.value < budgetForPeriod.expectedExpenses, 'below': dashboard.monthlyExpenses.value > budgetForPeriod.expectedExpenses }">
-                {{ formattedExpenses }}
+                {{ hideValues ? '••••• €' : formattedExpenses }}
               </span>
             </div>
-            <div v-if="budgetForPeriod.expectedExpenses > 0" class="comparison-diff">
+            <div v-if="budgetForPeriod.expectedExpenses > 0 && !hideValues" class="comparison-diff">
               {{ dashboard.monthlyExpenses.value <= budgetForPeriod.expectedExpenses ? '✓' : '' }}
               {{ formatCurrency(dashboard.monthlyExpenses.value - budgetForPeriod.expectedExpenses, dashboard.currency.value) }}
               {{ dashboard.monthlyExpenses.value <= budgetForPeriod.expectedExpenses ? 'abaixo do orçamento' : 'acima do orçamento' }}
@@ -662,13 +678,13 @@ const showContent = computed(() =>
             <div class="comparison-row">
               <span class="comparison-label">Esperado</span>
               <span class="comparison-value" :class="(budgetForPeriod.expectedIncome - budgetForPeriod.expectedExpenses) >= 0 ? 'income' : 'expense'">
-                {{ formatCurrency(budgetForPeriod.expectedIncome - budgetForPeriod.expectedExpenses, dashboard.currency.value) }}
+                {{ hideValues ? '••••• €' : formatCurrency(budgetForPeriod.expectedIncome - budgetForPeriod.expectedExpenses, dashboard.currency.value) }}
               </span>
             </div>
             <div class="comparison-row">
               <span class="comparison-label">Real</span>
               <span class="comparison-value" :class="dashboard.monthlySavings.value >= 0 ? 'income' : 'expense'">
-                {{ formattedSavings }}
+                {{ hideValues ? '••••• €' : formattedSavings }}
               </span>
             </div>
           </div>
@@ -715,21 +731,6 @@ const showContent = computed(() =>
         </div>
       </div>
 
-      <div class="dashboard-section-card resumo-section">
-        <h2 class="section-title">Resumo final</h2>
-        <div class="summary-cards summary-cards-fallback">
-          <div class="card card-balance">
-            <p class="card-title">Saldo final</p>
-            <p class="card-value">{{ formatCurrency(finalBalance, dashboard.currency.value) }}</p>
-            <p class="card-subtitle">Receitas − Despesas reais</p>
-          </div>
-          <div class="card card-income">
-            <p class="card-title">Taxa de poupança</p>
-            <p class="card-value">{{ formatPercent(savingsRate) }}</p>
-            <p class="card-subtitle">% da receita real poupada</p>
-          </div>
-        </div>
-      </div>
     </div>
   </div>
 </template>
@@ -1484,17 +1485,41 @@ html.dark .static-card-action {
   flex-direction: column;
 }
 
+.patrimonio-label-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.375rem;
+}
+
 .patrimonio-label {
   font-size: 0.75rem;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: #166534;
-  margin-bottom: 0.375rem;
 }
 
 html.dark .patrimonio-label {
   color: #4ade80;
+}
+
+.patrimonio-eye-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0.2rem;
+  border-radius: 6px;
+  color: var(--color-text-muted);
+  transition: color 0.15s, background 0.15s;
+}
+
+.patrimonio-eye-btn:hover {
+  color: var(--color-text);
+  background: var(--color-table-row-hover, rgba(0, 0, 0, 0.04));
 }
 
 .patrimonio-value {
