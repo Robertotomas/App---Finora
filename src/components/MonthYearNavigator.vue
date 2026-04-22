@@ -75,7 +75,7 @@ const displayLabel = computed(() => {
     if (year.value === 0) return 'Todos os períodos'
   if (month.value === -1) return `${props.yearToDateButton} · ${year.value}`
   if (month.value === 0) return `${props.allMonthsInYearTitle} · ${year.value}`
-  return `${props.monthNames[month.value]} ${year.value}`
+  return `${props.monthNames[month.value]} - ${year.value}`
 })
 
 const canPrev = computed(() => {
@@ -288,61 +288,73 @@ function chooseAllPeriods() {
   display: inline-flex;
   align-items: stretch;
   gap: 0;
-  border-radius: var(--app-radius-md, 12px);
+  border-radius: 10px;
   border: 1px solid var(--color-border);
-  background: var(--color-bg-card);
-  box-shadow: var(--app-shadow-sm, 0 1px 2px rgba(15, 23, 42, 0.06));
+  background: var(--color-bg, #f8fafc);
+  box-shadow: none;
+}
+
+html.dark .month-year-nav {
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .nav-arrow {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 2.5rem;
-  min-height: 2.75rem;
+  width: 2rem;
+  min-height: 2.25rem;
   padding: 0;
   border: none;
   background: transparent;
   color: var(--color-text-muted);
   cursor: pointer;
+  border-radius: 8px;
   transition: background 0.15s ease, color 0.15s ease;
 }
 
 .nav-arrow:hover:not(:disabled) {
-  background: var(--color-table-row-hover);
+  background: rgba(0, 0, 0, 0.06);
   color: var(--color-text);
 }
 
+html.dark .nav-arrow:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+}
+
 .nav-arrow:disabled {
-  opacity: 0.35;
+  opacity: 0.3;
   cursor: not-allowed;
 }
 
 .nav-center {
   display: flex;
   align-items: center;
-  gap: 0.35rem;
-  min-width: min(14rem, 72vw);
-  padding: 0 1rem;
+  gap: 0.3rem;
+  min-width: min(12rem, 60vw);
+  padding: 0 0.625rem;
   border: none;
-  border-left: 1px solid var(--color-border);
-  border-right: 1px solid var(--color-border);
   background: transparent;
   cursor: pointer;
   font-family: inherit;
+  border-radius: 8px;
   transition: background 0.15s ease;
 }
 
 .nav-center:hover {
-  background: var(--color-table-row-hover);
+  background: rgba(0, 0, 0, 0.04);
+}
+
+html.dark .nav-center:hover {
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .nav-center-label {
   flex: 1;
   text-align: center;
-  font-size: 0.9375rem;
-  font-weight: 650;
-  letter-spacing: -0.02em;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
   color: var(--color-text);
 }
 
@@ -350,6 +362,8 @@ function chooseAllPeriods() {
   flex-shrink: 0;
   color: var(--color-text-muted);
   transition: transform 0.2s ease;
+  width: 14px;
+  height: 14px;
 }
 
 .nav-center[aria-expanded='true'] .nav-center-chevron {

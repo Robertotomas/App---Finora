@@ -614,22 +614,18 @@ const showContent = computed(() =>
 
       <!-- ═══ FILTERED SECTIONS (dados dinâmicos por período) ═══ -->
       <div class="dashboard-section-card">
-        <div class="section-header-row">
-          <h2 class="section-title">{{ periodLabel || 'Resumo' }}</h2>
-          <div class="period-filter-bar">
-            <MonthYearNavigator
-              v-model:month="selectedMonth"
-              v-model:year="selectedYear"
-              :years="navYears"
-              :month-names="MONTH_NAMES"
-              allow-all-months
-              allow-all-years
-              allow-year-to-date
-              @change="onPeriodChange"
-            />
-          </div>
+        <div class="period-filter-bar">
+          <MonthYearNavigator
+            v-model:month="selectedMonth"
+            v-model:year="selectedYear"
+            :years="navYears"
+            :month-names="MONTH_NAMES"
+            allow-all-months
+            allow-all-years
+            allow-year-to-date
+            @change="onPeriodChange"
+          />
         </div>
-
         <div v-if="periodChangeLoading" class="period-refresh-state">
           <div class="period-refresh-inner">
             <div class="spinner"></div>
@@ -1814,28 +1810,6 @@ html.dark .patrimonio-period-btn.active {
   opacity: 0.4;
 }
 
-/* section-header-row: title + period filter inline */
-.section-header-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  margin-bottom: 1.125rem;
-  padding-bottom: 0.75rem;
-  border-bottom: 2px solid var(--color-border);
-}
-
-.section-header-row .section-title {
-  margin: 0;
-  padding-bottom: 0;
-  border-bottom: none;
-}
-
-.section-header-row .period-filter-bar {
-  margin: 0;
-  padding: 0;
-}
 
 @media (max-width: 768px) {
   .patrimonio-hero {
@@ -1869,10 +1843,6 @@ html.dark .patrimonio-period-btn.active {
     order: 1;
   }
 
-  .section-header-row {
-    flex-direction: column;
-    align-items: flex-start;
-  }
 }
 
 </style>
