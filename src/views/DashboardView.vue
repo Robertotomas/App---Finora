@@ -19,7 +19,6 @@ function isCreditCard(type: number): boolean {
 function accountTypeLabel(type: number): string {
   return ACCOUNT_TYPE_LABELS[type as AccountType] ?? ''
 }
-import DashboardSkeleton from '@/components/DashboardSkeleton.vue'
 import ExpensesPieChart from '@/components/charts/ExpensesPieChart.vue'
 import IncomePieChart from '@/components/charts/IncomePieChart.vue'
 import MonthlyLineChart from '@/components/charts/MonthlyLineChart.vue'
@@ -386,37 +385,26 @@ const showContent = computed(() =>
 
 <template>
   <div class="dashboard" :data-dev="isDev">
-    <div v-if="!mounted" class="loading-state">
-      <div class="spinner"></div>
-      <p>A carregar...</p>
-    </div>
+    <!-- Overlay loading -->
+    <transition name="fade">
+      <div v-if="!mounted || (householdStore.loading && !householdStore.household) || (dashboard.loading && !dashboard.data)" class="loading-overlay">
+        <div class="spinner"></div>
+        <p>A carregar...</p>
+      </div>
+    </transition>
 
-    <div v-else-if="loadError" class="error-state">
+    <div v-if="loadError" class="error-state">
       <p>{{ loadError }}</p>
       <p class="error-hint">Abre a consola do browser (F12) e o separador Network para verificar os pedidos à API.</p>
     </div>
 
-    <div v-else-if="!householdStore.household && !householdStore.loading" class="empty-state">
+    <div v-else-if="!householdStore.household && !householdStore.loading && mounted" class="empty-state">
       <p>Configura primeiro o teu household.</p>
       <router-link to="/household" class="link">Ir para Household</router-link>
     </div>
 
-    <div v-else-if="householdStore.loading && !householdStore.household" class="loading-state">
-      <div class="spinner"></div>
-      <p>A carregar...</p>
-    </div>
-
     <div v-else-if="dashboard.error" class="error-state">
       <p>{{ dashboard.error }}</p>
-    </div>
-
-    <div v-else-if="dashboard.loading && !dashboard.data" class="dashboard-content">
-      <DashboardSkeleton :cards="4" :show-charts="true" />
-    </div>
-
-    <div v-else-if="!dashboard.data && !dashboard.loading" class="loading-state">
-      <div class="spinner"></div>
-      <p>A carregar dashboard...</p>
     </div>
 
     <div v-if="showContent" ref="dashboardContentRef" class="dashboard-content">
@@ -767,6 +755,7 @@ const showContent = computed(() =>
 
 <style scoped>
 .dashboard {
+  position: relative;
   max-width: 100%;
   margin: 0 auto;
   padding: 0;
@@ -775,7 +764,28 @@ const showContent = computed(() =>
   background: transparent;
 }
 
-.loading-state,
+.loading-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: var(--color-text-muted);
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+
 .error-state,
 .empty-state {
   text-align: center;
