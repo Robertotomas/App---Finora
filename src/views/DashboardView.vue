@@ -462,7 +462,8 @@ const showContent = computed(() =>
               :currency="dashboard.currency.value"
             />
             <div v-else class="patrimonio-chart-empty">
-              <p>Sem dados de evolução disponíveis.</p>
+              <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="patrimonio-chart-empty-icon"><line x1="3" x2="3" y1="3" y2="21"/><line x1="3" x2="21" y1="21" y2="21"/><line x1="7" x2="7" y1="17" y2="13"/><line x1="12" x2="12" y1="17" y2="8"/><line x1="17" x2="17" y1="17" y2="11"/></svg>
+              <p>Sem dados de evolução disponíveis</p>
             </div>
           </div>
         </div>
@@ -474,7 +475,7 @@ const showContent = computed(() =>
         <div class="dashboard-section-card static-card">
           <div class="static-card-header">
             <h2 class="section-title">Contas</h2>
-            <router-link :to="{ name: 'accounts' }" class="static-card-link">Ver todas</router-link>
+            <router-link :to="{ name: 'accounts' }" class="static-card-link" title="Ver todas"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></router-link>
           </div>
           <div v-if="accountsToShow.length > 0" class="accounts-list">
             <router-link
@@ -510,7 +511,7 @@ const showContent = computed(() =>
         <div class="dashboard-section-card static-card">
           <div class="static-card-header">
             <h2 class="section-title">Objetivos de poupança</h2>
-            <router-link :to="{ name: 'objectives' }" class="static-card-link">Ver todos</router-link>
+            <router-link :to="{ name: 'objectives' }" class="static-card-link" title="Ver todos"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></router-link>
           </div>
           <div
             class="dashboard-objectives-body-wrap"
@@ -579,7 +580,7 @@ const showContent = computed(() =>
         <div class="dashboard-section-card static-card">
           <div class="static-card-header">
             <h2 class="section-title">Últimos movimentos</h2>
-            <router-link :to="{ name: 'transactions' }" class="static-card-link">Ver todos</router-link>
+            <router-link :to="{ name: 'transactions' }" class="static-card-link" title="Ver todos"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></router-link>
           </div>
           <div v-if="recentTransactions.length > 0" class="movements-list">
             <router-link
@@ -604,7 +605,7 @@ const showContent = computed(() =>
             </router-link>
           </div>
           <div v-else class="static-card-empty">
-            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="static-card-empty-icon"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="static-card-empty-icon"><circle cx="12" cy="12" r="10"/><path d="M15 9.354a4 4 0 1 0 0 5.292M9 12h7"/></svg>
             <p>Nenhum movimento registado</p>
             <router-link to="/transactions" class="static-card-action">Adicionar</router-link>
           </div>
@@ -1321,18 +1322,29 @@ html.dark .objectives-completed-badge {
 }
 
 .static-card-link {
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: #166534;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  color: #64748b;
   text-decoration: none;
   flex-shrink: 0;
+  transition: background 0.15s, color 0.15s;
 }
 
 .static-card-link:hover {
-  text-decoration: underline;
+  background: var(--color-table-row-hover, rgba(0, 0, 0, 0.04));
+  color: #166534;
 }
 
 html.dark .static-card-link {
+  color: #94a3b8;
+}
+
+html.dark .static-card-link:hover {
+  background: rgba(255, 255, 255, 0.06);
   color: #4ade80;
 }
 
@@ -1789,11 +1801,17 @@ html.dark .patrimonio-period-btn.active {
 
 .patrimonio-chart-empty {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 0.5rem;
   min-height: 200px;
   color: var(--color-text-muted);
   font-size: 0.875rem;
+}
+
+.patrimonio-chart-empty-icon {
+  opacity: 0.4;
 }
 
 /* section-header-row: title + period filter inline */
