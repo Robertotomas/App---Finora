@@ -40,7 +40,10 @@ const objectivesLoading = ref(false)
 const objectivesLoaded = ref(false)
 const objectivesPreview = ref<SavingsObjectiveActive[]>([])
 const objectivesActiveTotal = ref(0)
-const objectivesMoreCount = computed(() => Math.max(0, objectivesActiveTotal.value - 4))
+const objectivesMoreCount = computed(() => Math.max(0, objectivesActiveTotal.value - 3))
+const objectivesReserved = ref(0)
+const objectivesTotalSavings = ref(0)
+const objectivesCompletedCount = ref(0)
 
 function parseTargetDateOnly(raw: unknown): string | null {
   if (raw == null || raw === '') return null
@@ -79,12 +82,24 @@ async function loadObjectivesPreview() {
   objectivesLoading.value = true
   try {
     const { data } = await objectivesApi.getOverview()
+    const raw = (data ?? {}) as unknown as Record<string, unknown>
+    const pick = (key: string) => raw[key] ?? raw[key.charAt(0).toUpperCase() + key.slice(1)]
+
     const all = mapActiveObjectivesFromOverview(data)
     objectivesActiveTotal.value = all.length
     objectivesPreview.value = all.slice(0, 3)
+
+    objectivesReserved.value = Number(pick('reservedByCompletedObjectives')) || 0
+    objectivesTotalSavings.value = Number(pick('totalSavings')) || 0
+
+    const history = pick('historyObjectives')
+    objectivesCompletedCount.value = Array.isArray(history) ? history.length : 0
   } catch {
     objectivesPreview.value = []
     objectivesActiveTotal.value = 0
+    objectivesReserved.value = 0
+    objectivesTotalSavings.value = 0
+    objectivesCompletedCount.value = 0
   } finally {
     objectivesLoading.value = false
     objectivesLoaded.value = true
@@ -301,6 +316,10 @@ const accountCategoryGroups = computed(() => {
   }))
 })
 
+const totalAllocatedToObjectives = computed(() =>
+  objectivesReserved.value + objectivesPreview.value.reduce((s, g) => s + g.allocatedAmount, 0)
+)
+
 const todayLabel = computed(() => {
   const d = new Date()
   return d.toLocaleDateString('pt-PT', { day: 'numeric', month: 'long', year: 'numeric' })
@@ -399,6 +418,9 @@ const showContent = computed(() =>
             <span class="patrimonio-label">PATRIMÔNIO TOTAL</span>
             <p class="patrimonio-value">{{ formattedCurrentBalance }}</p>
             <span class="patrimonio-date">{{ todayLabel }}</span>
+            <span v-if="totalAllocatedToObjectives > 0" class="patrimonio-reserved">
+              {{ formatCurrency(totalAllocatedToObjectives, dashboard.currency.value) }} reservado para objetivos
+            </span>
           </div>
           <div class="patrimonio-periods">
             <button
@@ -520,9 +542,14 @@ const showContent = computed(() =>
                     </p>
                   </router-link>
                 </div>
-                <p v-if="objectivesMoreCount > 0" class="objectives-more-count">
-                  +{{ objectivesMoreCount }} {{ objectivesMoreCount === 1 ? 'objetivo ativo' : 'objetivos ativos' }}
-                </p>
+                <div class="objectives-footer">
+                  <p v-if="objectivesMoreCount > 0" class="objectives-more-count">
+                    +{{ objectivesMoreCount }} {{ objectivesMoreCount === 1 ? 'objetivo ativo' : 'objetivos ativos' }}
+                  </p>
+                  <p v-if="objectivesCompletedCount > 0" class="objectives-completed-badge">
+                    {{ objectivesCompletedCount }} {{ objectivesCompletedCount === 1 ? 'concluído' : 'concluídos' }}
+                  </p>
+                </div>
               </div>
               <div v-else-if="objectivesLoaded" class="static-card-empty">
                 <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="static-card-empty-icon"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
@@ -986,18 +1013,41 @@ html.dark .dashboard-objectives-lock-overlay {
   gap: 0.75rem;
 }
 
+.objectives-footer {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
 .objectives-more-count {
   margin: 0;
-  font-size: 0.8125rem;
+  font-size: 0.75rem;
   font-weight: 600;
   color: var(--color-text-muted);
   line-height: 1.4;
 }
 
+.objectives-completed-badge {
+  margin: 0;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: #166534;
+  background: rgba(22, 101, 52, 0.08);
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  line-height: 1.4;
+}
+
+html.dark .objectives-completed-badge {
+  color: #4ade80;
+  background: rgba(74, 222, 128, 0.12);
+}
+
 
 .objective-preview-track {
   width: 100%;
-  height: 8px;
+  height: 6px;
   border-radius: 999px;
   background: var(--color-border);
   overflow: hidden;
@@ -1214,7 +1264,7 @@ html.dark .dashboard-objectives-lock-overlay {
 .static-card {
   display: flex;
   flex-direction: column;
-  padding: 1.125rem 1.25rem;
+  padding: 0.875rem 1rem;
 }
 
 .static-card-header {
@@ -1260,8 +1310,8 @@ html.dark .static-card-link {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0.5rem 0.25rem;
+  gap: 0.5rem;
+  padding: 0.375rem 0.125rem;
   text-decoration: none;
   color: inherit;
   border-bottom: 1px solid var(--color-border);
@@ -1292,7 +1342,7 @@ html.dark .static-card-link {
 }
 
 .account-row-name {
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
   font-weight: 600;
   color: var(--color-text);
   margin: 0;
@@ -1307,7 +1357,7 @@ html.dark .static-card-link {
 }
 
 .account-row-balance {
-  font-size: 0.9375rem;
+  font-size: 0.8125rem;
   font-weight: 700;
   color: var(--color-text);
   white-space: nowrap;
@@ -1322,12 +1372,12 @@ html.dark .static-card-link {
 .objectives-list {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.375rem;
 }
 
 .objective-row {
   display: block;
-  padding: 0.5rem 0.625rem;
+  padding: 0.375rem 0.5rem;
   border-radius: 8px;
   border: 1px solid var(--color-border);
   text-decoration: none;
@@ -1345,11 +1395,11 @@ html.dark .static-card-link {
   justify-content: space-between;
   align-items: baseline;
   gap: 0.5rem;
-  margin-bottom: 0.375rem;
+  margin-bottom: 0.25rem;
 }
 
 .objective-row-name {
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
   font-weight: 650;
   color: var(--color-text);
 }
@@ -1416,7 +1466,7 @@ html.dark .static-card-action {
 .patrimonio-hero {
   background: var(--color-bg-card);
   border-radius: 14px;
-  padding: 2rem 2.25rem 1.75rem;
+  padding: 1.5rem 2rem 1.25rem;
   box-shadow: var(--app-shadow-card, 0 1px 3px rgba(0, 0, 0, 0.06));
   border: 1px solid var(--color-border);
   margin-top: 0;
@@ -1426,7 +1476,7 @@ html.dark .static-card-action {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 1.5rem;
+  margin-bottom: 0.75rem;
 }
 
 .patrimonio-info {
@@ -1460,6 +1510,23 @@ html.dark .patrimonio-label {
   font-size: 0.8125rem;
   color: var(--color-text-muted);
   margin-top: 0.25rem;
+}
+
+.patrimonio-reserved {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  margin-top: 0.375rem;
+  padding: 0.25rem 0.625rem;
+  background: rgba(22, 101, 52, 0.06);
+  border-radius: 999px;
+  width: fit-content;
+}
+
+html.dark .patrimonio-reserved {
+  background: rgba(74, 222, 128, 0.1);
 }
 
 .patrimonio-periods {
@@ -1505,15 +1572,15 @@ html.dark .patrimonio-period-btn.active {
 
 .patrimonio-body {
   display: grid;
-  grid-template-columns: 260px 1fr;
-  gap: 1.5rem;
+  grid-template-columns: 220px 1fr;
+  gap: 1.25rem;
   align-items: center;
 }
 
 .patrimonio-categories {
   display: flex;
   flex-direction: column;
-  gap: 1.125rem;
+  gap: 0.625rem;
 }
 
 .patrimonio-cat-row {
@@ -1523,7 +1590,7 @@ html.dark .patrimonio-period-btn.active {
 }
 
 .patrimonio-cat-name {
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
   font-weight: 600;
   color: var(--color-text);
 }
@@ -1535,7 +1602,7 @@ html.dark .patrimonio-period-btn.active {
 }
 
 .patrimonio-cat-amount {
-  font-size: 0.9375rem;
+  font-size: 0.8125rem;
   font-weight: 700;
   color: var(--color-text);
 }

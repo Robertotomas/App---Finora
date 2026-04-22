@@ -155,7 +155,7 @@ const chartOptions = computed(() => {
 
 <style scoped>
 .net-worth-chart {
-  height: 280px;
+  height: 220px;
   position: relative;
 }
 
