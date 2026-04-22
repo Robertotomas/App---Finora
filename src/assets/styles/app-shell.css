@@ -85,7 +85,7 @@ html.dark .select-period-naked:focus {
 
 /* Área de conteúdo: largura máx. centrada + respiro consistente */
 .app-layout main.main-content {
-  padding: 0 clamp(1rem, 2.5vw, 1.75rem) 2.5rem;
+  padding: 1.5rem clamp(1rem, 2.5vw, 1.75rem) 2.5rem;
   max-width: var(--app-content-max);
   margin-inline: auto;
   width: 100%;

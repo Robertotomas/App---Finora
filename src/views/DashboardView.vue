@@ -759,7 +759,7 @@ const showContent = computed(() =>
   max-width: 100%;
   margin: 0 auto;
   padding: 0;
-  margin-top: -3rem;
+  margin-top: -4rem;
   min-height: 400px;
   background: transparent;
 }
