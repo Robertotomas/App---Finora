@@ -237,7 +237,7 @@ async function handleLeave() {
 .error-state {
   text-align: center;
   padding: 3rem;
-  color: #64748b;
+  color: var(--color-text-muted);
 }
 
 .spinner {
@@ -255,7 +255,7 @@ async function handleLeave() {
 }
 
 .error-state p {
-  color: #dc2626;
+  color: var(--color-error);
 }
 
 .card {
@@ -293,13 +293,13 @@ async function handleLeave() {
 }
 
 .badge-free {
-  background: #f1f5f9;
-  color: #475569;
+  background: var(--color-table-row-hover);
+  color: var(--color-text-muted);
 }
 
 .badge-couple {
-  background: #dbeafe;
-  color: #1d4ed8;
+  background: var(--color-type-income-bg);
+  color: var(--color-type-income-text);
 }
 
 .plan-info {
@@ -309,19 +309,19 @@ async function handleLeave() {
 .plan-name {
   font-size: 1.125rem;
   font-weight: 600;
-  color: #0f172a;
+  color: var(--color-text);
   margin: 0 0 0.25rem 0;
 }
 
 .plan-type {
   font-size: 0.875rem;
-  color: #64748b;
+  color: var(--color-text-muted);
   margin: 0;
 }
 
 .plan-hint {
   font-size: 0.875rem;
-  color: #64748b;
+  color: var(--color-text-muted);
   margin: 0.75rem 0 0 0;
   line-height: 1.4;
 }
@@ -335,7 +335,7 @@ async function handleLeave() {
 
 .members-hint {
   font-size: 0.875rem;
-  color: #64748b;
+  color: var(--color-text-muted);
   margin: 0 0 0.75rem 0;
 }
 
@@ -345,7 +345,7 @@ async function handleLeave() {
   align-items: center;
   justify-content: space-between;
   padding: 0.75rem;
-  background: #f8fafc;
+  background: var(--color-table-header-bg);
   border-radius: 8px;
   margin-bottom: 0.5rem;
 }
@@ -360,25 +360,25 @@ async function handleLeave() {
 .member-name {
   font-size: 0.875rem;
   font-weight: 600;
-  color: #0f172a;
+  color: var(--color-text);
 }
 
 .member-email,
 .invitation-item span:first-child {
   font-size: 0.8125rem;
-  color: #64748b;
+  color: var(--color-text-muted);
 }
 
 .member-status,
 .invitation-status {
   font-size: 0.75rem;
-  color: #64748b;
+  color: var(--color-text-muted);
 }
 
 .empty-state {
   padding: 1.5rem;
   text-align: center;
-  color: #94a3b8;
+  color: var(--color-text-muted);
   font-size: 0.875rem;
 }
 
@@ -390,18 +390,18 @@ async function handleLeave() {
 .invite-form h3 {
   font-size: 0.875rem;
   font-weight: 600;
-  color: #475569;
+  color: var(--color-text-muted);
   margin: 0 0 0.75rem 0;
 }
 
 .invite-form {
   padding-top: 1.5rem;
-  border-top: 1px solid #f1f5f9;
+  border-top: 1px solid var(--color-border);
 }
 
 .form-error {
   font-size: 0.8125rem;
-  color: #dc2626;
+  color: var(--color-error);
   margin-bottom: 0.75rem;
 }
 
@@ -413,20 +413,20 @@ async function handleLeave() {
 .input {
   flex: 1;
   padding: 0.625rem 0.875rem;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--color-input-border);
   border-radius: 8px;
   font-size: 0.9375rem;
 }
 
 .input:focus {
   outline: none;
-  border-color: #2563eb;
-  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+  border-color: var(--app-brand-tab, #166534);
+  box-shadow: 0 0 0 2px rgba(22, 101, 52, 0.2);
 }
 
 .btn-invite {
   padding: 0.625rem 1.25rem;
-  background: #2563eb;
+  background: #166534;
   color: white;
   border: none;
   border-radius: 8px;
@@ -436,23 +436,23 @@ async function handleLeave() {
 }
 
 .btn-invite:hover:not(:disabled) {
-  background: #1d4ed8;
+  background: #15803d;
 }
 
 .danger-card h2 {
-  color: #dc2626;
+  color: var(--color-error);
 }
 
 .danger-text {
   font-size: 0.875rem;
-  color: #64748b;
+  color: var(--color-text-muted);
   margin: 0 0 1rem 0;
 }
 
 .btn-leave {
   padding: 0.5rem 1rem;
   background: transparent;
-  color: #dc2626;
+  color: var(--color-error);
   border: 1px solid #fecaca;
   border-radius: 8px;
   font-size: 0.875rem;
@@ -475,7 +475,7 @@ async function handleLeave() {
 }
 
 .modal {
-  background: white;
+  background: var(--color-bg-card);
   border-radius: 12px;
   padding: 1.5rem;
   max-width: 400px;
@@ -491,7 +491,7 @@ async function handleLeave() {
   margin: 0 0 1rem 1.1rem;
   padding: 0;
   font-size: 0.875rem;
-  color: #64748b;
+  color: var(--color-text-muted);
   line-height: 1.5;
 }
 
@@ -508,7 +508,7 @@ async function handleLeave() {
   align-items: flex-start;
   gap: 0.5rem;
   font-size: 0.875rem;
-  color: #0f172a;
+  color: var(--color-text);
   cursor: pointer;
   margin-bottom: 1rem;
   line-height: 1.4;
@@ -522,13 +522,13 @@ async function handleLeave() {
 .modal h3 {
   font-size: 1.125rem;
   font-weight: 600;
-  color: #0f172a;
+  color: var(--color-text);
   margin: 0 0 0.5rem 0;
 }
 
 .modal p {
   font-size: 0.875rem;
-  color: #64748b;
+  color: var(--color-text-muted);
   margin: 0 0 1.5rem 0;
 }
 
@@ -540,8 +540,8 @@ async function handleLeave() {
 
 .btn-cancel {
   padding: 0.5rem 1rem;
-  background: #f1f5f9;
-  color: #475569;
+  background: var(--color-table-row-hover);
+  color: var(--color-text-muted);
   border: none;
   border-radius: 8px;
   font-size: 0.875rem;
@@ -549,12 +549,12 @@ async function handleLeave() {
 }
 
 .btn-cancel:hover {
-  background: #e2e8f0;
+  background: var(--color-border);
 }
 
 .btn-confirm-leave {
   padding: 0.5rem 1rem;
-  background: #dc2626;
+  background: var(--color-error);
   color: white;
   border: none;
   border-radius: 8px;

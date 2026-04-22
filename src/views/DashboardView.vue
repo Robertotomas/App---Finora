@@ -22,6 +22,7 @@ import ExpensesPieChart from '@/components/charts/ExpensesPieChart.vue'
 import IncomePieChart from '@/components/charts/IncomePieChart.vue'
 import MonthlyLineChart from '@/components/charts/MonthlyLineChart.vue'
 import BudgetProgressChart from '@/components/charts/BudgetProgressChart.vue'
+import NetWorthChart from '@/components/charts/NetWorthChart.vue'
 import MonthYearNavigator from '@/components/MonthYearNavigator.vue'
 
 const householdStore = useHouseholdStore()
@@ -146,6 +147,7 @@ onMounted(async () => {
             accountsStore.fetchAccounts(),
             loadObjectivesPreview(),
             subscriptionStore.fetchSubscription(),
+            fetchChartTrend(),
           ])
         }
       })(),
@@ -269,6 +271,88 @@ function formatPercent(value: number): string {
   return `${value > 0 ? '+' : ''}${value}%`
 }
 
+/* ── Património Total: account category groups ── */
+const accountCategoryGroups = computed(() => {
+  const accs = accountsToShow.value
+  const total = accs.reduce((s, a) => s + Math.abs(a.balance), 0)
+
+  const groups = [
+    {
+      label: 'Dinheiro e poupanças',
+      types: [AccountType.Bank, AccountType.Cash, AccountType.Savings],
+      sum: 0,
+    },
+    {
+      label: 'Ações e fundos',
+      types: [AccountType.Investment],
+      sum: 0,
+    },
+    {
+      label: 'Outros',
+      types: [AccountType.CreditCard, AccountType.Other],
+      sum: 0,
+    },
+  ]
+
+  for (const acc of accs) {
+    const g = groups.find((g) => g.types.includes(acc.type as AccountType))
+    if (g) g.sum += acc.balance
+    else groups[2].sum += acc.balance
+  }
+
+  return groups.map((g) => ({
+    label: g.label,
+    value: g.sum,
+    percent: total > 0 ? (Math.abs(g.sum) / total) * 100 : 0,
+  }))
+})
+
+const todayLabel = computed(() => {
+  const d = new Date()
+  return d.toLocaleDateString('pt-PT', { day: 'numeric', month: 'long', year: 'numeric' })
+})
+
+/* ── Net worth chart period filter ── */
+type ChartPeriod = 'YTD' | '3M' | '6M' | '1A' | '5A'
+const chartPeriod = ref<ChartPeriod>('6M')
+const chartPeriods: ChartPeriod[] = ['YTD', '3M', '6M', '1A', '5A']
+
+const chartTrendMonths = computed(() => {
+  const map: Record<ChartPeriod, number> = { YTD: 12, '3M': 3, '6M': 6, '1A': 12, '5A': 60 }
+  return map[chartPeriod.value]
+})
+
+const chartTrendData = ref<MonthlyTrend[]>([])
+const chartLoading = ref(false)
+
+async function fetchChartTrend() {
+  chartLoading.value = true
+  try {
+    const response = await import('@/api/dashboard').then((m) =>
+      m.dashboardApi.get({ trendMonths: chartTrendMonths.value })
+    )
+    const res = (response.data ?? response) as unknown as Record<string, unknown>
+    const get = (key: string) => res[key] ?? res[key.charAt(0).toUpperCase() + key.slice(1)]
+    const arr = get('monthlyTrend')
+    if (Array.isArray(arr)) {
+      chartTrendData.value = arr.map((x: Record<string, unknown>) => ({
+        year: Number(x.year ?? x.Year) || 0,
+        month: Number(x.month ?? x.Month) || 0,
+        label: String(x.label ?? x.Label ?? ''),
+        income: Number(x.income ?? x.Income) || 0,
+        expenses: Number(x.expenses ?? x.Expenses) || 0,
+        savings: Number(x.savings ?? x.Savings) || 0,
+      }))
+    }
+  } catch {
+    // keep existing data
+  } finally {
+    chartLoading.value = false
+  }
+}
+
+watch(chartPeriod, () => fetchChartTrend())
+
 const showContent = computed(() =>
   mounted.value &&
   !loadError.value &&
@@ -313,43 +397,84 @@ const showContent = computed(() =>
     </div>
 
     <div v-if="showContent" ref="dashboardContentRef" class="dashboard-content">
-      <div class="page-header">
-        <h1>Dashboard</h1>
-        <p class="subtitle">
-          Acompanha as tuas despesas e receitas com toda a informação necessária para gerires o orçamento e
-          poupares de forma mais consciente.
-        </p>
-      </div>
 
-      <div class="period-filter-bar">
-        <MonthYearNavigator
-          v-model:month="selectedMonth"
-          v-model:year="selectedYear"
-          :years="navYears"
-          :month-names="MONTH_NAMES"
-          allow-all-months
-          allow-all-years
-          allow-year-to-date
-          @change="onPeriodChange"
-        />
-      </div>
+      <!-- ═══ PATRIMÔNIO TOTAL — Hero Section ═══ -->
+      <div class="patrimonio-hero">
+        <div class="patrimonio-top">
+          <div class="patrimonio-info">
+            <span class="patrimonio-label">PATRIMÔNIO TOTAL</span>
+            <p class="patrimonio-value">{{ formattedBalance }}</p>
+            <span class="patrimonio-date">{{ todayLabel }}</span>
+          </div>
+          <div class="patrimonio-periods">
+            <button
+              v-for="p in chartPeriods"
+              :key="p"
+              class="patrimonio-period-btn"
+              :class="{ active: chartPeriod === p }"
+              @click="chartPeriod = p"
+            >{{ p }}</button>
+          </div>
+        </div>
 
-      <div v-if="periodChangeLoading" class="period-refresh-state">
-        <div class="period-refresh-inner">
-          <div class="spinner"></div>
-          <p class="period-refresh-text">A atualizar dados do dashboard...</p>
+        <div class="patrimonio-body">
+          <div class="patrimonio-categories">
+            <div
+              v-for="group in accountCategoryGroups"
+              :key="group.label"
+              class="patrimonio-cat-row"
+            >
+              <span class="patrimonio-cat-name">{{ group.label }}</span>
+              <div class="patrimonio-cat-values">
+                <span class="patrimonio-cat-amount">{{ formatCurrency(group.value, dashboard.currency.value) }}</span>
+                <span class="patrimonio-cat-percent">{{ group.percent.toFixed(2) }}% do total</span>
+              </div>
+            </div>
+          </div>
+          <div class="patrimonio-chart-area">
+            <div v-if="chartLoading" class="patrimonio-chart-loading">
+              <div class="spinner"></div>
+            </div>
+            <NetWorthChart
+              v-else-if="chartTrendData.length > 0"
+              :trend-data="chartTrendData"
+              :current-balance="dashboard.totalBalance.value"
+              :currency="dashboard.currency.value"
+            />
+            <div v-else class="patrimonio-chart-empty">
+              <p>Sem dados de evolução disponíveis.</p>
+            </div>
+          </div>
         </div>
       </div>
 
-      <template v-else>
+      <!-- ═══ Summary Cards (Receitas / Despesas / Poupança) ═══ -->
       <div class="dashboard-section-card">
-        <h2 class="section-title">{{ periodLabel || 'Resumo' }}</h2>
-        <div class="summary-cards summary-cards-fallback">
-          <div class="card">
-            <p class="card-title">Saldo total</p>
-            <p class="card-value">{{ formattedBalance }}</p>
-            <p class="card-subtitle">Todas as contas</p>
+        <div class="section-header-row">
+          <h2 class="section-title">{{ periodLabel || 'Resumo' }}</h2>
+          <div class="period-filter-bar">
+            <MonthYearNavigator
+              v-model:month="selectedMonth"
+              v-model:year="selectedYear"
+              :years="navYears"
+              :month-names="MONTH_NAMES"
+              allow-all-months
+              allow-all-years
+              allow-year-to-date
+              @change="onPeriodChange"
+            />
           </div>
+        </div>
+
+        <div v-if="periodChangeLoading" class="period-refresh-state">
+          <div class="period-refresh-inner">
+            <div class="spinner"></div>
+            <p class="period-refresh-text">A atualizar dados do dashboard...</p>
+          </div>
+        </div>
+
+        <template v-else>
+        <div class="summary-cards summary-cards-fallback">
           <div class="card card-income">
             <p class="card-title">Receitas</p>
             <p class="card-value">{{ formattedIncome }}</p>
@@ -444,6 +569,7 @@ const showContent = computed(() =>
             </div>
           </div>
         </div>
+        </template>
       </div>
 
       <div class="dashboard-section-card">
@@ -590,7 +716,6 @@ const showContent = computed(() =>
           </div>
         </div>
       </div>
-      </template>
     </div>
   </div>
 </template>
@@ -600,6 +725,7 @@ const showContent = computed(() =>
   max-width: 100%;
   margin: 0 auto;
   padding: 0;
+  margin-top: -3rem;
   min-height: 400px;
   background: transparent;
 }
@@ -716,11 +842,11 @@ const showContent = computed(() =>
 
 .dashboard-section-card {
   background: var(--color-bg-card);
-  border-radius: var(--app-radius-md, 12px);
-  padding: 1.375rem 1.5rem;
+  border-radius: 14px;
+  padding: 1.5rem;
   box-shadow: var(--app-shadow-card, 0 1px 3px rgba(0, 0, 0, 0.06));
   border: 1px solid var(--color-border);
-  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+  transition: box-shadow 0.2s ease;
 }
 
 .section-empty {
@@ -741,20 +867,24 @@ const showContent = computed(() =>
 }
 
 .btn-section-add {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
   padding: 0.625rem 1.25rem;
-  font-size: 0.9375rem;
+  font-size: 0.875rem;
   font-weight: 600;
   color: #fff;
-  background: #166534;
+  background: linear-gradient(135deg, #166534 0%, #15803d 100%);
   border: none;
-  border-radius: 8px;
+  border-radius: 10px;
   text-decoration: none;
-  transition: background 0.2s;
+  transition: transform 0.15s, box-shadow 0.15s;
+  box-shadow: 0 1px 3px rgba(22, 101, 52, 0.2);
 }
 
 .btn-section-add:hover {
-  background: #15803d;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(22, 101, 52, 0.25);
 }
 
 .section-header {
@@ -767,12 +897,30 @@ const showContent = computed(() =>
 }
 
 .section-title {
-  font-size: 1.0625rem;
-  font-weight: 650;
-  letter-spacing: -0.025em;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
   color: var(--color-text);
-  margin: 0 0 1rem 0;
+  margin: 0 0 1.125rem 0;
   line-height: 1.3;
+  padding-bottom: 0.75rem;
+  border-bottom: 2px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.section-title::before {
+  content: '';
+  width: 3px;
+  height: 1em;
+  background: #166534;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+html.dark .section-title::before {
+  background: #4ade80;
 }
 
 .period-filter-bar {
@@ -904,18 +1052,19 @@ html.dark .dashboard-objectives-lock-overlay {
 
 .objective-preview-card {
   display: block;
-  padding: 0.875rem 1rem;
+  padding: 1rem 1.125rem;
   border-radius: 10px;
   border: 1px solid var(--color-border);
   background: var(--color-bg);
   text-decoration: none;
   color: inherit;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
 }
 
 .objective-preview-card:hover {
-  border-color: #166534;
-  box-shadow: 0 2px 8px rgba(22, 101, 52, 0.12);
+  border-color: rgba(22, 101, 52, 0.4);
+  box-shadow: 0 2px 8px rgba(22, 101, 52, 0.1);
+  transform: translateY(-1px);
 }
 
 .objective-preview-name {
@@ -935,9 +1084,9 @@ html.dark .dashboard-objectives-lock-overlay {
 
 .objective-preview-track {
   width: 100%;
-  height: 6px;
+  height: 8px;
   border-radius: 999px;
-  background: var(--color-table-row-hover);
+  background: var(--color-border);
   overflow: hidden;
 }
 
@@ -981,60 +1130,71 @@ html.dark .dashboard-objectives-lock-overlay {
 }
 
 .btn-add-objective {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
   padding: 0.45rem 0.9rem;
   font-size: 0.8125rem;
   font-weight: 600;
   color: #fff;
-  background: #166534;
+  background: linear-gradient(135deg, #166534 0%, #15803d 100%);
   border-radius: 8px;
   text-decoration: none;
+  transition: transform 0.15s, box-shadow 0.15s;
+  box-shadow: 0 1px 2px rgba(22, 101, 52, 0.15);
 }
 
 .btn-add-objective:hover {
-  background: #15803d;
+  transform: translateY(-1px);
+  box-shadow: 0 3px 8px rgba(22, 101, 52, 0.2);
 }
 
 .summary-cards-fallback .card {
   background: var(--color-bg-card);
-  border-radius: var(--app-radius-md, 12px);
-  padding: 1.125rem 1.25rem;
+  border-radius: 12px;
+  padding: 1.125rem 1.25rem 1.125rem 1.375rem;
   box-shadow: var(--app-shadow-card, 0 1px 3px rgba(0, 0, 0, 0.06));
   border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-border);
   transition: box-shadow 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
 }
 
 .summary-cards-fallback .card:hover {
   box-shadow: var(--app-shadow-card-hover, 0 4px 12px rgba(0, 0, 0, 0.08));
-  border-color: var(--color-border);
+  transform: translateY(-2px);
 }
 
 .summary-cards-fallback .card-title {
-  font-size: 0.8125rem;
-  font-weight: 500;
+  font-size: 0.75rem;
+  font-weight: 600;
   color: var(--color-text-muted);
-  margin: 0 0 0.5rem 0;
+  margin: 0 0 0.625rem 0;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 .summary-cards-fallback .card-value {
-  font-size: 1.5rem;
+  font-size: 1.625rem;
   font-weight: 700;
   color: var(--color-text);
   margin: 0;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
 }
 
 .summary-cards-fallback .card-subtitle {
-  font-size: 0.75rem;
+  font-size: 0.6875rem;
   color: var(--color-text-muted);
-  margin: 0.25rem 0 0 0;
+  margin: 0.375rem 0 0 0;
+  font-weight: 500;
 }
 
-.summary-cards-fallback .card-income .card-value { color: #059669; }
-.summary-cards-fallback .card-expense .card-value { color: #dc2626; }
-.summary-cards-fallback .card-savings .card-value { color: #2563eb; }
-.summary-cards-fallback .card-balance .card-value {
-  color: var(--color-text);
-}
+.summary-cards-fallback .card-income { border-left-color: var(--color-income); }
+.summary-cards-fallback .card-income .card-value { color: var(--color-income); }
+.summary-cards-fallback .card-expense { border-left-color: var(--color-expense); }
+.summary-cards-fallback .card-expense .card-value { color: var(--color-expense); }
+.summary-cards-fallback .card-savings { border-left-color: #2563eb; }
+.summary-cards-fallback .card-savings .card-value { color: var(--color-link-hover, #2563eb); }
+.summary-cards-fallback .card-balance .card-value { color: var(--color-text); }
 
 
 .accounts-grid {
@@ -1050,16 +1210,22 @@ html.dark .dashboard-objectives-lock-overlay {
 
 .account-card {
   background: var(--color-bg-card);
-  border-radius: var(--app-radius-md, 12px);
+  border-radius: 12px;
   padding: 1.125rem 1.25rem;
   box-shadow: var(--app-shadow-card, 0 1px 3px rgba(0, 0, 0, 0.06));
   border: 1px solid var(--color-border);
+  border-top: 3px solid #166534;
   transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
 }
 
 .account-card-link:hover .account-card {
-  border-color: rgba(22, 101, 52, 0.45);
+  border-top-color: #15803d;
   box-shadow: var(--app-shadow-card-hover, 0 4px 16px rgba(0, 0, 0, 0.1));
+  transform: translateY(-2px);
+}
+
+html.dark .account-card {
+  border-top-color: #4ade80;
 }
 
 .account-card-header {
@@ -1114,11 +1280,15 @@ html.dark .dashboard-objectives-lock-overlay {
 }
 
 .comparison-card {
-  background: var(--color-bg-card);
-  border-radius: var(--app-radius-md, 12px);
+  background: var(--color-bg);
+  border-radius: 12px;
   padding: 1.25rem;
-  box-shadow: var(--app-shadow-card, 0 1px 3px rgba(0, 0, 0, 0.06));
   border: 1px solid var(--color-border);
+  transition: border-color 0.2s;
+}
+
+.comparison-card:hover {
+  border-color: rgba(22, 101, 52, 0.3);
 }
 
 .comparison-title {
@@ -1149,13 +1319,13 @@ html.dark .dashboard-objectives-lock-overlay {
 }
 
 .comparison-value.expected {
-  color: #64748b;
+  color: var(--color-text-muted);
 }
 
-.comparison-value.income { color: #059669; }
-.comparison-value.expense { color: #dc2626; }
-.comparison-value.above { color: #059669; }
-.comparison-value.below { color: #dc2626; }
+.comparison-value.income { color: var(--color-income); }
+.comparison-value.expense { color: var(--color-expense); }
+.comparison-value.above { color: var(--color-income); }
+.comparison-value.below { color: var(--color-expense); }
 
 .comparison-diff {
   font-size: 0.8125rem;
@@ -1173,10 +1343,16 @@ html.dark .dashboard-objectives-lock-overlay {
 
 .chart-card {
   background: var(--color-bg-card);
-  border-radius: var(--app-radius-md, 12px);
-  padding: 1.25rem;
+  border-radius: 12px;
+  padding: 1.375rem;
   box-shadow: var(--app-shadow-card, 0 1px 3px rgba(0, 0, 0, 0.06));
   border: 1px solid var(--color-border);
+  transition: box-shadow 0.2s, transform 0.15s;
+}
+
+.chart-card:hover {
+  box-shadow: var(--app-shadow-card-hover, 0 4px 12px rgba(0, 0, 0, 0.08));
+  transform: translateY(-1px);
 }
 
 .chart-title {
@@ -1188,6 +1364,220 @@ html.dark .dashboard-objectives-lock-overlay {
 
 .chart-card-full {
   grid-column: 1 / -1;
+}
+
+/* ═══ PATRIMONIO HERO ═══ */
+.patrimonio-hero {
+  background: var(--color-bg-card);
+  border-radius: 14px;
+  padding: 2rem 2.25rem 1.75rem;
+  box-shadow: var(--app-shadow-card, 0 1px 3px rgba(0, 0, 0, 0.06));
+  border: 1px solid var(--color-border);
+  margin-top: 0;
+}
+
+.patrimonio-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 1.5rem;
+}
+
+.patrimonio-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.patrimonio-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #166534;
+  margin-bottom: 0.375rem;
+}
+
+html.dark .patrimonio-label {
+  color: #4ade80;
+}
+
+.patrimonio-value {
+  font-size: clamp(1.75rem, 3.5vw, 2.25rem);
+  font-weight: 800;
+  color: var(--color-text);
+  margin: 0;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+}
+
+.patrimonio-date {
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+  margin-top: 0.25rem;
+}
+
+.patrimonio-periods {
+  display: flex;
+  gap: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.patrimonio-period-btn {
+  padding: 0.375rem 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  border-right: 1px solid var(--color-border);
+}
+
+.patrimonio-period-btn:last-child {
+  border-right: none;
+}
+
+.patrimonio-period-btn:hover {
+  background: var(--color-table-row-hover, rgba(0, 0, 0, 0.03));
+  color: var(--color-text);
+}
+
+.patrimonio-period-btn.active {
+  background: var(--color-text);
+  color: var(--color-bg-card);
+  font-weight: 700;
+}
+
+html.dark .patrimonio-period-btn.active {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+.patrimonio-body {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: 1.5rem;
+  align-items: center;
+}
+
+.patrimonio-categories {
+  display: flex;
+  flex-direction: column;
+  gap: 1.125rem;
+}
+
+.patrimonio-cat-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.patrimonio-cat-name {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.patrimonio-cat-values {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.patrimonio-cat-amount {
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.patrimonio-cat-percent {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+.patrimonio-chart-area {
+  min-height: 200px;
+}
+
+.patrimonio-chart-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+}
+
+.patrimonio-chart-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+}
+
+/* section-header-row: title + period filter inline */
+.section-header-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 1.125rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 2px solid var(--color-border);
+}
+
+.section-header-row .section-title {
+  margin: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.section-header-row .period-filter-bar {
+  margin: 0;
+  padding: 0;
+}
+
+@media (max-width: 768px) {
+  .patrimonio-hero {
+    padding: 1.25rem 1rem;
+    margin-top: 0;
+  }
+
+  .patrimonio-top {
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .patrimonio-body {
+    grid-template-columns: 1fr;
+    gap: 1.25rem;
+  }
+
+  .patrimonio-categories {
+    order: 2;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 1rem;
+  }
+
+  .patrimonio-cat-row {
+    flex: 1;
+    min-width: 140px;
+  }
+
+  .patrimonio-chart-area {
+    order: 1;
+  }
+
+  .section-header-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 }
 
 </style>

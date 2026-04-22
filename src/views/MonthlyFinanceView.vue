@@ -334,14 +334,14 @@ onMounted(async () => {
 
 .expected-section {
   padding: 1.5rem;
-  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+  background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
   border-radius: 12px;
-  border: 1px solid #bae6fd;
+  border: 1px solid #bbf7d0;
 }
 
 html.dark .expected-section {
-  background: linear-gradient(135deg, #1e3a5f 0%, #0f172a 100%) !important;
-  border-color: var(--color-border) !important;
+  background: linear-gradient(135deg, #052e16 0%, #0f172a 100%) !important;
+  border-color: #166534 !important;
 }
 
 .expected-grid {
@@ -360,7 +360,7 @@ html.dark .expected-section {
 .expected-label {
   font-size: 0.8125rem;
   font-weight: 500;
-  color: #0c4a6e;
+  color: #166534;
 }
 
 html.dark .expected-label {
@@ -373,7 +373,7 @@ html.dark .expected-label {
   font-weight: 600;
   color: var(--color-text);
   background: var(--color-input-bg);
-  border: 1px solid #7dd3fc;
+  border: 1px solid #86efac;
   border-radius: 8px;
 }
 
@@ -383,13 +383,13 @@ html.dark .expected-input {
 
 .expected-input:focus {
   outline: none;
-  border-color: #0284c7;
-  box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.2);
+  border-color: #15803d;
+  box-shadow: 0 0 0 3px rgba(22, 101, 52, 0.2);
 }
 
 .btn-submit {
   padding: 0.625rem 1.5rem;
-  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  background: linear-gradient(135deg, #166534 0%, #15803d 100%);
   color: white;
   border: none;
   border-radius: 8px;

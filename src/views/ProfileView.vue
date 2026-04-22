@@ -218,30 +218,32 @@ async function handleSubmit() {
 .profile-card {
   background: var(--color-bg-card);
   border: 1px solid var(--color-border);
-  border-radius: var(--app-radius-md, 12px);
-  padding: 1.5rem;
+  border-radius: 14px;
+  padding: 1.75rem;
   box-shadow: var(--app-shadow-card, 0 1px 3px rgba(0, 0, 0, 0.06));
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 1.125rem;
 }
 
 .form-error {
-  padding: 0.65rem 0.75rem;
-  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  border-radius: 10px;
   background: #fef2f2;
   color: #dc2626;
   border: 1px solid #fecaca;
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
 }
 
 .form-success {
-  padding: 0.65rem 0.75rem;
-  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  border-radius: 10px;
   background: #ecfdf5;
   color: #166534;
   border: 1px solid #a7f3d0;
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
 }
 
 .field {
@@ -251,18 +253,27 @@ async function handleSubmit() {
 }
 
 .field-label {
-  font-size: 0.8125rem;
-  font-weight: 600;
+  font-size: 0.75rem;
+  font-weight: 700;
   color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 .field-input {
-  padding: 0.5rem 0.75rem;
-  border: 1px solid var(--color-input-border);
-  border-radius: 8px;
+  padding: 0.5625rem 0.875rem;
+  border: 1.5px solid var(--color-input-border);
+  border-radius: 10px;
   font-size: 0.9375rem;
   background: var(--color-input-bg);
   color: var(--color-text);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.field-input:focus {
+  outline: none;
+  border-color: #166534;
+  box-shadow: 0 0 0 3px rgba(22, 101, 52, 0.08);
 }
 
 .field-readonly .field-input:disabled {
@@ -280,22 +291,25 @@ async function handleSubmit() {
 }
 
 .btn-save {
-  padding: 0.55rem 1.25rem;
+  padding: 0.625rem 1.5rem;
   font-size: 0.875rem;
-  font-weight: 600;
+  font-weight: 700;
   color: #fff;
-  background: #166534;
+  background: linear-gradient(135deg, #166534 0%, #15803d 100%);
   border: none;
-  border-radius: 8px;
+  border-radius: 10px;
   cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s;
+  box-shadow: 0 1px 3px rgba(22, 101, 52, 0.2);
 }
 
 .btn-save:hover:not(:disabled) {
-  background: #15803d;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(22, 101, 52, 0.25);
 }
 
 .btn-save:disabled {
-  opacity: 0.65;
+  opacity: 0.6;
   cursor: not-allowed;
 }
 </style>

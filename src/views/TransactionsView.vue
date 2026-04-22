@@ -938,7 +938,7 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
 .empty-state {
   text-align: center;
   padding: 3rem;
-  color: #64748b;
+  color: var(--color-text-muted);
 }
 
 .spinner {
@@ -956,7 +956,7 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
 }
 
 .error-state p {
-  color: #dc2626;
+  color: var(--color-error);
 }
 
 .empty-state {
@@ -967,40 +967,60 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
 }
 
 .link {
-  color: #2563eb;
+  color: var(--color-link-hover);
   border-bottom: 1px solid transparent;
 }
 
 .link:hover {
-  border-bottom-color: #2563eb;
+  border-bottom-color: var(--color-link-hover);
 }
 
 .tabs {
-  display: flex;
+  display: inline-flex;
   gap: 0.25rem;
   margin-bottom: 1.5rem;
-  border-bottom: 1px solid #e2e8f0;
+  padding: 0.25rem;
+  background: var(--color-table-row-hover);
+  border-radius: 10px;
+  border: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .tab {
-  padding: 0.625rem 1rem;
-  font-size: 0.875rem;
+  padding: 0.5rem 1rem;
+  font-size: 0.8125rem;
   font-weight: 500;
-  color: #64748b;
+  color: var(--color-text-muted);
   background: transparent;
   border: none;
-  border-bottom: 2px solid transparent;
+  border-bottom: none;
+  border-radius: 8px;
   cursor: pointer;
-  margin-bottom: -1px;
+  margin-bottom: 0;
+  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
 }
 
 .tab:hover {
-  color: #334155;
+  color: var(--color-text);
+  background: rgba(255, 255, 255, 0.5);
+}
+
+html.dark .tab:hover {
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .tab.active {
-  color: #2563eb;
-  border-bottom-color: #2563eb;
+  color: var(--app-brand-tab, #166534);
+  background: var(--color-bg-card);
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  border-bottom-color: transparent;
+}
+
+html.dark .tab.active {
+  color: #4ade80;
+  border-bottom-color: transparent;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
 .tab-content {
@@ -1009,7 +1029,7 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
 
 .recurring-hint {
   font-size: 0.8125rem;
-  color: #64748b;
+  color: var(--color-text-muted);
   margin: 0;
   flex: 1;
 }
@@ -1058,32 +1078,44 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
 
 .filter-select,
 .filter-input {
-  padding: 0.5rem 0.75rem;
-  border: 1px solid #e2e8f0;
+  padding: 0.4375rem 0.75rem;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
+  background: var(--color-input-bg);
+  color: var(--color-text);
+  transition: border-color 0.15s;
+}
+
+.filter-select:focus,
+.filter-input:focus {
+  border-color: #166534;
+  outline: none;
 }
 
 .btn-add {
-  padding: 0.625rem 1.25rem;
-  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  padding: 0.5rem 1.125rem;
+  background: linear-gradient(135deg, #166534 0%, #15803d 100%);
   color: white;
   border: none;
-  border-radius: 8px;
-  font-weight: 500;
-  font-size: 0.875rem;
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 0.8125rem;
   cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s;
+  box-shadow: 0 1px 3px rgba(22, 101, 52, 0.2);
 }
 
 .btn-add:hover {
-  opacity: 0.95;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(22, 101, 52, 0.25);
 }
 
 .table-container {
-  background: white;
-  border-radius: 12px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
-  border: 1px solid #f1f5f9;
+  background: var(--color-bg-card);
+  border-radius: 14px;
+  box-shadow: var(--app-shadow-card, 0 1px 3px rgba(0, 0, 0, 0.06));
+  border: 1px solid var(--color-border);
   overflow: hidden;
 }
 
@@ -1094,25 +1126,33 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
 
 .transactions-table th {
   text-align: left;
-  padding: 0.75rem 1rem;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: #64748b;
+  padding: 0.875rem 1.125rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  color: var(--color-text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  background: #f8fafc;
-  border-bottom: 1px solid #e2e8f0;
+  letter-spacing: 0.06em;
+  background: var(--color-table-header-bg);
+  border-bottom: 2px solid var(--color-border);
 }
 
 .transactions-table td {
-  padding: 0.875rem 1rem;
+  padding: 0.875rem 1.125rem;
   font-size: 0.875rem;
-  color: #334155;
-  border-bottom: 1px solid #f1f5f9;
+  color: var(--color-text);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.transactions-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.table-row {
+  transition: background var(--transition-fast, 150ms);
 }
 
 .table-row:hover {
-  background: #f8fafc;
+  background: var(--color-table-row-hover);
 }
 
 .amount-col {
@@ -1121,11 +1161,11 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
 }
 
 .amount-income {
-  color: #059669;
+  color: var(--color-income);
 }
 
 .amount-expense {
-  color: #dc2626;
+  color: var(--color-expense);
 }
 
 .actions-col {
@@ -1134,37 +1174,41 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
 }
 
 .type-badge {
-  display: inline-block;
-  font-size: 0.75rem;
-  font-weight: 500;
-  padding: 0.25rem 0.5rem;
-  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  padding: 0.2rem 0.625rem;
+  border-radius: 999px;
+  letter-spacing: 0.02em;
 }
 
 .type-income {
-  background: #d1fae5;
-  color: #047857;
+  background: var(--color-type-income-bg);
+  color: var(--color-type-income-text);
 }
 
 .type-expense {
-  background: #fee2e2;
-  color: #b91c1c;
+  background: var(--color-type-expense-bg);
+  color: var(--color-type-expense-text);
 }
 
 .btn-icon {
-  padding: 0.25rem 0.5rem;
+  padding: 0.3rem 0.625rem;
   font-size: 0.75rem;
-  color: #64748b;
+  font-weight: 500;
+  color: var(--color-text-muted);
   background: transparent;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--color-border);
   border-radius: 6px;
   cursor: pointer;
   margin-right: 0.25rem;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
 
 .btn-icon:hover {
-  background: #f8fafc;
-  color: #334155;
+  background: var(--color-table-row-hover);
+  color: var(--color-text);
 }
 
 .btn-icon:disabled {
@@ -1224,24 +1268,26 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 1rem;
-  padding: 1rem;
-  border-top: 1px solid #f1f5f9;
+  gap: 0.75rem;
+  padding: 0.875rem 1rem;
+  border-top: 1px solid var(--color-border);
 }
 
 .btn-page {
-  padding: 0.5rem 1rem;
-  font-size: 0.875rem;
-  color: #475569;
-  background: #f1f5f9;
-  border: none;
+  padding: 0.375rem 0.875rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  background: transparent;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   cursor: pointer;
+  transition: background 0.15s, color 0.15s;
 }
 
 .btn-page:hover:not(:disabled) {
-  background: #e2e8f0;
-  color: #334155;
+  background: var(--color-table-row-hover);
+  color: var(--color-text);
 }
 
 .btn-page:disabled {
@@ -1250,7 +1296,8 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
 }
 
 .page-info {
-  font-size: 0.875rem;
-  color: #64748b;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--color-text-muted);
 }
 </style>

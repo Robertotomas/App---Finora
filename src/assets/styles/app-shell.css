@@ -4,7 +4,7 @@
  */
 
 :root {
-  --app-content-max: 1180px;
+  --app-content-max: 1320px;
   --app-radius-sm: 8px;
   --app-radius-md: 12px;
   --app-radius-lg: 14px;
@@ -85,7 +85,7 @@ html.dark .select-period-naked:focus {
 
 /* Área de conteúdo: largura máx. centrada + respiro consistente */
 .app-layout main.main-content {
-  padding: 1.125rem clamp(1rem, 2.5vw, 1.75rem) 2.5rem;
+  padding: 0 clamp(1rem, 2.5vw, 1.75rem) 2.5rem;
   max-width: var(--app-content-max);
   margin-inline: auto;
   width: 100%;
@@ -220,4 +220,44 @@ html.dark .home .btn-secondary {
 
 .home .btn-secondary:hover {
   background: var(--color-border);
+}
+
+/* ─── Page transition ─── */
+.main-content {
+  animation: page-enter 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ─── Mobile responsiveness for content ─── */
+@media (max-width: 768px) {
+  .app-layout main.main-content {
+    padding: 0 0.875rem 2rem;
+  }
+
+  .app-layout main.main-content .page-header {
+    margin-bottom: 1.25rem;
+    padding-bottom: 0.875rem;
+  }
+
+  .app-layout main.main-content .page-header h1 {
+    font-size: 1.25rem;
+  }
+
+  .home {
+    padding: clamp(1.5rem, 5vh, 3rem) 1rem;
+  }
+
+  .home h1 {
+    font-size: 1.5rem;
+  }
 }

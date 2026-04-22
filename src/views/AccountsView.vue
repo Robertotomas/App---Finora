@@ -419,7 +419,7 @@ function formatBalance(balance: number, currency: string): string {
 .empty-state {
   text-align: center;
   padding: 3rem;
-  color: #64748b;
+  color: var(--color-text-muted);
 }
 
 .spinner {
@@ -437,7 +437,7 @@ function formatBalance(balance: number, currency: string): string {
 }
 
 .error-state p {
-  color: #dc2626;
+  color: var(--color-error);
 }
 
 .empty-state {
@@ -448,12 +448,12 @@ function formatBalance(balance: number, currency: string): string {
 }
 
 .link {
-  color: #2563eb;
+  color: var(--color-link-hover);
   border-bottom: 1px solid transparent;
 }
 
 .link:hover {
-  border-bottom-color: #2563eb;
+  border-bottom-color: var(--color-link-hover);
 }
 
 .global-error {
@@ -591,6 +591,8 @@ html.dark .primary-banner-text {
   align-items: center;
   justify-content: space-between;
   margin-bottom: 1.25rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 2px solid var(--color-border);
 }
 
 .section-title {
@@ -633,18 +635,20 @@ html.dark .primary-banner-text {
 
 .btn-add {
   padding: 0.5rem 1rem;
-  background: #166534;
+  background: linear-gradient(135deg, #166534 0%, #15803d 100%);
   color: white;
   border: none;
-  border-radius: 8px;
+  border-radius: 10px;
   font-weight: 600;
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
   cursor: pointer;
-  transition: background 0.2s;
+  transition: transform 0.15s, box-shadow 0.15s;
+  box-shadow: 0 1px 3px rgba(22, 101, 52, 0.2);
 }
 
 .btn-add:hover {
-  background: #15803d;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(22, 101, 52, 0.25);
 }
 
 .cards-grid {
@@ -654,26 +658,37 @@ html.dark .primary-banner-text {
 }
 
 .account-card {
-  background: white;
-  border-radius: 12px;
-  padding: 1.25rem;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
-  border: 1px solid #f1f5f9;
+  background: var(--color-bg-card);
+  border-radius: 14px;
+  padding: 1.375rem;
+  box-shadow: var(--app-shadow-card, 0 1px 3px rgba(0, 0, 0, 0.06));
+  border: 1px solid var(--color-border);
+  border-top: 3px solid #166534;
   display: flex;
   flex-direction: column;
   gap: 1rem;
+  transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s;
+}
+
+.account-card:hover {
+  box-shadow: var(--app-shadow-card-hover, 0 4px 16px rgba(0, 0, 0, 0.1));
+  transform: translateY(-2px);
+}
+
+html.dark .account-card {
+  border-top-color: #4ade80;
 }
 
 .account-card--locked {
   opacity: 0.92;
   border-style: dashed;
-  border-color: #cbd5e1;
+  border-color: var(--color-text-muted);
 }
 
 .account-locked-hint {
   margin: 0.5rem 0 0 0;
   font-size: 0.75rem;
-  color: #64748b;
+  color: var(--color-text-muted);
   line-height: 1.35;
 }
 
@@ -695,14 +710,14 @@ html.dark .primary-banner-text {
 }
 
 .primary-badge {
-  font-size: 0.6875rem;
-  font-weight: 600;
+  font-size: 0.625rem;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.03em;
-  color: #166534;
-  background: #dcfce7;
-  padding: 0.2rem 0.45rem;
-  border-radius: 6px;
+  letter-spacing: 0.05em;
+  color: #ffffff;
+  background: #166534;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
 }
 
 .account-type-icon {
@@ -719,31 +734,35 @@ html.dark .primary-banner-text {
 }
 
 .account-name {
-  font-size: 1.0625rem;
-  font-weight: 600;
-  color: #0f172a;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--color-text);
   margin: 0;
+  letter-spacing: -0.01em;
 }
 
 .account-balance {
-  font-size: 1.25rem;
+  font-size: 1.375rem;
   font-weight: 700;
-  color: #059669;
+  color: var(--color-income);
   margin: 0 0 0.5rem 0;
+  letter-spacing: -0.02em;
 }
 
 .account-balance.negative {
-  color: #dc2626;
+  color: var(--color-expense);
 }
 
 .account-type-badge {
-  display: inline-block;
-  font-size: 0.75rem;
-  font-weight: 500;
-  color: #64748b;
-  background: #f1f5f9;
-  padding: 0.25rem 0.5rem;
-  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  background: var(--color-table-row-hover);
+  padding: 0.2rem 0.625rem;
+  border-radius: 999px;
+  letter-spacing: 0.02em;
 }
 
 .card-actions {
@@ -752,18 +771,20 @@ html.dark .primary-banner-text {
 }
 
 .btn-icon {
-  padding: 0.375rem 0.75rem;
-  font-size: 0.8125rem;
-  color: #64748b;
+  padding: 0.3rem 0.625rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--color-text-muted);
   background: transparent;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--color-border);
   border-radius: 6px;
   cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
 
 .btn-icon:hover {
-  background: #f8fafc;
-  color: #334155;
+  background: var(--color-table-row-hover);
+  color: var(--color-text);
 }
 
 .btn-delete:hover {
