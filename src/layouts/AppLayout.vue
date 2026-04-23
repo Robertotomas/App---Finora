@@ -6,12 +6,6 @@ import { useThemeStore } from '@/stores/theme'
 import { useHouseholdStore } from '@/stores/household'
 import { useSubscriptionStore } from '@/stores/subscription'
 import iconMale from '@/assets/images/icon-male.png'
-import iconDashboard from '@/assets/images/icon-dashboard.png'
-import iconCreditCard from '@/assets/images/icon-credit-card.png'
-import iconMonthly from '@/assets/images/icon-monthly.png'
-import iconTransactions from '@/assets/images/icon-transactions.png'
-import iconObjectives from '@/assets/images/icon-objectives.png'
-import iconReports from '@/assets/images/icon-reports.png'
 import iconFinoraFlow from '@/assets/images/finoraflow-icon.png'
 import PartnerLeftModal from '@/components/PartnerLeftModal.vue'
 
@@ -92,11 +86,11 @@ const showHouseholdInUserMenu = computed(
 )
 
 const navItems = [
-  { to: '/dashboard', label: 'Dashboard', iconImg: iconDashboard },
-  { to: '/monthly', label: 'Plano Mensal', iconImg: iconMonthly, iconClass: 'sidebar-nav-icon-lg' },
-  { to: '/accounts', label: 'Contas', iconSvg: true, iconClass: '' },
-  { to: '/objectives', label: 'Objetivos', iconImg: iconObjectives, iconClass: 'sidebar-nav-icon-lg sidebar-nav-icon-objectives' },
-  { to: '/reports', label: 'Relatórios', iconImg: iconReports, iconClass: 'sidebar-nav-icon-lg sidebar-nav-icon-reports' },
+  { to: '/dashboard', label: 'Dashboard' },
+  { to: '/monthly', label: 'Plano Mensal' },
+  { to: '/accounts', label: 'Contas' },
+  { to: '/objectives', label: 'Objetivos' },
+  { to: '/reports', label: 'Relatórios' },
 ]
 
 const movimentsOpen = ref(false)
@@ -108,9 +102,6 @@ const movimentsSubItems = [
   { to: '/transactions?tab=recurring', label: 'Recorrentes', tabKey: 'recurring' },
 ]
 
-function toggleMoviments() {
-  movimentsOpen.value = !movimentsOpen.value
-}
 
 function isMovimentsSubActive(tabKey: string) {
   if (!route.path.startsWith('/transactions')) return false
@@ -254,8 +245,7 @@ function isActive(path: string) {
                   <!-- Objetivos -->
                   <svg v-else-if="item.to === '/objectives'" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/><line x1="22" x2="12" y1="2" y2="12"/></svg>
                   <!-- Relatórios -->
-                  <svg v-else-if="item.to === '/reports'" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" x2="8" y1="13" y2="13"/><line x1="16" x2="8" y1="17" y2="17"/><line x1="10" x2="8" y1="9" y2="9"/></svg>
-                  <img v-else :src="item.iconImg" alt="" class="sidebar-nav-icon" :class="item.iconClass" />
+                  <svg v-else xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" x2="8" y1="13" y2="13"/><line x1="16" x2="8" y1="17" y2="17"/><line x1="10" x2="8" y1="9" y2="9"/></svg>
                 </span>
                 <span class="sidebar-label">{{ item.label }}</span>
               </RouterLink>

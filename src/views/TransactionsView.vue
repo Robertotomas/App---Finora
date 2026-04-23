@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useTransactionsStore } from '@/stores/transactions'
 import { useRecurringTransactionsStore } from '@/stores/recurringTransactions'
@@ -12,7 +12,6 @@ import TransactionFormModal from '@/components/TransactionFormModal.vue'
 import RecurringFormModal from '@/components/RecurringFormModal.vue'
 import RemoveRecurringModal from '@/components/RemoveRecurringModal.vue'
 import ConfirmDeleteModal from '@/components/ConfirmDeleteModal.vue'
-import MonthYearNavigator from '@/components/MonthYearNavigator.vue'
 import BaseModal from '@/components/BaseModal.vue'
 import type { Transaction, CreateTransactionRequest } from '@/types/transaction'
 import type { RecurringTransaction, CreateRecurringTransactionRequest } from '@/types/recurringTransaction'
@@ -33,12 +32,13 @@ const router = useRouter()
 const routeRef = useRoute()
 
 const tabFromQuery = routeRef.query.tab as string | undefined
-const initialTab = tabFromQuery === 'recurring' ? 'recurring' : 'transactions'
-const activeTab = ref<'transactions' | 'recurring'>(initialTab)
+const initialTab = tabFromQuery === 'recurring' ? 'recurring' : tabFromQuery === 'transactions' ? 'transactions' : 'summary'
+const activeTab = ref<'summary' | 'transactions' | 'recurring'>(initialTab)
 
 watch(() => routeRef.query.tab, (tab) => {
   if (tab === 'recurring') activeTab.value = 'recurring'
-  else if (tab === 'transactions' || !tab) activeTab.value = 'transactions'
+  else if (tab === 'transactions') activeTab.value = 'transactions'
+  else activeTab.value = 'summary'
 })
 
 const createModalOpen = ref(false)
@@ -61,37 +61,11 @@ const filterFrom = ref('')
 const filterTo = ref('')
 
 const MONTH_NAMES = ['', 'Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
-const TRANSACTION_MONTH_NAMES = [
-  '',
-  'Janeiro',
-  'Fevereiro',
-  'Março',
-  'Abril',
-  'Maio',
-  'Junho',
-  'Julho',
-  'Agosto',
-  'Setembro',
-  'Outubro',
-  'Novembro',
-  'Dezembro',
-]
 const now = new Date()
-const filterMonth = ref<number>(now.getMonth() + 1)
-const filterYear = ref<number>(now.getFullYear())
-
-const yearOptions = computed(() => {
-  const y = now.getFullYear()
-  return [y, y - 1, y - 2, y - 3]
-})
 
 /** 1.º dia do mês do filtro: o limite Free aplica-se ao mês da data da transação, não ao mês do calendário “hoje”. */
 const defaultDateForNewTransaction = computed(() => {
-  if (filterMonth.value >= 1 && filterMonth.value <= 12) {
-    const y = filterYear.value
-    const m = String(filterMonth.value).padStart(2, '0')
-    return `${y}-${m}-01`
-  }
+  if (filterFrom.value) return filterFrom.value
   return undefined
 })
 
@@ -118,6 +92,502 @@ const accountsForEditModal = computed(() => {
   return accountsStore.accounts.filter(
     (a) => a.isActiveForPlan !== false || a.id === tx.accountId
   )
+})
+
+/* ── Summary tab state ── */
+const summaryDateFrom = ref('')
+const summaryDateTo = ref('')
+const summaryFilterType = ref<'' | 'income' | 'expense'>('')
+const summaryFilterCategory = ref<'' | string>('')
+const summaryFilterAccount = ref('')
+const summarySearch = ref('')
+const summaryTransactions = ref<Transaction[]>([])
+const summaryLoading = ref(false)
+
+// Init default: last 30 days
+;(() => {
+  const end = new Date()
+  const start = new Date()
+  start.setDate(start.getDate() - 30)
+  summaryDateFrom.value = start.toISOString().slice(0, 10)
+  summaryDateTo.value = end.toISOString().slice(0, 10)
+})()
+
+/* ── Date Range Picker ── */
+const datePickerOpen = ref(false)
+const datePickerRef = ref<HTMLElement | null>(null)
+const PICKER_MONTH_NAMES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
+const PICKER_WEEKDAYS = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom']
+
+// Left calendar state (for "from")
+const pickerLeftYear = ref(new Date().getFullYear())
+const pickerLeftMonth = ref(new Date().getMonth()) // 0-based
+
+// Right calendar is always leftMonth + 1
+const pickerRightYear = computed(() => pickerLeftMonth.value === 11 ? pickerLeftYear.value + 1 : pickerLeftYear.value)
+const pickerRightMonth = computed(() => pickerLeftMonth.value === 11 ? 0 : pickerLeftMonth.value + 1)
+
+function initPickerFromValues() {
+  if (summaryDateFrom.value) {
+    const d = new Date(summaryDateFrom.value)
+    pickerLeftYear.value = d.getFullYear()
+    pickerLeftMonth.value = d.getMonth()
+  }
+}
+
+function pickerPrevMonth() {
+  if (pickerLeftMonth.value === 0) {
+    pickerLeftMonth.value = 11
+    pickerLeftYear.value--
+  } else {
+    pickerLeftMonth.value--
+  }
+}
+
+function pickerNextMonth() {
+  if (pickerLeftMonth.value === 11) {
+    pickerLeftMonth.value = 0
+    pickerLeftYear.value++
+  } else {
+    pickerLeftMonth.value++
+  }
+}
+
+function calendarDays(year: number, month: number): (number | null)[] {
+  const firstDay = new Date(year, month, 1).getDay()
+  // Convert Sunday=0 to Monday-based: Mon=0 ... Sun=6
+  const startOffset = firstDay === 0 ? 6 : firstDay - 1
+  const daysInMonth = new Date(year, month + 1, 0).getDate()
+  const cells: (number | null)[] = []
+  for (let i = 0; i < startOffset; i++) cells.push(null)
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d)
+  return cells
+}
+
+const leftDays = computed(() => calendarDays(pickerLeftYear.value, pickerLeftMonth.value))
+const rightDays = computed(() => calendarDays(pickerRightYear.value, pickerRightMonth.value))
+
+function toDateStr(y: number, m: number, d: number): string {
+  return `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+}
+
+function isInRange(y: number, m: number, d: number): boolean {
+  if (!summaryDateFrom.value || !summaryDateTo.value) return false
+  const ds = toDateStr(y, m, d)
+  return ds >= summaryDateFrom.value && ds <= summaryDateTo.value
+}
+
+function isStart(y: number, m: number, d: number): boolean {
+  return toDateStr(y, m, d) === summaryDateFrom.value
+}
+
+function isEnd(y: number, m: number, d: number): boolean {
+  return toDateStr(y, m, d) === summaryDateTo.value
+}
+
+// Selection state: first click sets "from", second click sets "to"
+const pickerSelectStep = ref<'from' | 'to'>('from')
+
+function toggleDatePicker() {
+  datePickerOpen.value = !datePickerOpen.value
+  if (datePickerOpen.value) {
+    initPickerFromValues()
+    if (!summaryDateTo.value) pickerSelectStep.value = 'to'
+    else pickerSelectStep.value = 'from'
+  }
+}
+
+const activePreset = ref<string>('30d')
+
+function applyPreset(preset: string) {
+  const today = new Date()
+  const toStr = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  activePreset.value = preset
+  summaryDateTo.value = toStr(today)
+
+  if (preset === 'month') {
+    summaryDateFrom.value = toStr(new Date(today.getFullYear(), today.getMonth(), 1))
+  } else if (preset === '30d') {
+    const d = new Date(); d.setDate(d.getDate() - 30)
+    summaryDateFrom.value = toStr(d)
+  } else if (preset === '3m') {
+    const d = new Date(); d.setMonth(d.getMonth() - 3)
+    summaryDateFrom.value = toStr(d)
+  } else if (preset === 'year') {
+    summaryDateFrom.value = toStr(new Date(today.getFullYear(), 0, 1))
+  }
+
+  initPickerFromValues()
+  pickerSelectStep.value = 'from'
+  datePickerOpen.value = false
+}
+
+// Clear preset when user picks custom dates
+function pickDay(y: number, m: number, d: number) {
+  const ds = toDateStr(y, m, d)
+  activePreset.value = ''
+  if (pickerSelectStep.value === 'from') {
+    summaryDateFrom.value = ds
+    summaryDateTo.value = ''
+    pickerSelectStep.value = 'to'
+  } else {
+    if (ds < summaryDateFrom.value) {
+      summaryDateFrom.value = ds
+      summaryDateTo.value = ''
+      pickerSelectStep.value = 'to'
+    } else {
+      summaryDateTo.value = ds
+      pickerSelectStep.value = 'from'
+      datePickerOpen.value = false
+    }
+  }
+}
+
+const datePickerLabel = computed(() => {
+  if (!summaryDateFrom.value && !summaryDateTo.value) return 'Selecionar período'
+  const fmt = (s: string) => {
+    const d = new Date(s)
+    return d.toLocaleDateString('pt-PT', { day: '2-digit', month: 'short', year: 'numeric' })
+  }
+  if (summaryDateFrom.value && summaryDateTo.value) return `${fmt(summaryDateFrom.value)} – ${fmt(summaryDateTo.value)}`
+  if (summaryDateFrom.value) return `${fmt(summaryDateFrom.value)} – ...`
+  return 'Selecionar período'
+})
+
+function onDatePickerOutsideClick(e: MouseEvent) {
+  if (!datePickerOpen.value || !datePickerRef.value) return
+  if (!datePickerRef.value.contains(e.target as Node)) {
+    datePickerOpen.value = false
+  }
+}
+
+/* ── Transactions tab date range picker ── */
+const txDatePickerOpen = ref(false)
+const txDatePickerRef = ref<HTMLElement | null>(null)
+const txPickerLeftYear = ref(new Date().getFullYear())
+const txPickerLeftMonth = ref(new Date().getMonth())
+const txPickerRightYear = computed(() => txPickerLeftMonth.value === 11 ? txPickerLeftYear.value + 1 : txPickerLeftYear.value)
+const txPickerRightMonth = computed(() => txPickerLeftMonth.value === 11 ? 0 : txPickerLeftMonth.value + 1)
+const txPickerSelectStep = ref<'from' | 'to'>('from')
+const txActivePreset = ref<string>('month')
+
+const txLeftDays = computed(() => calendarDays(txPickerLeftYear.value, txPickerLeftMonth.value))
+const txRightDays = computed(() => calendarDays(txPickerRightYear.value, txPickerRightMonth.value))
+
+// Init transactions filter to current month
+;(() => {
+  const t = new Date()
+  const y = t.getFullYear()
+  const m = t.getMonth()
+  filterFrom.value = `${y}-${String(m + 1).padStart(2, '0')}-01`
+  const last = new Date(y, m + 1, 0)
+  filterTo.value = `${y}-${String(m + 1).padStart(2, '0')}-${String(last.getDate()).padStart(2, '0')}`
+})()
+
+function txInitPickerFromValues() {
+  if (filterFrom.value) {
+    const d = new Date(filterFrom.value + 'T00:00:00')
+    txPickerLeftYear.value = d.getFullYear()
+    txPickerLeftMonth.value = d.getMonth()
+  }
+}
+
+function txPickerPrevMonth() {
+  if (txPickerLeftMonth.value === 0) { txPickerLeftMonth.value = 11; txPickerLeftYear.value-- }
+  else txPickerLeftMonth.value--
+}
+
+function txPickerNextMonth() {
+  if (txPickerLeftMonth.value === 11) { txPickerLeftMonth.value = 0; txPickerLeftYear.value++ }
+  else txPickerLeftMonth.value++
+}
+
+function txIsInRange(y: number, m: number, d: number): boolean {
+  if (!filterFrom.value || !filterTo.value) return false
+  const ds = toDateStr(y, m, d)
+  return ds >= filterFrom.value && ds <= filterTo.value
+}
+function txIsStart(y: number, m: number, d: number): boolean { return toDateStr(y, m, d) === filterFrom.value }
+function txIsEnd(y: number, m: number, d: number): boolean { return toDateStr(y, m, d) === filterTo.value }
+
+function txPickDay(y: number, m: number, d: number) {
+  const ds = toDateStr(y, m, d)
+  txActivePreset.value = ''
+  if (txPickerSelectStep.value === 'from') {
+    filterFrom.value = ds
+    filterTo.value = ''
+    txPickerSelectStep.value = 'to'
+  } else {
+    if (ds < filterFrom.value) {
+      filterFrom.value = ds
+      filterTo.value = ''
+      txPickerSelectStep.value = 'to'
+    } else {
+      filterTo.value = ds
+      txPickerSelectStep.value = 'from'
+      txDatePickerOpen.value = false
+    }
+  }
+}
+
+function txApplyPreset(preset: string) {
+  const today = new Date()
+  const toStr = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  txActivePreset.value = preset
+  filterTo.value = toStr(today)
+
+  if (preset === 'month') {
+    filterFrom.value = toStr(new Date(today.getFullYear(), today.getMonth(), 1))
+  } else if (preset === '30d') {
+    const d = new Date(); d.setDate(d.getDate() - 30)
+    filterFrom.value = toStr(d)
+  } else if (preset === '3m') {
+    const d = new Date(); d.setMonth(d.getMonth() - 3)
+    filterFrom.value = toStr(d)
+  } else if (preset === 'year') {
+    filterFrom.value = toStr(new Date(today.getFullYear(), 0, 1))
+  }
+
+  txInitPickerFromValues()
+  txPickerSelectStep.value = 'from'
+  txDatePickerOpen.value = false
+}
+
+function toggleTxDatePicker() {
+  txDatePickerOpen.value = !txDatePickerOpen.value
+  if (txDatePickerOpen.value) {
+    txInitPickerFromValues()
+    if (!filterTo.value) txPickerSelectStep.value = 'to'
+    else txPickerSelectStep.value = 'from'
+  }
+}
+
+const txDatePickerLabel = computed(() => {
+  if (!filterFrom.value && !filterTo.value) return 'Selecionar período'
+  const fmt = (s: string) => {
+    const d = new Date(s + 'T00:00:00')
+    return d.toLocaleDateString('pt-PT', { day: '2-digit', month: 'short', year: 'numeric' })
+  }
+  if (filterFrom.value && filterTo.value) return `${fmt(filterFrom.value)} – ${fmt(filterTo.value)}`
+  if (filterFrom.value) return `${fmt(filterFrom.value)} – ...`
+  return 'Selecionar período'
+})
+
+function onTxDatePickerOutsideClick(e: MouseEvent) {
+  if (!txDatePickerOpen.value || !txDatePickerRef.value) return
+  if (!txDatePickerRef.value.contains(e.target as Node)) txDatePickerOpen.value = false
+}
+
+onMounted(() => {
+  document.addEventListener('click', onDatePickerOutsideClick, true)
+  document.addEventListener('click', onTxDatePickerOutsideClick, true)
+})
+onUnmounted(() => {
+  document.removeEventListener('click', onDatePickerOutsideClick, true)
+  document.removeEventListener('click', onTxDatePickerOutsideClick, true)
+})
+
+async function fetchSummaryTransactions() {
+  summaryLoading.value = true
+  try {
+    const params: { from?: string; to?: string; accountId?: string } = {}
+    if (summaryDateFrom.value) params.from = summaryDateFrom.value
+    if (summaryDateTo.value) params.to = summaryDateTo.value
+    if (summaryFilterAccount.value) params.accountId = summaryFilterAccount.value
+    const [result] = await Promise.all([
+      transactionsStore.fetchTransactions(params),
+      recurringStore.fetchRecurring()
+    ])
+    const regular: Transaction[] = result ?? []
+
+    // Expand recurring transactions into virtual entries for each month in range
+    // Use YYYY-MM string comparison to avoid timezone issues
+    const fromYM = summaryDateFrom.value ? summaryDateFrom.value.slice(0, 7) : null  // "2026-04"
+    const toYM = summaryDateTo.value ? summaryDateTo.value.slice(0, 7) : null
+    const virtual: Transaction[] = []
+    for (const r of recurringStore.recurring) {
+      if (summaryFilterAccount.value && r.accountId !== summaryFilterAccount.value) continue
+      let y = r.startYear
+      let m = r.startMonth
+      const endY = r.endYear ?? new Date().getFullYear()
+      const endM = r.endMonth ?? new Date().getMonth() + 1
+      while (y < endY || (y === endY && m <= endM)) {
+        const ym = `${y}-${String(m).padStart(2, '0')}`
+        const inRange = (!fromYM || ym >= fromYM) && (!toYM || ym <= toYM)
+        if (inRange) {
+          virtual.push({
+            id: `recurring-${r.id}-${y}-${m}`,
+            accountId: r.accountId,
+            householdId: r.householdId,
+            type: r.type,
+            category: r.category,
+            amount: r.amount,
+            description: r.description ?? '',
+            date: `${y}-${String(m).padStart(2, '0')}-01`,
+            splits: []
+          })
+        }
+        m++
+        if (m > 12) { m = 1; y++ }
+      }
+    }
+    summaryTransactions.value = [...regular, ...virtual]
+  } catch { /* handled */ } finally {
+    summaryLoading.value = false
+  }
+}
+
+const summaryFiltered = computed(() => {
+  let list = [...summaryTransactions.value]
+  if (summaryFilterType.value === 'income') list = list.filter(t => t.type === TransactionType.Income)
+  else if (summaryFilterType.value === 'expense') list = list.filter(t => t.type === TransactionType.Expense)
+  if (summaryFilterCategory.value) list = list.filter(t => String(t.category) === summaryFilterCategory.value)
+  if (summarySearch.value) {
+    const q = summarySearch.value.toLowerCase()
+    list = list.filter(t => (t.description || '').toLowerCase().includes(q) || (TRANSACTION_CATEGORY_LABELS[t.category] || '').toLowerCase().includes(q))
+  }
+  list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+  return list
+})
+
+const summaryTotalIncome = computed(() => summaryFiltered.value.filter(t => t.type === TransactionType.Income).reduce((s, t) => s + t.amount, 0))
+const summaryTotalExpenses = computed(() => summaryFiltered.value.filter(t => t.type === TransactionType.Expense).reduce((s, t) => s + t.amount, 0))
+const summaryBalance = computed(() => summaryTotalIncome.value - summaryTotalExpenses.value)
+
+const summaryExpensesByCategory = computed(() => {
+  const map = new Map<number, { name: string; total: number }>()
+  summaryFiltered.value.filter(t => t.type === TransactionType.Expense).forEach(t => {
+    const existing = map.get(t.category)
+    if (existing) existing.total += t.amount
+    else map.set(t.category, { name: TRANSACTION_CATEGORY_LABELS[t.category] || 'Outro', total: t.amount })
+  })
+  return [...map.entries()].map(([cat, v]) => ({ category: cat, name: v.name, total: v.total })).sort((a, b) => b.total - a.total)
+})
+
+const summaryIncomeByCategory = computed(() => {
+  const map = new Map<number, { name: string; total: number }>()
+  summaryFiltered.value.filter(t => t.type === TransactionType.Income).forEach(t => {
+    const existing = map.get(t.category)
+    if (existing) existing.total += t.amount
+    else map.set(t.category, { name: TRANSACTION_CATEGORY_LABELS[t.category] || 'Outro', total: t.amount })
+  })
+  return [...map.entries()].map(([cat, v]) => ({ category: cat, name: v.name, total: v.total })).sort((a, b) => b.total - a.total)
+})
+
+
+/* ── Sankey diagram computeds ── */
+const sankeyWidth = 200
+const sankeyNodeGap = 18
+const sankeyMinHeight = 28
+
+interface SankeyNode { name: string; total: number; color: string; height: number; y: number; category: number }
+interface SankeyLink { path: string; color: string; thickness: number }
+
+// Dynamic height based on how many nodes we have
+const sankeyHeight = computed(() => {
+  const maxNodes = Math.max(summaryIncomeByCategory.value.length, summaryExpensesByCategory.value.length, 1)
+  return Math.max(280, maxNodes * (sankeyMinHeight + sankeyNodeGap) + 40)
+})
+
+function buildSankeyNodes(items: { category: number; name: string; total: number }[], scaleTotal: number, totalHeight: number): SankeyNode[] {
+  if (items.length === 0) return []
+  const usable = totalHeight - (items.length - 1) * sankeyNodeGap
+  const itemsTotal = items.reduce((s, it) => s + it.total, 0)
+  const ratio = scaleTotal > 0 ? itemsTotal / scaleTotal : 1
+  const targetH = usable * ratio
+  const nodes: SankeyNode[] = items.map(item => ({
+    ...item,
+    color: categoryColors[item.category] || '#94a3b8',
+    height: Math.max(sankeyMinHeight, (item.total / itemsTotal) * targetH),
+    y: 0,
+  }))
+  let yy = 0
+  nodes.forEach(n => { n.y = yy; yy += n.height + sankeyNodeGap })
+  // Center vertically
+  const totalUsed = yy - sankeyNodeGap
+  const offset = (totalHeight - totalUsed) / 2
+  nodes.forEach(n => { n.y += offset })
+  return nodes
+}
+
+// Income fills the full height; expenses scale proportionally to income
+const sankeyIncomeNodes = computed(() => buildSankeyNodes(summaryIncomeByCategory.value, summaryTotalIncome.value, sankeyHeight.value))
+const sankeyExpenseNodes = computed(() => buildSankeyNodes(summaryExpensesByCategory.value, summaryTotalIncome.value, sankeyHeight.value))
+
+const sankeyCenterHeight = computed(() => {
+  const incomeH = sankeyIncomeNodes.value.reduce((s, n) => s + n.height, 0) + Math.max(0, sankeyIncomeNodes.value.length - 1) * sankeyNodeGap
+  return Math.max(40, incomeH)
+})
+
+function makeSankeyPath(srcY: number, srcH: number, dstY: number, dstH: number, width: number): string {
+  const x0 = 0
+  const x1 = width
+  const cx = width * 0.5
+  return `M${x0},${srcY} C${cx},${srcY} ${cx},${dstY} ${x1},${dstY} L${x1},${dstY + dstH} C${cx},${dstY + dstH} ${cx},${srcY + srcH} ${x0},${srcY + srcH} Z`
+}
+
+function hexToRgba(hex: string, alpha: number): string {
+  const r = parseInt(hex.slice(1, 3), 16)
+  const g = parseInt(hex.slice(3, 5), 16)
+  const b = parseInt(hex.slice(5, 7), 16)
+  return `rgba(${r},${g},${b},${alpha})`
+}
+
+const sankeyIncomeLinks = computed<SankeyLink[]>(() => {
+  const nodes = sankeyIncomeNodes.value
+  const centerH = sankeyCenterHeight.value
+  const h = sankeyHeight.value
+  const centerTop = (h - centerH) / 2
+  if (nodes.length === 0) return []
+  const total = nodes.reduce((s, n) => s + n.height, 0)
+  let destY = centerTop
+  return nodes.map(n => {
+    const dstH = (n.height / total) * centerH
+    const link = { path: makeSankeyPath(n.y, n.height, destY, dstH, sankeyWidth), color: hexToRgba(n.color, 0.35), thickness: n.height }
+    destY += dstH
+    return link
+  })
+})
+
+const sankeyExpenseLinksRight = computed<SankeyLink[]>(() => {
+  const nodes = sankeyExpenseNodes.value
+  const centerH = sankeyCenterHeight.value
+  const h = sankeyHeight.value
+  const centerTop = (h - centerH) / 2
+  if (nodes.length === 0) return []
+  const expenseRatio = summaryTotalIncome.value > 0 ? summaryTotalExpenses.value / summaryTotalIncome.value : 1
+  const expenseCenterH = centerH * Math.min(1, expenseRatio)
+  const nodesTotal = nodes.reduce((s, n) => s + n.height, 0)
+  let srcY = centerTop
+  return nodes.map(n => {
+    const srcH = nodesTotal > 0 ? (n.height / nodesTotal) * expenseCenterH : expenseCenterH / nodes.length
+    const link = { path: makeSankeyPath(srcY, srcH, n.y, n.height, sankeyWidth), color: hexToRgba(n.color, 0.35), thickness: n.height }
+    srcY += srcH
+    return link
+  })
+})
+
+function formatCurrencySummary(value: number): string {
+  return new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 }).format(value)
+}
+
+function accountName(accountId: string): string {
+  return accountsStore.accounts.find(a => a.id === accountId)?.name ?? ''
+}
+
+// Category colors for the bars
+const categoryColors: Record<number, string> = {
+  0: '#059669', 1: '#10b981', 2: '#0ea5e9', 3: '#8b5cf6', 4: '#6366f1',
+  10: '#ef4444', 11: '#f97316', 12: '#eab308', 13: '#84cc16', 14: '#ec4899',
+  15: '#a855f7', 16: '#f43f5e', 17: '#14b8a6', 99: '#94a3b8'
+}
+
+watch([summaryDateFrom, summaryDateTo, summaryFilterAccount], () => {
+  if (activeTab.value === 'summary') fetchSummaryTransactions()
+})
+
+watch(activeTab, (tab) => {
+  if (tab === 'summary' && summaryTransactions.value.length === 0) fetchSummaryTransactions()
 })
 
 const accountsForRecurringCreate = computed(() =>
@@ -164,6 +634,28 @@ function nextPage() {
   if (canNextPage.value) page.value++
 }
 
+function goToPage(p: number) {
+  page.value = p
+}
+
+const visiblePages = computed(() => {
+  const total = totalPages.value
+  const current = page.value
+  const pages: (number | '...')[] = []
+  if (total <= 7) {
+    for (let i = 1; i <= total; i++) pages.push(i)
+  } else {
+    pages.push(1)
+    if (current > 3) pages.push('...')
+    const start = Math.max(2, current - 1)
+    const end = Math.min(total - 1, current + 1)
+    for (let i = start; i <= end; i++) pages.push(i)
+    if (current < total - 2) pages.push('...')
+    pages.push(total)
+  }
+  return pages
+})
+
 async function loadMembers() {
   membersLoading.value = true
   try {
@@ -177,11 +669,6 @@ async function loadMembers() {
 }
 
 onMounted(async () => {
-  const range = getDateRangeFromMonth()
-  if (range) {
-    filterFrom.value = range.from
-    filterTo.value = range.to
-  }
   try {
     await householdStore.fetchHousehold()
     if (householdStore.household) {
@@ -196,28 +683,11 @@ onMounted(async () => {
   }
 })
 
-function getDateRangeFromMonth(): { from: string; to: string } | null {
-  if (filterMonth.value < 1 || filterMonth.value > 12) return null
-  const y = filterYear.value
-  const m = filterMonth.value
-  const firstDay = `${y}-${String(m).padStart(2, '0')}-01`
-  const lastDate = new Date(y, m, 0)
-  const toStr = `${lastDate.getFullYear()}-${String(lastDate.getMonth() + 1).padStart(2, '0')}-${String(lastDate.getDate()).padStart(2, '0')}`
-  return { from: firstDay, to: toStr }
-}
-
 async function fetchWithFilters() {
   const params: { accountId?: string; from?: string; to?: string } = {}
   if (filterAccountId.value) params.accountId = filterAccountId.value
-
-  const monthRange = getDateRangeFromMonth()
-  if (monthRange) {
-    params.from = monthRange.from
-    params.to = monthRange.to
-  } else if (filterFrom.value || filterTo.value) {
-    if (filterFrom.value) params.from = filterFrom.value
-    if (filterTo.value) params.to = filterTo.value
-  }
+  if (filterFrom.value) params.from = filterFrom.value
+  if (filterTo.value) params.to = filterTo.value
 
   try {
     await transactionsStore.fetchTransactions(params)
@@ -227,18 +697,7 @@ async function fetchWithFilters() {
   }
 }
 
-watch([filterMonth, filterYear], () => {
-  const range = getDateRangeFromMonth()
-  if (range) {
-    filterFrom.value = range.from
-    filterTo.value = range.to
-  } else {
-    filterFrom.value = ''
-    filterTo.value = ''
-  }
-})
-
-watch([filterAccountId, filterFrom, filterTo, filterMonth, filterYear], () => {
+watch([filterAccountId, filterFrom, filterTo], () => {
   fetchWithFilters()
 })
 
@@ -601,8 +1060,8 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
 <template>
   <div class="transactions-view">
     <div class="page-header">
-      <h1>{{ activeTab === 'recurring' ? 'Transações Recorrentes' : 'Transações' }}</h1>
-      <p class="subtitle">{{ activeTab === 'recurring' ? 'Gerir transações automáticas' : 'Gerir receitas e despesas' }}</p>
+      <h1>{{ activeTab === 'recurring' ? 'Transações Recorrentes' : activeTab === 'summary' ? 'Resumo de Movimentos' : 'Transações' }}</h1>
+      <p class="subtitle">{{ activeTab === 'recurring' ? 'Gerir transações automáticas' : activeTab === 'summary' ? 'Visão geral das receitas e despesas' : 'Gerir receitas e despesas' }}</p>
     </div>
 
     <div v-if="!householdStore.household && !householdStore.loading" class="empty-state">
@@ -627,6 +1086,241 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
         {{ recurringStore.error }}
       </div>
 
+      <!-- ═══ SUMMARY TAB ═══ -->
+      <div v-show="activeTab === 'summary'" class="tab-content">
+        <!-- Filters -->
+        <div class="summary-filters">
+          <div ref="datePickerRef" class="date-range-picker">
+            <button type="button" class="date-range-btn" @click.stop="toggleDatePicker">
+              <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
+              <span>{{ datePickerLabel }}</span>
+              <svg class="date-range-chevron" :class="{ open: datePickerOpen }" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+            </button>
+            <Transition name="panel">
+              <div v-show="datePickerOpen" class="date-range-panel" @click.stop>
+                <div class="dr-presets">
+                  <button type="button" class="dr-preset-btn" :class="{ active: activePreset === 'month' }" @click="applyPreset('month')">Este mês</button>
+                  <button type="button" class="dr-preset-btn" :class="{ active: activePreset === '30d' }" @click="applyPreset('30d')">30 dias</button>
+                  <button type="button" class="dr-preset-btn" :class="{ active: activePreset === '3m' }" @click="applyPreset('3m')">3 meses</button>
+                  <button type="button" class="dr-preset-btn" :class="{ active: activePreset === 'year' }" @click="applyPreset('year')">Este ano</button>
+                </div>
+                <div class="date-range-calendars">
+                  <!-- Left calendar -->
+                  <div class="dr-calendar">
+                    <div class="dr-cal-header">
+                      <button type="button" class="dr-cal-nav" @click="pickerPrevMonth">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                      </button>
+                      <span class="dr-cal-title">{{ PICKER_MONTH_NAMES[pickerLeftMonth] }} {{ pickerLeftYear }}</span>
+                      <span style="width:28px"></span>
+                    </div>
+                    <div class="dr-cal-weekdays">
+                      <span v-for="wd in PICKER_WEEKDAYS" :key="wd">{{ wd }}</span>
+                    </div>
+                    <div class="dr-cal-grid">
+                      <button
+                        v-for="(d, i) in leftDays"
+                        :key="'l'+i"
+                        type="button"
+                        class="dr-day"
+                        :class="{
+                          empty: d === null,
+                          'in-range': d !== null && isInRange(pickerLeftYear, pickerLeftMonth, d),
+                          'is-start': d !== null && isStart(pickerLeftYear, pickerLeftMonth, d),
+                          'is-end': d !== null && isEnd(pickerLeftYear, pickerLeftMonth, d),
+                        }"
+                        :disabled="d === null"
+                        @click="d !== null && pickDay(pickerLeftYear, pickerLeftMonth, d)"
+                      >
+                        {{ d ?? '' }}
+                      </button>
+                    </div>
+                  </div>
+                  <!-- Right calendar -->
+                  <div class="dr-calendar">
+                    <div class="dr-cal-header">
+                      <span style="width:28px"></span>
+                      <span class="dr-cal-title">{{ PICKER_MONTH_NAMES[pickerRightMonth] }} {{ pickerRightYear }}</span>
+                      <button type="button" class="dr-cal-nav" @click="pickerNextMonth">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                      </button>
+                    </div>
+                    <div class="dr-cal-weekdays">
+                      <span v-for="wd in PICKER_WEEKDAYS" :key="wd">{{ wd }}</span>
+                    </div>
+                    <div class="dr-cal-grid">
+                      <button
+                        v-for="(d, i) in rightDays"
+                        :key="'r'+i"
+                        type="button"
+                        class="dr-day"
+                        :class="{
+                          empty: d === null,
+                          'in-range': d !== null && isInRange(pickerRightYear, pickerRightMonth, d),
+                          'is-start': d !== null && isStart(pickerRightYear, pickerRightMonth, d),
+                          'is-end': d !== null && isEnd(pickerRightYear, pickerRightMonth, d),
+                        }"
+                        :disabled="d === null"
+                        @click="d !== null && pickDay(pickerRightYear, pickerRightMonth, d)"
+                      >
+                        {{ d ?? '' }}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </Transition>
+          </div>
+          <select v-model="summaryFilterType" class="summary-select">
+            <option value="">Todos os tipos</option>
+            <option value="income">Receitas</option>
+            <option value="expense">Despesas</option>
+          </select>
+          <select v-model="summaryFilterCategory" class="summary-select">
+            <option value="">Todas as categorias</option>
+            <option v-for="cat in Object.entries(TRANSACTION_CATEGORY_LABELS)" :key="cat[0]" :value="cat[0]">{{ cat[1] }}</option>
+          </select>
+          <select v-model="summaryFilterAccount" class="summary-select">
+            <option value="">Todas as contas</option>
+            <option v-for="a in accountsStore.accounts" :key="a.id" :value="a.id">{{ a.name }}</option>
+          </select>
+          <div class="summary-search">
+            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" x2="16.65" y1="21" y2="16.65"/></svg>
+            <input v-model="summarySearch" type="text" placeholder="Pesquisar movimentos..." class="summary-search-input" />
+          </div>
+        </div>
+
+        <!-- Summary cards -->
+        <div class="summary-totals">
+          <div class="summary-total-card">
+            <span class="summary-total-label">Saldo</span>
+            <span class="summary-total-value" :class="summaryBalance >= 0 ? 'positive' : 'negative'">
+              {{ summaryBalance >= 0 ? '+' : '' }}{{ formatCurrencySummary(summaryBalance) }}
+            </span>
+          </div>
+          <div class="summary-total-card">
+            <span class="summary-total-label">Receitas</span>
+            <span class="summary-total-value positive">+{{ formatCurrencySummary(summaryTotalIncome) }}</span>
+          </div>
+          <div class="summary-total-card">
+            <span class="summary-total-label">Despesas</span>
+            <span class="summary-total-value negative">-{{ formatCurrencySummary(summaryTotalExpenses) }}</span>
+          </div>
+        </div>
+
+        <!-- Category breakdown chart -->
+        <div v-if="summaryFiltered.length > 0 && (summaryIncomeByCategory.length > 0 || summaryExpensesByCategory.length > 0)" class="sankey-section">
+          <div class="sankey-card">
+            <div class="sankey-container" :style="{ height: sankeyHeight + 'px' }">
+              <!-- Left: Income labels -->
+              <div class="sankey-col sankey-col-left">
+                <div
+                  v-for="(node, i) in sankeyIncomeNodes"
+                  :key="'il'+i"
+                  class="sankey-node"
+                  :style="{ height: node.height + 'px', top: node.y + 'px' }"
+                >
+                  <span class="sankey-node-label sankey-node-label-left">
+                    <span class="sankey-node-name">{{ node.name }}</span>
+                    <span class="sankey-node-amount">{{ formatCurrencySummary(node.total) }}</span>
+                  </span>
+                  <div class="sankey-node-bar" :style="{ background: node.color }"></div>
+                </div>
+              </div>
+
+              <!-- SVG paths: Income → Center -->
+              <svg class="sankey-svg" :viewBox="`0 0 ${sankeyWidth} ${sankeyHeight}`" preserveAspectRatio="none">
+                <path
+                  v-for="(link, i) in sankeyIncomeLinks"
+                  :key="'li'+i"
+                  :d="link.path"
+                  :fill="link.color"
+                  opacity="1"
+                />
+              </svg>
+
+              <!-- Center: Total block -->
+              <div class="sankey-col sankey-col-center">
+                <div class="sankey-center-node" :style="{ height: sankeyCenterHeight + 'px' }">
+                  <div class="sankey-center-bar"></div>
+                  <span class="sankey-center-label">
+                    <span class="sankey-center-amount">{{ formatCurrencySummary(summaryTotalIncome) }}</span>
+                    <span class="sankey-center-sub">Total receitas</span>
+                  </span>
+                </div>
+              </div>
+
+              <!-- SVG paths: Center → Expenses -->
+              <svg class="sankey-svg" :viewBox="`0 0 ${sankeyWidth} ${sankeyHeight}`" preserveAspectRatio="none">
+                <path
+                  v-for="(link, i) in sankeyExpenseLinksRight"
+                  :key="'re'+i"
+                  :d="link.path"
+                  :fill="link.color"
+                  opacity="1"
+                />
+              </svg>
+
+              <!-- Right: Expense labels -->
+              <div class="sankey-col sankey-col-right">
+                <div
+                  v-for="(node, i) in sankeyExpenseNodes"
+                  :key="'er'+i"
+                  class="sankey-node"
+                  :style="{ height: node.height + 'px', top: node.y + 'px' }"
+                >
+                  <div class="sankey-node-bar" :style="{ background: node.color }"></div>
+                  <span class="sankey-node-label sankey-node-label-right">
+                    <span class="sankey-node-name">{{ node.name }}</span>
+                    <span class="sankey-node-amount">{{ formatCurrencySummary(node.total) }}</span>
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Transactions table -->
+        <div v-if="summaryLoading" class="loading-state">
+          <div class="spinner"></div>
+          <p>A carregar...</p>
+        </div>
+        <div v-else-if="summaryFiltered.length > 0" class="summary-table-wrap">
+          <table class="summary-table">
+            <thead>
+              <tr>
+                <th>Data</th>
+                <th>Descrição</th>
+                <th>Categoria</th>
+                <th>Conta</th>
+                <th class="text-center">Valor</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="tx in summaryFiltered" :key="tx.id">
+                <td class="summary-td-date">{{ new Date(tx.date).toLocaleDateString('pt-PT', { day: '2-digit', month: 'short' }) }}</td>
+                <td class="summary-td-desc">{{ tx.description || TRANSACTION_CATEGORY_LABELS[tx.category] || '—' }}</td>
+                <td>
+                  <span class="summary-cat-badge" :style="{ background: (categoryColors[tx.category] || '#94a3b8') + '18', color: categoryColors[tx.category] || '#94a3b8' }">
+                    {{ TRANSACTION_CATEGORY_LABELS[tx.category] || 'Outro' }}
+                  </span>
+                </td>
+                <td class="summary-td-account">{{ accountName(tx.accountId) }}</td>
+                <td class="text-center">
+                  <span :class="tx.type === TransactionType.Income ? 'val-income' : 'val-expense'">
+                    {{ tx.type === TransactionType.Income ? '+' : '-' }}{{ formatCurrencySummary(tx.amount) }}
+                  </span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div v-else class="section-empty">
+          <p>Nenhum movimento encontrado para o período selecionado.</p>
+        </div>
+      </div>
+
+      <!-- ═══ TRANSACTIONS TAB ═══ -->
       <div v-show="activeTab === 'transactions'" class="tab-content">
       <div v-if="needsPrimarySelection" class="primary-inline-hint">
         <router-link :to="{ name: 'accounts' }" class="primary-inline-link">Escolhe a conta principal em Contas</router-link>
@@ -640,31 +1334,85 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
               {{ a.name }}
             </option>
           </select>
-          <MonthYearNavigator
-            v-model:month="filterMonth"
-            v-model:year="filterYear"
-            :years="yearOptions"
-            :month-names="TRANSACTION_MONTH_NAMES"
-            allow-all-months
-            all-months-in-year-title="Todos os meses"
-            all-months-in-year-button="Todos os meses"
-          />
-          <template v-if="filterMonth === 0">
-            <input
-              v-model="filterFrom"
-              type="date"
-              class="filter-input"
-              placeholder="De"
-              title="Data inicial"
-            />
-            <input
-              v-model="filterTo"
-              type="date"
-              class="filter-input"
-              placeholder="Até"
-              title="Data final"
-            />
-          </template>
+          <div ref="txDatePickerRef" class="date-range-picker">
+            <button type="button" class="date-range-btn" @click.stop="toggleTxDatePicker">
+              <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
+              <span>{{ txDatePickerLabel }}</span>
+              <svg class="date-range-chevron" :class="{ open: txDatePickerOpen }" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+            </button>
+            <Transition name="panel">
+              <div v-show="txDatePickerOpen" class="date-range-panel" @click.stop>
+                <div class="dr-presets">
+                  <button type="button" class="dr-preset-btn" :class="{ active: txActivePreset === 'month' }" @click="txApplyPreset('month')">Este mês</button>
+                  <button type="button" class="dr-preset-btn" :class="{ active: txActivePreset === '30d' }" @click="txApplyPreset('30d')">30 dias</button>
+                  <button type="button" class="dr-preset-btn" :class="{ active: txActivePreset === '3m' }" @click="txApplyPreset('3m')">3 meses</button>
+                  <button type="button" class="dr-preset-btn" :class="{ active: txActivePreset === 'year' }" @click="txApplyPreset('year')">Este ano</button>
+                </div>
+                <div class="date-range-calendars">
+                  <div class="dr-calendar">
+                    <div class="dr-cal-header">
+                      <button type="button" class="dr-cal-nav" @click="txPickerPrevMonth">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                      </button>
+                      <span class="dr-cal-title">{{ PICKER_MONTH_NAMES[txPickerLeftMonth] }} {{ txPickerLeftYear }}</span>
+                      <span style="width:28px"></span>
+                    </div>
+                    <div class="dr-cal-weekdays">
+                      <span v-for="wd in PICKER_WEEKDAYS" :key="wd">{{ wd }}</span>
+                    </div>
+                    <div class="dr-cal-grid">
+                      <button
+                        v-for="(d, i) in txLeftDays"
+                        :key="'tl'+i"
+                        type="button"
+                        class="dr-day"
+                        :class="{
+                          empty: d === null,
+                          'in-range': d !== null && txIsInRange(txPickerLeftYear, txPickerLeftMonth, d),
+                          'is-start': d !== null && txIsStart(txPickerLeftYear, txPickerLeftMonth, d),
+                          'is-end': d !== null && txIsEnd(txPickerLeftYear, txPickerLeftMonth, d),
+                        }"
+                        :disabled="d === null"
+                        @click="d !== null && txPickDay(txPickerLeftYear, txPickerLeftMonth, d)"
+                      >
+                        {{ d ?? '' }}
+                      </button>
+                    </div>
+                  </div>
+                  <div class="dr-calendar">
+                    <div class="dr-cal-header">
+                      <span style="width:28px"></span>
+                      <span class="dr-cal-title">{{ PICKER_MONTH_NAMES[txPickerRightMonth] }} {{ txPickerRightYear }}</span>
+                      <button type="button" class="dr-cal-nav" @click="txPickerNextMonth">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                      </button>
+                    </div>
+                    <div class="dr-cal-weekdays">
+                      <span v-for="wd in PICKER_WEEKDAYS" :key="wd">{{ wd }}</span>
+                    </div>
+                    <div class="dr-cal-grid">
+                      <button
+                        v-for="(d, i) in txRightDays"
+                        :key="'tr'+i"
+                        type="button"
+                        class="dr-day"
+                        :class="{
+                          empty: d === null,
+                          'in-range': d !== null && txIsInRange(txPickerRightYear, txPickerRightMonth, d),
+                          'is-start': d !== null && txIsStart(txPickerRightYear, txPickerRightMonth, d),
+                          'is-end': d !== null && txIsEnd(txPickerRightYear, txPickerRightMonth, d),
+                        }"
+                        :disabled="d === null"
+                        @click="d !== null && txPickDay(txPickerRightYear, txPickerRightMonth, d)"
+                      >
+                        {{ d ?? '' }}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </Transition>
+          </div>
         </div>
         <button type="button" class="btn-add" @click="openCreateModal">
           + Nova transação
@@ -732,24 +1480,15 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
         </table>
 
         <div v-if="totalPages > 1" class="pagination">
-          <button
-            type="button"
-            class="btn-page"
-            :disabled="!canPrevPage"
-            @click="prevPage"
-          >
-            Anterior
+          <button type="button" class="pg-arrow" :disabled="!canPrevPage" @click="prevPage" aria-label="Anterior">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
           </button>
-          <span class="page-info">
-            Página {{ page }} de {{ totalPages }}
-          </span>
-          <button
-            type="button"
-            class="btn-page"
-            :disabled="!canNextPage"
-            @click="nextPage"
-          >
-            Seguinte
+          <template v-for="(p, i) in visiblePages" :key="i">
+            <span v-if="p === '...'" class="pg-dots">...</span>
+            <button v-else type="button" class="pg-num" :class="{ active: p === page }" @click="goToPage(p)">{{ p }}</button>
+          </template>
+          <button type="button" class="pg-arrow" :disabled="!canNextPage" @click="nextPage" aria-label="Seguinte">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
           </button>
         </div>
       </div>
@@ -1259,36 +1998,681 @@ html.dark .tab.active {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 0.75rem;
+  gap: 0.25rem;
   padding: 0.875rem 1rem;
   border-top: 1px solid var(--color-border);
 }
 
-.btn-page {
-  padding: 0.375rem 0.875rem;
-  font-size: 0.8125rem;
-  font-weight: 500;
-  color: var(--color-text-muted);
+.pg-arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
   background: transparent;
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
+  color: var(--color-text-muted);
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  border-radius: 8px;
+  transition: background 0.15s ease, color 0.15s ease;
 }
 
-.btn-page:hover:not(:disabled) {
+.pg-arrow:hover:not(:disabled) {
   background: var(--color-table-row-hover);
   color: var(--color-text);
 }
 
-.btn-page:disabled {
-  opacity: 0.5;
+.pg-arrow:disabled {
+  opacity: 0.3;
   cursor: not-allowed;
+}
+
+.pg-num {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  height: 32px;
+  padding: 0 0.375rem;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  border-radius: 8px;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.pg-num:hover {
+  background: var(--color-table-row-hover);
+  color: var(--color-text);
+}
+
+.pg-num.active {
+  background: #166534;
+  color: #fff;
+  font-weight: 700;
+}
+
+html.dark .pg-num.active {
+  background: #4ade80;
+  color: #0a0a0a;
+}
+
+.pg-dots {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  height: 32px;
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+  user-select: none;
 }
 
 .page-info {
   font-size: 0.8125rem;
   font-weight: 500;
   color: var(--color-text-muted);
+}
+
+/* ═══ SUMMARY TAB ═══ */
+.summary-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.625rem;
+  margin-bottom: 1.25rem;
+}
+
+.date-range-picker {
+  position: relative;
+}
+
+.date-range-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 0.4375rem 0.75rem;
+  font-family: inherit;
+  font-size: 0.8125rem;
+  color: var(--color-text);
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+  white-space: nowrap;
+}
+
+.date-range-btn:hover {
+  border-color: #166534;
+}
+
+.date-range-btn svg:first-child {
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+}
+
+.date-range-chevron {
+  color: var(--color-text-muted);
+  transition: transform 0.2s ease;
+  flex-shrink: 0;
+}
+
+.date-range-chevron.open {
+  transform: rotate(180deg);
+}
+
+.date-range-panel {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  left: 0;
+  z-index: 60;
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  box-shadow: 0 12px 40px -8px rgba(15, 23, 42, 0.18);
+  padding: 1rem;
+}
+
+.dr-presets {
+  display: flex;
+  gap: 0.375rem;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.dr-preset-btn {
+  padding: 0.3rem 0.625rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-family: inherit;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+  white-space: nowrap;
+}
+
+.dr-preset-btn:hover {
+  border-color: #166534;
+  color: #166534;
+}
+
+.dr-preset-btn.active {
+  border-color: #166534;
+  background: rgba(22, 101, 52, 0.1);
+  color: #166534;
+}
+
+html.dark .dr-preset-btn.active {
+  border-color: #4ade80;
+  background: rgba(74, 222, 128, 0.12);
+  color: #4ade80;
+}
+
+html.dark .dr-preset-btn:hover {
+  border-color: #4ade80;
+  color: #4ade80;
+}
+
+.date-range-calendars {
+  display: flex;
+  gap: 1.25rem;
+}
+
+.dr-calendar {
+  width: 240px;
+}
+
+.dr-cal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+.dr-cal-title {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: var(--color-text);
+  text-align: center;
+}
+
+.dr-cal-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  border-radius: 6px;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.dr-cal-nav:hover {
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--color-text);
+}
+
+html.dark .dr-cal-nav:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.dr-cal-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0;
+  margin-bottom: 0.25rem;
+}
+
+.dr-cal-weekdays span {
+  text-align: center;
+  font-size: 0.625rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+  padding: 0.25rem 0;
+}
+
+.dr-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 1px;
+}
+
+.dr-day {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 32px;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--color-text);
+  cursor: pointer;
+  border-radius: 0;
+  transition: background 0.1s ease;
+}
+
+.dr-day.empty {
+  cursor: default;
+}
+
+.dr-day:not(.empty):hover {
+  background: rgba(22, 101, 52, 0.08);
+}
+
+.dr-day.in-range {
+  background: rgba(22, 101, 52, 0.08);
+}
+
+.dr-day.is-start,
+.dr-day.is-end {
+  background: #166534;
+  color: #fff;
+  font-weight: 700;
+}
+
+.dr-day.is-start {
+  border-radius: 6px 0 0 6px;
+}
+
+.dr-day.is-end {
+  border-radius: 0 6px 6px 0;
+}
+
+.dr-day.is-start.is-end {
+  border-radius: 6px;
+}
+
+html.dark .dr-day.in-range {
+  background: rgba(74, 222, 128, 0.1);
+}
+
+html.dark .dr-day.is-start,
+html.dark .dr-day.is-end {
+  background: #4ade80;
+  color: #0a0a0a;
+}
+
+.summary-select {
+  padding: 0.4375rem 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-bg-card);
+  font-family: inherit;
+  font-size: 0.8125rem;
+  color: var(--color-text);
+  cursor: pointer;
+  outline: none;
+}
+
+.summary-search {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-bg-card);
+  padding: 0.375rem 0.625rem;
+  color: var(--color-text-muted);
+  flex: 1;
+  min-width: 160px;
+}
+
+.summary-search-input {
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: 0.8125rem;
+  color: var(--color-text);
+  outline: none;
+  width: 100%;
+}
+
+.summary-search-input::placeholder {
+  color: var(--color-text-muted);
+}
+
+/* Summary cards */
+.summary-totals {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.summary-total-card {
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 1rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.summary-total-label {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--color-text-muted);
+}
+
+.summary-total-value {
+  font-size: 1.375rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.summary-total-value.positive { color: #059669; }
+.summary-total-value.negative { color: #dc2626; }
+html.dark .summary-total-value.positive { color: #4ade80; }
+html.dark .summary-total-value.negative { color: #f87171; }
+
+/* Category breakdown */
+/* ═══ Sankey Diagram ═══ */
+.sankey-section {
+  margin-bottom: 1.5rem;
+}
+
+.sankey-card {
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 1.5rem;
+}
+
+.sankey-container {
+  display: flex;
+  align-items: stretch;
+  position: relative;
+  gap: 0;
+}
+
+.sankey-col {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.sankey-col-left,
+.sankey-col-right {
+  width: 100px;
+}
+
+.sankey-col-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 80px;
+  flex-shrink: 0;
+}
+
+.sankey-svg {
+  flex: 1;
+  height: 100%;
+  min-width: 60px;
+}
+
+.sankey-node {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.sankey-col-left .sankey-node {
+  justify-content: flex-end;
+}
+
+.sankey-col-right .sankey-node {
+  justify-content: flex-start;
+}
+
+.sankey-node-bar {
+  width: 5px;
+  height: 100%;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.sankey-node-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  overflow: hidden;
+  flex-shrink: 1;
+  min-width: 0;
+}
+
+.sankey-node-label-left {
+  text-align: right;
+  align-items: flex-end;
+  order: -1;
+}
+
+.sankey-node-label-right {
+  text-align: left;
+  align-items: flex-start;
+}
+
+.sankey-node-name {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
+}
+
+.sankey-node-amount {
+  font-size: 0.625rem;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  line-height: 1.2;
+}
+
+.sankey-center-node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.sankey-center-bar {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 5px;
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(180deg, #059669 0%, #10b981 100%);
+}
+
+.sankey-center-label {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: var(--color-bg-card);
+  padding: 0.375rem 0.5rem;
+  border-radius: 6px;
+}
+
+.sankey-center-amount {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--color-text);
+  white-space: nowrap;
+}
+
+.sankey-center-sub {
+  font-size: 0.5625rem;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+/* Table */
+.summary-table-wrap {
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.summary-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+}
+
+.summary-table thead {
+  background: var(--color-bg, #f8fafc);
+}
+
+html.dark .summary-table thead {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.summary-table th {
+  padding: 0.75rem 1rem;
+  text-align: left;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-muted);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.summary-table td {
+  padding: 0.625rem 1rem;
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text);
+}
+
+.summary-table tr:last-child td {
+  border-bottom: none;
+}
+
+.summary-table tr:hover td {
+  background: var(--color-table-row-hover);
+}
+
+.summary-td-date {
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  width: 80px;
+}
+
+.summary-td-desc {
+  font-weight: 500;
+  max-width: 250px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.summary-td-account {
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+}
+
+.summary-cat-badge {
+  display: inline-block;
+  padding: 0.2rem 0.5rem;
+  border-radius: 6px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.text-right { text-align: right; }
+.text-center { text-align: center; }
+
+.summary-table th.text-center,
+.summary-table td.text-center {
+  text-align: center;
+  width: 130px;
+}
+
+.val-income {
+  color: #059669;
+  font-weight: 600;
+}
+
+.val-expense {
+  color: #dc2626;
+  font-weight: 600;
+}
+
+html.dark .val-income { color: #4ade80; }
+html.dark .val-expense { color: #f87171; }
+
+.section-empty {
+  text-align: center;
+  padding: 3rem;
+  color: var(--color-text-muted);
+}
+
+@media (max-width: 768px) {
+  .summary-filters {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .summary-totals {
+    grid-template-columns: 1fr;
+  }
+
+  .sankey-container {
+    height: auto;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .sankey-col-left,
+  .sankey-col-right {
+    position: static;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+  }
+
+  .sankey-node {
+    position: static;
+    height: auto !important;
+  }
+
+  .sankey-svg {
+    display: none;
+  }
+
+  .sankey-col-center {
+    width: 100%;
+  }
+
+  .summary-table-wrap {
+    overflow-x: auto;
+  }
 }
 </style>
