@@ -480,6 +480,9 @@ function onDropdownOutsideClick(e: MouseEvent) {
   if (sumTypeDropOpen.value && sumTypeDropRef.value && !sumTypeDropRef.value.contains(t)) sumTypeDropOpen.value = false
   if (sumCatDropOpen.value && sumCatDropRef.value && !sumCatDropRef.value.contains(t)) sumCatDropOpen.value = false
   if (sumAccDropOpen.value && sumAccDropRef.value && !sumAccDropRef.value.contains(t)) sumAccDropOpen.value = false
+  if (recTypeDropOpen.value && recTypeDropRef.value && !recTypeDropRef.value.contains(t)) recTypeDropOpen.value = false
+  if (recCatDropOpen.value && recCatDropRef.value && !recCatDropRef.value.contains(t)) recCatDropOpen.value = false
+  if (recAccDropOpen.value && recAccDropRef.value && !recAccDropRef.value.contains(t)) recAccDropOpen.value = false
 }
 
 onMounted(() => {
@@ -744,6 +747,68 @@ const activeRecurring = computed(() =>
     return false
   })
 )
+
+// Recurring tab filters
+const recFilterType = ref<'' | 'income' | 'expense'>('')
+const recFilterCategory = ref<string>('')
+const recFilterAccount = ref<string>('')
+
+const recTypeDropOpen = ref(false)
+const recCatDropOpen = ref(false)
+const recAccDropOpen = ref(false)
+const recTypeDropRef = ref<HTMLElement | null>(null)
+const recCatDropRef = ref<HTMLElement | null>(null)
+const recAccDropRef = ref<HTMLElement | null>(null)
+
+function toggleRecTypeDrop() { recTypeDropOpen.value = !recTypeDropOpen.value; recCatDropOpen.value = false; recAccDropOpen.value = false }
+function toggleRecCatDrop() { recCatDropOpen.value = !recCatDropOpen.value; recTypeDropOpen.value = false; recAccDropOpen.value = false }
+function toggleRecAccDrop() { recAccDropOpen.value = !recAccDropOpen.value; recTypeDropOpen.value = false; recCatDropOpen.value = false }
+
+function pickRecType(val: '' | 'income' | 'expense') { recFilterType.value = val; recTypeDropOpen.value = false }
+function pickRecCategory(val: string) { recFilterCategory.value = val; recCatDropOpen.value = false }
+function pickRecAccount(val: string) { recFilterAccount.value = val; recAccDropOpen.value = false }
+
+const recTypeLabel = computed(() => {
+  if (recFilterType.value === 'income') return 'Receita'
+  if (recFilterType.value === 'expense') return 'Despesa'
+  return 'Todos os tipos'
+})
+const recCategoryLabel = computed(() => {
+  if (recFilterCategory.value) return TRANSACTION_CATEGORY_LABELS[Number(recFilterCategory.value) as TransactionCategory] || 'Categoria'
+  return 'Todas as categorias'
+})
+const recAccountLabel = computed(() => {
+  if (recFilterAccount.value) return accountsStore.accounts.find(a => a.id === recFilterAccount.value)?.name || 'Conta'
+  return 'Todas as contas'
+})
+
+const recAvailableCategories = computed(() => {
+  let cats: TransactionCategory[]
+  if (recFilterType.value === 'income') cats = incomeCategories
+  else if (recFilterType.value === 'expense') cats = expenseCategories
+  else cats = [...incomeCategories, ...expenseCategories]
+  const result: Record<number, string> = {}
+  for (const c of cats) result[c] = TRANSACTION_CATEGORY_LABELS[c]
+  return result
+})
+
+watch(recFilterType, () => { recFilterCategory.value = '' })
+
+const filteredRecurring = computed(() => {
+  let list = activeRecurring.value
+  if (recFilterType.value) {
+    const typeVal = recFilterType.value === 'income' ? TransactionType.Income : TransactionType.Expense
+    list = list.filter(r => r.type === typeVal)
+  }
+  if (recFilterCategory.value) {
+    const catVal = Number(recFilterCategory.value)
+    list = list.filter(r => r.category === catVal)
+  }
+  if (recFilterAccount.value) {
+    list = list.filter(r => r.accountId === recFilterAccount.value)
+  }
+  return list
+})
 
 const totalPages = computed(() =>
   Math.max(1, Math.ceil(filteredTransactions.value.length / pageSize))
@@ -1695,8 +1760,47 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
           <router-link :to="{ name: 'accounts' }" class="primary-inline-link">Escolhe a conta principal em Contas</router-link>
           <span> para gerires recorrentes no plano Free com várias contas.</span>
         </div>
+        <p class="recurring-hint">Receitas e despesas que se repetem mensalmente. São contabilizadas a partir do mês atual.</p>
         <div class="toolbar">
-          <p class="recurring-hint">Receitas e despesas que se repetem mensalmente. São contabilizadas a partir do mês atual.</p>
+          <div class="filters">
+            <div ref="recTypeDropRef" class="custom-dropdown">
+              <button type="button" class="custom-dropdown-btn" :class="{ active: recFilterType !== '' }" @click.stop="toggleRecTypeDrop">
+                <span>{{ recTypeLabel }}</span>
+                <svg class="custom-dropdown-chevron" :class="{ open: recTypeDropOpen }" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+              </button>
+              <Transition name="panel">
+                <div v-show="recTypeDropOpen" class="custom-dropdown-panel" @click.stop>
+                  <button type="button" class="custom-dropdown-item" :class="{ selected: recFilterType === '' }" @click="pickRecType('')">Todos os tipos</button>
+                  <button type="button" class="custom-dropdown-item" :class="{ selected: recFilterType === 'income' }" @click="pickRecType('income')">Receita</button>
+                  <button type="button" class="custom-dropdown-item" :class="{ selected: recFilterType === 'expense' }" @click="pickRecType('expense')">Despesa</button>
+                </div>
+              </Transition>
+            </div>
+            <div ref="recCatDropRef" class="custom-dropdown">
+              <button type="button" class="custom-dropdown-btn" :class="{ active: recFilterCategory !== '' }" @click.stop="toggleRecCatDrop">
+                <span>{{ recCategoryLabel }}</span>
+                <svg class="custom-dropdown-chevron" :class="{ open: recCatDropOpen }" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+              </button>
+              <Transition name="panel">
+                <div v-show="recCatDropOpen" class="custom-dropdown-panel" @click.stop>
+                  <button type="button" class="custom-dropdown-item" :class="{ selected: recFilterCategory === '' }" @click="pickRecCategory('')">Todas as categorias</button>
+                  <button v-for="(label, key) in recAvailableCategories" :key="key" type="button" class="custom-dropdown-item" :class="{ selected: recFilterCategory === String(key) }" @click="pickRecCategory(String(key))">{{ label }}</button>
+                </div>
+              </Transition>
+            </div>
+            <div ref="recAccDropRef" class="custom-dropdown">
+              <button type="button" class="custom-dropdown-btn" :class="{ active: recFilterAccount !== '' }" @click.stop="toggleRecAccDrop">
+                <span>{{ recAccountLabel }}</span>
+                <svg class="custom-dropdown-chevron" :class="{ open: recAccDropOpen }" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+              </button>
+              <Transition name="panel">
+                <div v-show="recAccDropOpen" class="custom-dropdown-panel" @click.stop>
+                  <button type="button" class="custom-dropdown-item" :class="{ selected: recFilterAccount === '' }" @click="pickRecAccount('')">Todas as contas</button>
+                  <button v-for="a in accountsStore.accounts" :key="a.id" type="button" class="custom-dropdown-item" :class="{ selected: recFilterAccount === a.id }" @click="pickRecAccount(a.id)">{{ a.name }}</button>
+                </div>
+              </Transition>
+            </div>
+          </div>
           <button type="button" class="btn-add" @click="openRecurringCreateModal">
             + Nova transação recorrente
           </button>
@@ -1710,6 +1814,9 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
           <button type="button" class="btn-add" @click="openRecurringCreateModal">
             + Nova transação recorrente
           </button>
+        </div>
+        <div v-else-if="filteredRecurring.length === 0" class="empty-state">
+          <p>Nenhuma recorrente encontrada com os filtros selecionados.</p>
         </div>
         <div v-else class="table-container">
           <table class="transactions-table">
@@ -1725,7 +1832,7 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
             </thead>
             <tbody>
               <tr
-                v-for="r in activeRecurring"
+                v-for="r in filteredRecurring"
                 :key="r.id"
                 class="table-row"
               >
@@ -1984,8 +2091,7 @@ html.dark .tab.active {
 .recurring-hint {
   font-size: 0.8125rem;
   color: var(--color-text-muted);
-  margin: 0;
-  flex: 1;
+  margin: 0 0 1.25rem;
 }
 
 .global-error {

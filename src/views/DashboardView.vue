@@ -311,8 +311,10 @@ function toggleDashDatePicker() {
   }
 }
 
+const dashPresetLabels: Record<string, string> = { month: 'Este mês', '30d': '30 dias', '3m': '3 meses', year: 'Este ano', all: 'Desde sempre' }
+
 const dashDatePickerLabel = computed(() => {
-  if (dashActivePreset.value === 'all') return 'Desde sempre'
+  if (dashActivePreset.value && dashPresetLabels[dashActivePreset.value]) return dashPresetLabels[dashActivePreset.value]
   if (!dashFilterFrom.value && !dashFilterTo.value) return 'Selecionar período'
   const fmt = (s: string) => {
     const d = new Date(s + 'T00:00:00')
@@ -509,9 +511,7 @@ const accountCategoryGroups = computed(() => {
   }))
 })
 
-const totalAllocatedToObjectives = computed(() =>
-  objectivesReserved.value + objectivesPreview.value.reduce((s, g) => s + g.allocatedAmount, 0)
-)
+const totalAllocatedToObjectives = computed(() => objectivesReserved.value)
 
 const hideValues = ref(false)
 
