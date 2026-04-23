@@ -478,45 +478,52 @@ const summaryIncomeByCategory = computed(() => {
 /* ── Sankey diagram computeds ── */
 const sankeyWidth = 200
 const sankeyNodeGap = 18
-const sankeyMinHeight = 28
+const sankeyMinHeight = 4
 
 interface SankeyNode { name: string; total: number; color: string; height: number; y: number; category: number }
 interface SankeyLink { path: string; color: string; thickness: number }
 
-// Dynamic height based on how many nodes we have
+// Dynamic height: grows with number of nodes to keep proportional differences visible
 const sankeyHeight = computed(() => {
   const maxNodes = Math.max(summaryIncomeByCategory.value.length, summaryExpensesByCategory.value.length, 1)
-  return Math.max(280, maxNodes * (sankeyMinHeight + sankeyNodeGap) + 40)
+  return Math.max(280, maxNodes * 40 + 40)
 })
 
 function buildSankeyNodes(items: { category: number; name: string; total: number }[], scaleTotal: number, totalHeight: number): SankeyNode[] {
   if (items.length === 0) return []
-  const usable = totalHeight - (items.length - 1) * sankeyNodeGap
+  const n = items.length
+  const gapsTotal = (n - 1) * sankeyNodeGap
   const itemsTotal = items.reduce((s, it) => s + it.total, 0)
   const ratio = scaleTotal > 0 ? itemsTotal / scaleTotal : 1
-  const targetH = usable * ratio
+  // Available height for bars (no gaps), scaled by ratio
+  const barsHeight = (totalHeight - gapsTotal) * ratio
+  // Reserve minHeight per node, then distribute the rest proportionally
+  const baseTotal = n * sankeyMinHeight
+  const extra = Math.max(0, barsHeight - baseTotal)
   const nodes: SankeyNode[] = items.map(item => ({
     ...item,
     color: categoryColors[item.category] || '#94a3b8',
-    height: Math.max(sankeyMinHeight, (item.total / itemsTotal) * targetH),
+    height: sankeyMinHeight + (itemsTotal > 0 ? (item.total / itemsTotal) * extra : 0),
     y: 0,
   }))
   let yy = 0
-  nodes.forEach(n => { n.y = yy; yy += n.height + sankeyNodeGap })
+  nodes.forEach(nd => { nd.y = yy; yy += nd.height + sankeyNodeGap })
   // Center vertically
   const totalUsed = yy - sankeyNodeGap
   const offset = (totalHeight - totalUsed) / 2
-  nodes.forEach(n => { n.y += offset })
+  nodes.forEach(nd => { nd.y += offset })
   return nodes
 }
 
-// Income fills the full height; expenses scale proportionally to income
+// Income scales to income total; expenses scale to their own total (so differences are visible)
 const sankeyIncomeNodes = computed(() => buildSankeyNodes(summaryIncomeByCategory.value, summaryTotalIncome.value, sankeyHeight.value))
-const sankeyExpenseNodes = computed(() => buildSankeyNodes(summaryExpensesByCategory.value, summaryTotalIncome.value, sankeyHeight.value))
+const sankeyExpenseNodes = computed(() => buildSankeyNodes(summaryExpensesByCategory.value, summaryTotalExpenses.value, sankeyHeight.value))
 
 const sankeyCenterHeight = computed(() => {
-  const incomeH = sankeyIncomeNodes.value.reduce((s, n) => s + n.height, 0) + Math.max(0, sankeyIncomeNodes.value.length - 1) * sankeyNodeGap
-  return Math.max(40, incomeH)
+  const incNodes = sankeyIncomeNodes.value
+  if (incNodes.length === 0) return 40
+  // Sum of bar heights only (no gaps)
+  return Math.max(40, incNodes.reduce((s, n) => s + n.height, 0))
 })
 
 function makeSankeyPath(srcY: number, srcH: number, dstY: number, dstH: number, width: number): string {
