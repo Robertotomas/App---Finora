@@ -18,7 +18,8 @@ import type { RecurringTransaction, CreateRecurringTransactionRequest } from '@/
 import {
   TRANSACTION_TYPE_LABELS,
   TRANSACTION_CATEGORY_LABELS,
-  TransactionType
+  TransactionType,
+  TransactionCategory
 } from '@/types/transaction'
 import type { HouseholdMember } from '@/types/household'
 
@@ -57,8 +58,59 @@ const members = ref<HouseholdMember[]>([])
 const membersLoading = ref(false)
 
 const filterAccountId = ref<string>('')
-const filterFrom = ref('')
-const filterTo = ref('')
+const _txInitToday = new Date()
+const _txInitMonthStart = `${_txInitToday.getFullYear()}-${String(_txInitToday.getMonth() + 1).padStart(2, '0')}-01`
+const _txInitTodayStr = `${_txInitToday.getFullYear()}-${String(_txInitToday.getMonth() + 1).padStart(2, '0')}-${String(_txInitToday.getDate()).padStart(2, '0')}`
+const filterFrom = ref(_txInitMonthStart)
+const filterTo = ref(_txInitTodayStr)
+const filterType = ref<'' | 'income' | 'expense'>('')
+const filterCategory = ref<string>('')
+
+const typeDropOpen = ref(false)
+const catDropOpen = ref(false)
+const accDropOpen = ref(false)
+const typeDropRef = ref<HTMLElement | null>(null)
+const catDropRef = ref<HTMLElement | null>(null)
+const accDropRef = ref<HTMLElement | null>(null)
+
+function toggleTypeDrop() { typeDropOpen.value = !typeDropOpen.value; catDropOpen.value = false; accDropOpen.value = false }
+function toggleCatDrop() { catDropOpen.value = !catDropOpen.value; typeDropOpen.value = false; accDropOpen.value = false }
+function toggleAccDrop() { accDropOpen.value = !accDropOpen.value; typeDropOpen.value = false; catDropOpen.value = false }
+
+function pickType(val: '' | 'income' | 'expense') { filterType.value = val; typeDropOpen.value = false }
+function pickCategory(val: string) { filterCategory.value = val; catDropOpen.value = false }
+function pickAccount(val: string) { filterAccountId.value = val; accDropOpen.value = false }
+
+const typeLabel = computed(() => {
+  if (filterType.value === 'income') return 'Receita'
+  if (filterType.value === 'expense') return 'Despesa'
+  return 'Todos os tipos'
+})
+const categoryLabel = computed(() => {
+  if (filterCategory.value) return TRANSACTION_CATEGORY_LABELS[Number(filterCategory.value) as TransactionCategory] || 'Categoria'
+  return 'Todas as categorias'
+})
+const accountLabel = computed(() => {
+  if (filterAccountId.value) return accountsStore.accounts.find(a => a.id === filterAccountId.value)?.name || 'Conta'
+  return 'Todas as contas'
+})
+
+const incomeCategories = [TransactionCategory.Salary, TransactionCategory.Freelance, TransactionCategory.Investment, TransactionCategory.Gift, TransactionCategory.Refund]
+const expenseCategories = [TransactionCategory.Food, TransactionCategory.Transport, TransactionCategory.Housing, TransactionCategory.Utilities, TransactionCategory.Health, TransactionCategory.Entertainment, TransactionCategory.Shopping, TransactionCategory.Education, TransactionCategory.Other]
+
+const availableCategories = computed(() => {
+  let cats: TransactionCategory[]
+  if (filterType.value === 'income') cats = incomeCategories
+  else if (filterType.value === 'expense') cats = expenseCategories
+  else cats = [...incomeCategories, ...expenseCategories]
+  const result: Record<number, string> = {}
+  for (const c of cats) result[c] = TRANSACTION_CATEGORY_LABELS[c]
+  return result
+})
+
+watch(filterType, () => {
+  filterCategory.value = ''
+})
 
 const MONTH_NAMES = ['', 'Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 const now = new Date()
@@ -95,23 +147,61 @@ const accountsForEditModal = computed(() => {
 })
 
 /* ── Summary tab state ── */
-const summaryDateFrom = ref('')
-const summaryDateTo = ref('')
+const _initToday = new Date()
+const _initMonthStart = `${_initToday.getFullYear()}-${String(_initToday.getMonth() + 1).padStart(2, '0')}-01`
+const _initTodayStr = `${_initToday.getFullYear()}-${String(_initToday.getMonth() + 1).padStart(2, '0')}-${String(_initToday.getDate()).padStart(2, '0')}`
+const summaryDateFrom = ref(_initMonthStart)
+const summaryDateTo = ref(_initTodayStr)
 const summaryFilterType = ref<'' | 'income' | 'expense'>('')
 const summaryFilterCategory = ref<'' | string>('')
 const summaryFilterAccount = ref('')
+
+const sumTypeDropOpen = ref(false)
+const sumCatDropOpen = ref(false)
+const sumAccDropOpen = ref(false)
+const sumTypeDropRef = ref<HTMLElement | null>(null)
+const sumCatDropRef = ref<HTMLElement | null>(null)
+const sumAccDropRef = ref<HTMLElement | null>(null)
+
+function toggleSumTypeDrop() { sumTypeDropOpen.value = !sumTypeDropOpen.value; sumCatDropOpen.value = false; sumAccDropOpen.value = false }
+function toggleSumCatDrop() { sumCatDropOpen.value = !sumCatDropOpen.value; sumTypeDropOpen.value = false; sumAccDropOpen.value = false }
+function toggleSumAccDrop() { sumAccDropOpen.value = !sumAccDropOpen.value; sumTypeDropOpen.value = false; sumCatDropOpen.value = false }
+
+function pickSumType(val: '' | 'income' | 'expense') { summaryFilterType.value = val; sumTypeDropOpen.value = false }
+function pickSumCategory(val: string) { summaryFilterCategory.value = val; sumCatDropOpen.value = false }
+function pickSumAccount(val: string) { summaryFilterAccount.value = val; sumAccDropOpen.value = false }
+
+const sumTypeLabel = computed(() => {
+  if (summaryFilterType.value === 'income') return 'Receitas'
+  if (summaryFilterType.value === 'expense') return 'Despesas'
+  return 'Todos os tipos'
+})
+const sumCategoryLabel = computed(() => {
+  if (summaryFilterCategory.value) return TRANSACTION_CATEGORY_LABELS[Number(summaryFilterCategory.value) as TransactionCategory] || 'Categoria'
+  return 'Todas as categorias'
+})
+const sumAccountLabel = computed(() => {
+  if (summaryFilterAccount.value) return accountsStore.accounts.find(a => a.id === summaryFilterAccount.value)?.name || 'Conta'
+  return 'Todas as contas'
+})
+
+const sumAvailableCategories = computed(() => {
+  let cats: TransactionCategory[]
+  if (summaryFilterType.value === 'income') cats = incomeCategories
+  else if (summaryFilterType.value === 'expense') cats = expenseCategories
+  else cats = [...incomeCategories, ...expenseCategories]
+  const result: Record<number, string> = {}
+  for (const c of cats) result[c] = TRANSACTION_CATEGORY_LABELS[c]
+  return result
+})
+
+watch(summaryFilterType, () => {
+  summaryFilterCategory.value = ''
+})
 const summarySearch = ref('')
 const summaryTransactions = ref<Transaction[]>([])
-const summaryLoading = ref(false)
+const summaryLoading = ref(true)
 
-// Init default: last 30 days
-;(() => {
-  const end = new Date()
-  const start = new Date()
-  start.setDate(start.getDate() - 30)
-  summaryDateFrom.value = start.toISOString().slice(0, 10)
-  summaryDateTo.value = end.toISOString().slice(0, 10)
-})()
 
 /* ── Date Range Picker ── */
 const datePickerOpen = ref(false)
@@ -129,7 +219,7 @@ const pickerRightMonth = computed(() => pickerLeftMonth.value === 11 ? 0 : picke
 
 function initPickerFromValues() {
   if (summaryDateFrom.value) {
-    const d = new Date(summaryDateFrom.value)
+    const d = new Date(summaryDateFrom.value + 'T00:00:00')
     pickerLeftYear.value = d.getFullYear()
     pickerLeftMonth.value = d.getMonth()
   }
@@ -197,7 +287,7 @@ function toggleDatePicker() {
   }
 }
 
-const activePreset = ref<string>('30d')
+const activePreset = ref<string>('month')
 
 function applyPreset(preset: string) {
   const today = new Date()
@@ -243,10 +333,13 @@ function pickDay(y: number, m: number, d: number) {
   }
 }
 
+const presetLabels: Record<string, string> = { month: 'Este mês', '30d': '30 dias', '3m': '3 meses', year: 'Este ano' }
+
 const datePickerLabel = computed(() => {
+  if (activePreset.value && presetLabels[activePreset.value]) return presetLabels[activePreset.value]
   if (!summaryDateFrom.value && !summaryDateTo.value) return 'Selecionar período'
   const fmt = (s: string) => {
-    const d = new Date(s)
+    const d = new Date(s + 'T00:00:00')
     return d.toLocaleDateString('pt-PT', { day: '2-digit', month: 'short', year: 'numeric' })
   }
   if (summaryDateFrom.value && summaryDateTo.value) return `${fmt(summaryDateFrom.value)} – ${fmt(summaryDateTo.value)}`
@@ -363,6 +456,7 @@ function toggleTxDatePicker() {
 }
 
 const txDatePickerLabel = computed(() => {
+  if (txActivePreset.value && presetLabels[txActivePreset.value]) return presetLabels[txActivePreset.value]
   if (!filterFrom.value && !filterTo.value) return 'Selecionar período'
   const fmt = (s: string) => {
     const d = new Date(s + 'T00:00:00')
@@ -378,13 +472,25 @@ function onTxDatePickerOutsideClick(e: MouseEvent) {
   if (!txDatePickerRef.value.contains(e.target as Node)) txDatePickerOpen.value = false
 }
 
+function onDropdownOutsideClick(e: MouseEvent) {
+  const t = e.target as Node
+  if (typeDropOpen.value && typeDropRef.value && !typeDropRef.value.contains(t)) typeDropOpen.value = false
+  if (catDropOpen.value && catDropRef.value && !catDropRef.value.contains(t)) catDropOpen.value = false
+  if (accDropOpen.value && accDropRef.value && !accDropRef.value.contains(t)) accDropOpen.value = false
+  if (sumTypeDropOpen.value && sumTypeDropRef.value && !sumTypeDropRef.value.contains(t)) sumTypeDropOpen.value = false
+  if (sumCatDropOpen.value && sumCatDropRef.value && !sumCatDropRef.value.contains(t)) sumCatDropOpen.value = false
+  if (sumAccDropOpen.value && sumAccDropRef.value && !sumAccDropRef.value.contains(t)) sumAccDropOpen.value = false
+}
+
 onMounted(() => {
   document.addEventListener('click', onDatePickerOutsideClick, true)
   document.addEventListener('click', onTxDatePickerOutsideClick, true)
+  document.addEventListener('click', onDropdownOutsideClick, true)
 })
 onUnmounted(() => {
   document.removeEventListener('click', onDatePickerOutsideClick, true)
   document.removeEventListener('click', onTxDatePickerOutsideClick, true)
+  document.removeEventListener('click', onDropdownOutsideClick, true)
 })
 
 async function fetchSummaryTransactions() {
@@ -594,7 +700,7 @@ watch([summaryDateFrom, summaryDateTo, summaryFilterAccount], () => {
 })
 
 watch(activeTab, (tab) => {
-  if (tab === 'summary' && summaryTransactions.value.length === 0) fetchSummaryTransactions()
+  if (tab === 'summary') fetchSummaryTransactions()
 })
 
 const accountsForRecurringCreate = computed(() =>
@@ -609,8 +715,21 @@ const accountsForRecurringEdit = computed(() => {
   )
 })
 
+const filteredTransactions = computed(() => {
+  let list = transactionsStore.transactions
+  if (filterType.value) {
+    const typeVal = filterType.value === 'income' ? TransactionType.Income : TransactionType.Expense
+    list = list.filter(tx => tx.type === typeVal)
+  }
+  if (filterCategory.value) {
+    const catVal = Number(filterCategory.value)
+    list = list.filter(tx => tx.category === catVal)
+  }
+  return list
+})
+
 const paginatedTransactions = computed(() => {
-  const list = transactionsStore.transactions
+  const list = filteredTransactions.value
   const start = (page.value - 1) * pageSize
   return list.slice(start, start + pageSize)
 })
@@ -627,7 +746,7 @@ const activeRecurring = computed(() =>
 )
 
 const totalPages = computed(() =>
-  Math.max(1, Math.ceil(transactionsStore.transactions.length / pageSize))
+  Math.max(1, Math.ceil(filteredTransactions.value.length / pageSize))
 )
 
 const canPrevPage = computed(() => page.value > 1)
@@ -683,6 +802,7 @@ onMounted(async () => {
       await loadMembers()
       await fetchWithFilters()
       await recurringStore.fetchRecurring()
+      if (activeTab.value === 'summary') await fetchSummaryTransactions()
     }
     await subscriptionStore.fetchSubscription()
   } catch {
@@ -706,6 +826,10 @@ async function fetchWithFilters() {
 
 watch([filterAccountId, filterFrom, filterTo], () => {
   fetchWithFilters()
+})
+
+watch([filterType, filterCategory], () => {
+  page.value = 1
 })
 
 function openCreateModal() {
@@ -1178,27 +1302,60 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
               </div>
             </Transition>
           </div>
-          <select v-model="summaryFilterType" class="summary-select">
-            <option value="">Todos os tipos</option>
-            <option value="income">Receitas</option>
-            <option value="expense">Despesas</option>
-          </select>
-          <select v-model="summaryFilterCategory" class="summary-select">
-            <option value="">Todas as categorias</option>
-            <option v-for="cat in Object.entries(TRANSACTION_CATEGORY_LABELS)" :key="cat[0]" :value="cat[0]">{{ cat[1] }}</option>
-          </select>
-          <select v-model="summaryFilterAccount" class="summary-select">
-            <option value="">Todas as contas</option>
-            <option v-for="a in accountsStore.accounts" :key="a.id" :value="a.id">{{ a.name }}</option>
-          </select>
+          <div ref="sumTypeDropRef" class="custom-dropdown">
+            <button type="button" class="custom-dropdown-btn" :class="{ active: summaryFilterType !== '' }" @click.stop="toggleSumTypeDrop">
+              <span>{{ sumTypeLabel }}</span>
+              <svg class="custom-dropdown-chevron" :class="{ open: sumTypeDropOpen }" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+            </button>
+            <Transition name="panel">
+              <div v-show="sumTypeDropOpen" class="custom-dropdown-panel" @click.stop>
+                <button type="button" class="custom-dropdown-item" :class="{ selected: summaryFilterType === '' }" @click="pickSumType('')">Todos os tipos</button>
+                <button type="button" class="custom-dropdown-item" :class="{ selected: summaryFilterType === 'income' }" @click="pickSumType('income')">Receitas</button>
+                <button type="button" class="custom-dropdown-item" :class="{ selected: summaryFilterType === 'expense' }" @click="pickSumType('expense')">Despesas</button>
+              </div>
+            </Transition>
+          </div>
+          <div ref="sumCatDropRef" class="custom-dropdown">
+            <button type="button" class="custom-dropdown-btn" :class="{ active: summaryFilterCategory !== '' }" @click.stop="toggleSumCatDrop">
+              <span>{{ sumCategoryLabel }}</span>
+              <svg class="custom-dropdown-chevron" :class="{ open: sumCatDropOpen }" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+            </button>
+            <Transition name="panel">
+              <div v-show="sumCatDropOpen" class="custom-dropdown-panel" @click.stop>
+                <button type="button" class="custom-dropdown-item" :class="{ selected: summaryFilterCategory === '' }" @click="pickSumCategory('')">Todas as categorias</button>
+                <button v-for="(label, key) in sumAvailableCategories" :key="key" type="button" class="custom-dropdown-item" :class="{ selected: summaryFilterCategory === String(key) }" @click="pickSumCategory(String(key))">{{ label }}</button>
+              </div>
+            </Transition>
+          </div>
+          <div ref="sumAccDropRef" class="custom-dropdown">
+            <button type="button" class="custom-dropdown-btn" :class="{ active: summaryFilterAccount !== '' }" @click.stop="toggleSumAccDrop">
+              <span>{{ sumAccountLabel }}</span>
+              <svg class="custom-dropdown-chevron" :class="{ open: sumAccDropOpen }" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+            </button>
+            <Transition name="panel">
+              <div v-show="sumAccDropOpen" class="custom-dropdown-panel" @click.stop>
+                <button type="button" class="custom-dropdown-item" :class="{ selected: summaryFilterAccount === '' }" @click="pickSumAccount('')">Todas as contas</button>
+                <button v-for="a in accountsStore.accounts" :key="a.id" type="button" class="custom-dropdown-item" :class="{ selected: summaryFilterAccount === a.id }" @click="pickSumAccount(a.id)">{{ a.name }}</button>
+              </div>
+            </Transition>
+          </div>
           <div class="summary-search">
             <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" x2="16.65" y1="21" y2="16.65"/></svg>
             <input v-model="summarySearch" type="text" placeholder="Pesquisar movimentos..." class="summary-search-input" />
           </div>
         </div>
 
+        <!-- Summary content with loading overlay -->
+        <div class="summary-content-area">
+          <transition name="fade">
+            <div v-if="summaryLoading" class="summary-loading-overlay">
+              <div class="spinner"></div>
+              <p>A carregar...</p>
+            </div>
+          </transition>
+
         <!-- Summary cards -->
-        <div class="summary-totals">
+        <div v-show="!summaryLoading" class="summary-totals">
           <div class="summary-total-card">
             <span class="summary-total-label">Saldo</span>
             <span class="summary-total-value" :class="summaryBalance >= 0 ? 'positive' : 'negative'">
@@ -1216,7 +1373,7 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
         </div>
 
         <!-- Category breakdown chart -->
-        <div v-if="summaryFiltered.length > 0 && (summaryIncomeByCategory.length > 0 || summaryExpensesByCategory.length > 0)" class="sankey-section">
+        <div v-if="!summaryLoading && summaryFiltered.length > 0 && (summaryIncomeByCategory.length > 0 || summaryExpensesByCategory.length > 0)" class="sankey-section">
           <div class="sankey-card">
             <div class="sankey-container" :style="{ height: sankeyHeight + 'px' }">
               <!-- Left: Income labels -->
@@ -1288,11 +1445,7 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
         </div>
 
         <!-- Transactions table -->
-        <div v-if="summaryLoading" class="loading-state">
-          <div class="spinner"></div>
-          <p>A carregar...</p>
-        </div>
-        <div v-else-if="summaryFiltered.length > 0" class="summary-table-wrap">
+        <div v-if="!summaryLoading && summaryFiltered.length > 0" class="summary-table-wrap">
           <table class="summary-table">
             <thead>
               <tr>
@@ -1322,9 +1475,10 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
             </tbody>
           </table>
         </div>
-        <div v-else class="section-empty">
+        <div v-else-if="!summaryLoading" class="section-empty">
           <p>Nenhum movimento encontrado para o período selecionado.</p>
         </div>
+        </div><!-- /summary-content-area -->
       </div>
 
       <!-- ═══ TRANSACTIONS TAB ═══ -->
@@ -1335,12 +1489,6 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
       </div>
       <div class="toolbar">
         <div class="filters">
-          <select v-model="filterAccountId" class="filter-select">
-            <option value="">Todas as contas</option>
-            <option v-for="a in accountsStore.accounts" :key="a.id" :value="a.id">
-              {{ a.name }}
-            </option>
-          </select>
           <div ref="txDatePickerRef" class="date-range-picker">
             <button type="button" class="date-range-btn" @click.stop="toggleTxDatePicker">
               <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
@@ -1420,6 +1568,43 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
               </div>
             </Transition>
           </div>
+          <div ref="typeDropRef" class="custom-dropdown">
+            <button type="button" class="custom-dropdown-btn" :class="{ active: filterType !== '' }" @click.stop="toggleTypeDrop">
+              <span>{{ typeLabel }}</span>
+              <svg class="custom-dropdown-chevron" :class="{ open: typeDropOpen }" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+            </button>
+            <Transition name="panel">
+              <div v-show="typeDropOpen" class="custom-dropdown-panel" @click.stop>
+                <button type="button" class="custom-dropdown-item" :class="{ selected: filterType === '' }" @click="pickType('')">Todos os tipos</button>
+                <button type="button" class="custom-dropdown-item" :class="{ selected: filterType === 'income' }" @click="pickType('income')">Receita</button>
+                <button type="button" class="custom-dropdown-item" :class="{ selected: filterType === 'expense' }" @click="pickType('expense')">Despesa</button>
+              </div>
+            </Transition>
+          </div>
+          <div ref="catDropRef" class="custom-dropdown">
+            <button type="button" class="custom-dropdown-btn" :class="{ active: filterCategory !== '' }" @click.stop="toggleCatDrop">
+              <span>{{ categoryLabel }}</span>
+              <svg class="custom-dropdown-chevron" :class="{ open: catDropOpen }" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+            </button>
+            <Transition name="panel">
+              <div v-show="catDropOpen" class="custom-dropdown-panel" @click.stop>
+                <button type="button" class="custom-dropdown-item" :class="{ selected: filterCategory === '' }" @click="pickCategory('')">Todas as categorias</button>
+                <button v-for="(label, key) in availableCategories" :key="key" type="button" class="custom-dropdown-item" :class="{ selected: filterCategory === String(key) }" @click="pickCategory(String(key))">{{ label }}</button>
+              </div>
+            </Transition>
+          </div>
+          <div ref="accDropRef" class="custom-dropdown">
+            <button type="button" class="custom-dropdown-btn" :class="{ active: filterAccountId !== '' }" @click.stop="toggleAccDrop">
+              <span>{{ accountLabel }}</span>
+              <svg class="custom-dropdown-chevron" :class="{ open: accDropOpen }" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+            </button>
+            <Transition name="panel">
+              <div v-show="accDropOpen" class="custom-dropdown-panel" @click.stop>
+                <button type="button" class="custom-dropdown-item" :class="{ selected: filterAccountId === '' }" @click="pickAccount('')">Todas as contas</button>
+                <button v-for="a in accountsStore.accounts" :key="a.id" type="button" class="custom-dropdown-item" :class="{ selected: filterAccountId === a.id }" @click="pickAccount(a.id)">{{ a.name }}</button>
+              </div>
+            </Transition>
+          </div>
         </div>
         <button type="button" class="btn-add" @click="openCreateModal">
           + Nova transação
@@ -1436,6 +1621,10 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
         <button type="button" class="btn-add" @click="openCreateModal">
           + Nova transação
         </button>
+      </div>
+
+      <div v-else-if="filteredTransactions.length === 0" class="empty-state">
+        <p>Nenhuma transação encontrada com os filtros selecionados.</p>
       </div>
 
       <div v-else class="table-container">
@@ -1692,6 +1881,34 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
   to { transform: rotate(360deg); }
 }
 
+.summary-content-area {
+  position: relative;
+  min-height: 200px;
+}
+
+.summary-loading-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: var(--color-text-muted);
+  padding-top: 4rem;
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+
 .error-state p {
   color: var(--color-error);
 }
@@ -1797,6 +2014,98 @@ html.dark .tab.active {
   text-decoration: underline;
 }
 
+/* Custom dropdowns */
+.custom-dropdown {
+  position: relative;
+}
+
+.custom-dropdown-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4375rem 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  font-size: 0.8125rem;
+  font-family: inherit;
+  font-weight: 500;
+  background: var(--color-input-bg);
+  color: var(--color-text);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  white-space: nowrap;
+}
+
+.custom-dropdown-btn:hover {
+  border-color: #166534;
+}
+
+.custom-dropdown-btn.active {
+  border-color: #166534;
+  color: #166534;
+}
+
+html.dark .custom-dropdown-btn.active {
+  border-color: #4ade80;
+  color: #4ade80;
+}
+
+.custom-dropdown-chevron {
+  flex-shrink: 0;
+  color: var(--color-text-muted);
+  transition: transform 0.2s ease;
+}
+
+.custom-dropdown-chevron.open {
+  transform: rotate(180deg);
+}
+
+.custom-dropdown-panel {
+  position: absolute;
+  top: calc(100% + 0.375rem);
+  left: 0;
+  z-index: 50;
+  min-width: 100%;
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 0.375rem;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-bg-card);
+  box-shadow: 0 8px 24px -4px rgba(15, 23, 42, 0.12);
+}
+
+.custom-dropdown-item {
+  display: block;
+  width: 100%;
+  padding: 0.4375rem 0.625rem;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text);
+  font-size: 0.8125rem;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s;
+  white-space: nowrap;
+}
+
+.custom-dropdown-item:hover {
+  background: var(--color-table-row-hover);
+}
+
+.custom-dropdown-item.selected {
+  background: rgba(22, 101, 52, 0.1);
+  color: #166534;
+  font-weight: 600;
+}
+
+html.dark .custom-dropdown-item.selected {
+  background: rgba(74, 222, 128, 0.12);
+  color: #4ade80;
+}
+
 .toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -1815,13 +2124,20 @@ html.dark .tab.active {
 
 .filter-select,
 .filter-input {
-  padding: 0.4375rem 0.75rem;
+  padding: 0.4375rem 2rem 0.4375rem 0.75rem;
   border: 1px solid var(--color-border);
   border-radius: 8px;
   font-size: 0.8125rem;
+  font-family: inherit;
   background: var(--color-input-bg);
   color: var(--color-text);
   transition: border-color 0.15s;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.5rem center;
+  cursor: pointer;
 }
 
 .filter-select:focus,
