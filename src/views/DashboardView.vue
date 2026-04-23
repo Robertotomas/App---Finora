@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, computed, ref, nextTick, watch } from 'vue'
+import { onMounted, onUnmounted, computed, ref, nextTick, watch } from 'vue'
 import type { ExpenseByCategory, IncomeByCategory, MonthlyTrend } from '@/types/dashboard'
 import type { SavingsObjectiveActive } from '@/types/objective'
 import { objectivesApi } from '@/api/objectives'
@@ -23,7 +23,6 @@ import ExpensesPieChart from '@/components/charts/ExpensesPieChart.vue'
 import IncomePieChart from '@/components/charts/IncomePieChart.vue'
 import MonthlyLineChart from '@/components/charts/MonthlyLineChart.vue'
 import NetWorthChart from '@/components/charts/NetWorthChart.vue'
-import MonthYearNavigator from '@/components/MonthYearNavigator.vue'
 
 const householdStore = useHouseholdStore()
 const accountsStore = useAccountsStore()
@@ -88,10 +87,22 @@ async function loadObjectivesPreview() {
 
     const all = mapActiveObjectivesFromOverview(data)
     objectivesActiveTotal.value = all.length
-    objectivesPreview.value = all.slice(0, 3)
 
     objectivesReserved.value = Number(pick('reservedByCompletedObjectives')) || 0
     objectivesTotalSavings.value = Number(pick('totalSavings')) || 0
+
+    // totalSavings is already the remaining after completed objectives were "spent"
+    // Distribute it across active objectives by sortOrder priority
+    const available = Math.max(0, objectivesTotalSavings.value)
+    if (available > 0 && all.length > 0) {
+      for (const goal of all) {
+        const allocated = Math.min(available, goal.targetAmount)
+        goal.allocatedAmount = allocated
+        goal.progressPercent = goal.targetAmount > 0 ? (allocated / goal.targetAmount) * 100 : 0
+      }
+    }
+
+    objectivesPreview.value = all.slice(0, 3)
 
     const history = pick('historyObjectives')
     objectivesCompletedCount.value = Array.isArray(history) ? history.length : 0
@@ -122,15 +133,9 @@ function formatObjectiveDate(iso: string): string {
   return d.toLocaleDateString('pt-PT')
 }
 
-const MONTH_NAMES = ['', 'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
 const now = new Date()
 const selectedYear = ref(now.getFullYear())
 const selectedMonth = ref(now.getMonth() + 1)
-
-const navYears = computed(() => {
-  const y = now.getFullYear()
-  return [y, y - 1, y - 2, y - 3, 0]
-})
 
 async function onPeriodChange() {
   periodChangeLoading.value = true
@@ -143,6 +148,188 @@ async function onPeriodChange() {
     periodChangeLoading.value = false
   }
 }
+
+/* ── Dashboard Date Range Picker ── */
+const dashDatePickerOpen = ref(false)
+const dashDatePickerRef = ref<HTMLElement | null>(null)
+const dashActivePreset = ref<string>('month')
+const PICKER_MONTH_NAMES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
+const PICKER_WEEKDAYS = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom']
+
+const dashPickerLeftYear = ref(now.getFullYear())
+const dashPickerLeftMonth = ref(now.getMonth())
+const dashPickerRightYear = computed(() => dashPickerLeftMonth.value === 11 ? dashPickerLeftYear.value + 1 : dashPickerLeftYear.value)
+const dashPickerRightMonth = computed(() => dashPickerLeftMonth.value === 11 ? 0 : dashPickerLeftMonth.value + 1)
+
+const dashFilterFrom = ref('')
+const dashFilterTo = ref('')
+const dashPickerSelectStep = ref<'from' | 'to'>('from')
+
+// Init to current month
+;(() => {
+  const y = now.getFullYear(), m = now.getMonth()
+  dashFilterFrom.value = `${y}-${String(m + 1).padStart(2, '0')}-01`
+  const last = new Date(y, m + 1, 0)
+  dashFilterTo.value = `${y}-${String(m + 1).padStart(2, '0')}-${String(last.getDate()).padStart(2, '0')}`
+})()
+
+function calendarDays(year: number, month: number): (number | null)[] {
+  const firstDay = new Date(year, month, 1).getDay()
+  const startOffset = firstDay === 0 ? 6 : firstDay - 1
+  const daysInMonth = new Date(year, month + 1, 0).getDate()
+  const cells: (number | null)[] = []
+  for (let i = 0; i < startOffset; i++) cells.push(null)
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d)
+  return cells
+}
+
+function toDateStr(y: number, m: number, d: number): string {
+  return `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+}
+
+const dashLeftDays = computed(() => calendarDays(dashPickerLeftYear.value, dashPickerLeftMonth.value))
+const dashRightDays = computed(() => calendarDays(dashPickerRightYear.value, dashPickerRightMonth.value))
+
+function dashIsInRange(y: number, m: number, d: number): boolean {
+  if (!dashFilterFrom.value || !dashFilterTo.value) return false
+  const ds = toDateStr(y, m, d)
+  return ds >= dashFilterFrom.value && ds <= dashFilterTo.value
+}
+function dashIsStart(y: number, m: number, d: number): boolean { return toDateStr(y, m, d) === dashFilterFrom.value }
+function dashIsEnd(y: number, m: number, d: number): boolean { return toDateStr(y, m, d) === dashFilterTo.value }
+
+function dashPickerPrevMonth() {
+  if (dashPickerLeftMonth.value === 0) { dashPickerLeftMonth.value = 11; dashPickerLeftYear.value-- }
+  else dashPickerLeftMonth.value--
+}
+function dashPickerNextMonth() {
+  if (dashPickerLeftMonth.value === 11) { dashPickerLeftMonth.value = 0; dashPickerLeftYear.value++ }
+  else dashPickerLeftMonth.value++
+}
+
+function dashPickDay(y: number, m: number, d: number) {
+  const ds = toDateStr(y, m, d)
+  dashActivePreset.value = ''
+  if (dashPickerSelectStep.value === 'from') {
+    dashFilterFrom.value = ds
+    dashFilterTo.value = ''
+    dashPickerSelectStep.value = 'to'
+  } else {
+    if (ds < dashFilterFrom.value) {
+      dashFilterFrom.value = ds
+      dashFilterTo.value = ''
+      dashPickerSelectStep.value = 'to'
+    } else {
+      dashFilterTo.value = ds
+      dashPickerSelectStep.value = 'from'
+      dashDatePickerOpen.value = false
+      applyDashDateFilter()
+    }
+  }
+}
+
+function localDateStr(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function dashApplyPreset(preset: string) {
+  const today = new Date()
+  dashActivePreset.value = preset
+  dashFilterTo.value = localDateStr(today)
+
+  if (preset === 'month') {
+    dashFilterFrom.value = localDateStr(new Date(today.getFullYear(), today.getMonth(), 1))
+  } else if (preset === '30d') {
+    const d = new Date(); d.setDate(d.getDate() - 30)
+    dashFilterFrom.value = localDateStr(d)
+  } else if (preset === '3m') {
+    const d = new Date(); d.setMonth(d.getMonth() - 3)
+    dashFilterFrom.value = localDateStr(d)
+  } else if (preset === 'year') {
+    dashFilterFrom.value = localDateStr(new Date(today.getFullYear(), 0, 1))
+  } else if (preset === 'all') {
+    dashFilterFrom.value = ''
+    dashFilterTo.value = ''
+  }
+
+  dashDatePickerOpen.value = false
+  applyDashDateFilter()
+}
+
+function applyDashDateFilter() {
+  // Map the date range to dashboard setPeriod
+  const preset = dashActivePreset.value
+  if (preset === 'all') {
+    selectedYear.value = 0
+    selectedMonth.value = 0
+  } else if (preset === 'month') {
+    selectedYear.value = now.getFullYear()
+    selectedMonth.value = now.getMonth() + 1
+  } else if (preset === 'year') {
+    selectedYear.value = now.getFullYear()
+    selectedMonth.value = -1
+  } else {
+    // Custom range or 30d/3m: use year=0 (all) as the API doesn't support arbitrary ranges
+    // But we can try to match a specific month if from/to span exactly one month
+    if (dashFilterFrom.value && dashFilterTo.value) {
+      const from = new Date(dashFilterFrom.value + 'T00:00:00')
+      const to = new Date(dashFilterTo.value + 'T00:00:00')
+      // Check if it's exactly one calendar month
+      if (from.getDate() === 1) {
+        const lastOfMonth = new Date(from.getFullYear(), from.getMonth() + 1, 0)
+        if (to.getDate() === lastOfMonth.getDate() && to.getMonth() === from.getMonth() && to.getFullYear() === from.getFullYear()) {
+          selectedYear.value = from.getFullYear()
+          selectedMonth.value = from.getMonth() + 1
+          onPeriodChange()
+          return
+        }
+      }
+      // Check if it spans a full year
+      if (from.getMonth() === 0 && from.getDate() === 1 && to.getMonth() === 11 && to.getDate() === 31 && from.getFullYear() === to.getFullYear()) {
+        selectedYear.value = from.getFullYear()
+        selectedMonth.value = 0
+        onPeriodChange()
+        return
+      }
+    }
+    // Fallback: use all-time
+    selectedYear.value = 0
+    selectedMonth.value = 0
+  }
+  onPeriodChange()
+}
+
+function toggleDashDatePicker() {
+  dashDatePickerOpen.value = !dashDatePickerOpen.value
+  if (dashDatePickerOpen.value) {
+    if (dashFilterFrom.value) {
+      const d = new Date(dashFilterFrom.value + 'T00:00:00')
+      dashPickerLeftYear.value = d.getFullYear()
+      dashPickerLeftMonth.value = d.getMonth()
+    }
+    dashPickerSelectStep.value = !dashFilterTo.value ? 'to' : 'from'
+  }
+}
+
+const dashDatePickerLabel = computed(() => {
+  if (dashActivePreset.value === 'all') return 'Desde sempre'
+  if (!dashFilterFrom.value && !dashFilterTo.value) return 'Selecionar período'
+  const fmt = (s: string) => {
+    const d = new Date(s + 'T00:00:00')
+    return d.toLocaleDateString('pt-PT', { day: '2-digit', month: 'short', year: 'numeric' })
+  }
+  if (dashFilterFrom.value && dashFilterTo.value) return `${fmt(dashFilterFrom.value)} – ${fmt(dashFilterTo.value)}`
+  if (dashFilterFrom.value) return `${fmt(dashFilterFrom.value)} – ...`
+  return 'Selecionar período'
+})
+
+function onDashDatePickerOutsideClick(e: MouseEvent) {
+  if (!dashDatePickerOpen.value || !dashDatePickerRef.value) return
+  if (!dashDatePickerRef.value.contains(e.target as Node)) dashDatePickerOpen.value = false
+}
+
+onMounted(() => document.addEventListener('click', onDashDatePickerOutsideClick, true))
+onUnmounted(() => document.removeEventListener('click', onDashDatePickerOutsideClick, true))
 
 onMounted(async () => {
   try {
@@ -207,18 +394,21 @@ const expensesForChart = computed<ExpenseByCategory[]>(() => dashboard.expensesF
 const incomeForChart = computed<IncomeByCategory[]>(() => dashboard.incomeForChart?.value ?? [])
 const trendForChart = computed<MonthlyTrend[]>(() => dashboard.trendForChart?.value ?? [])
 const periodLabel = computed(() => {
-  if (selectedYear.value === 0) return 'Resumo total'
-  if (selectedMonth.value === -1) {
-    const y = selectedYear.value
-    const n = new Date()
-    const endM = y < n.getFullYear() ? 12 : y > n.getFullYear() ? 0 : n.getMonth() + 1
-    if (endM === 0) return `Início do ano até agora · ${y}`
-    const from = `Janeiro ${y}`
-    const to = `${MONTH_NAMES[endM]} ${y}`
-    return `Início do ano até agora (${from} – ${to})`
+  if (dashActivePreset.value === 'all') return 'Desde sempre'
+  if (dashActivePreset.value === 'month') return 'Este mês'
+  if (dashActivePreset.value === '30d') return 'Últimos 30 dias'
+  if (dashActivePreset.value === '3m') return 'Últimos 3 meses'
+  if (dashActivePreset.value === 'year') return 'Este ano'
+  if (dashFilterFrom.value && dashFilterTo.value) {
+    const fmt = (s: string) => new Date(s + 'T00:00:00').toLocaleDateString('pt-PT', { day: '2-digit', month: 'short' })
+    return `${fmt(dashFilterFrom.value)} – ${fmt(dashFilterTo.value)}`
   }
-  if (selectedMonth.value === 0) return `Resumo total ${selectedYear.value}`
-  return `${MONTH_NAMES[selectedMonth.value]} ${selectedYear.value}`
+  return ''
+})
+
+const isSingleMonth = computed(() => {
+  if (selectedMonth.value >= 1 && selectedMonth.value <= 12) return true
+  return false
 })
 
 /* Contas e património: sempre dados atuais (não afetados pelo filtro) */
@@ -615,16 +805,86 @@ const showContent = computed(() =>
       <!-- ═══ FILTERED SECTIONS (dados dinâmicos por período) ═══ -->
       <div class="dashboard-section-card">
         <div class="period-filter-bar">
-          <MonthYearNavigator
-            v-model:month="selectedMonth"
-            v-model:year="selectedYear"
-            :years="navYears"
-            :month-names="MONTH_NAMES"
-            allow-all-months
-            allow-all-years
-            allow-year-to-date
-            @change="onPeriodChange"
-          />
+          <div ref="dashDatePickerRef" class="date-range-picker">
+            <button type="button" class="date-range-btn" @click.stop="toggleDashDatePicker">
+              <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
+              <span>{{ dashDatePickerLabel }}</span>
+              <svg class="date-range-chevron" :class="{ open: dashDatePickerOpen }" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+            </button>
+            <Transition name="panel">
+              <div v-show="dashDatePickerOpen" class="date-range-panel" @click.stop>
+                <div class="dr-presets">
+                  <button type="button" class="dr-preset-btn" :class="{ active: dashActivePreset === 'month' }" @click="dashApplyPreset('month')">Este mês</button>
+                  <button type="button" class="dr-preset-btn" :class="{ active: dashActivePreset === '30d' }" @click="dashApplyPreset('30d')">30 dias</button>
+                  <button type="button" class="dr-preset-btn" :class="{ active: dashActivePreset === '3m' }" @click="dashApplyPreset('3m')">3 meses</button>
+                  <button type="button" class="dr-preset-btn" :class="{ active: dashActivePreset === 'year' }" @click="dashApplyPreset('year')">Este ano</button>
+                  <button type="button" class="dr-preset-btn" :class="{ active: dashActivePreset === 'all' }" @click="dashApplyPreset('all')">Desde sempre</button>
+                </div>
+                <div class="date-range-calendars">
+                  <div class="dr-calendar">
+                    <div class="dr-cal-header">
+                      <button type="button" class="dr-cal-nav" @click="dashPickerPrevMonth">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                      </button>
+                      <span class="dr-cal-title">{{ PICKER_MONTH_NAMES[dashPickerLeftMonth] }} {{ dashPickerLeftYear }}</span>
+                      <span style="width:28px"></span>
+                    </div>
+                    <div class="dr-cal-weekdays">
+                      <span v-for="wd in PICKER_WEEKDAYS" :key="wd">{{ wd }}</span>
+                    </div>
+                    <div class="dr-cal-grid">
+                      <button
+                        v-for="(d, i) in dashLeftDays"
+                        :key="'dl'+i"
+                        type="button"
+                        class="dr-day"
+                        :class="{
+                          empty: d === null,
+                          'in-range': d !== null && dashIsInRange(dashPickerLeftYear, dashPickerLeftMonth, d),
+                          'is-start': d !== null && dashIsStart(dashPickerLeftYear, dashPickerLeftMonth, d),
+                          'is-end': d !== null && dashIsEnd(dashPickerLeftYear, dashPickerLeftMonth, d),
+                        }"
+                        :disabled="d === null"
+                        @click="d !== null && dashPickDay(dashPickerLeftYear, dashPickerLeftMonth, d)"
+                      >
+                        {{ d ?? '' }}
+                      </button>
+                    </div>
+                  </div>
+                  <div class="dr-calendar">
+                    <div class="dr-cal-header">
+                      <span style="width:28px"></span>
+                      <span class="dr-cal-title">{{ PICKER_MONTH_NAMES[dashPickerRightMonth] }} {{ dashPickerRightYear }}</span>
+                      <button type="button" class="dr-cal-nav" @click="dashPickerNextMonth">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                      </button>
+                    </div>
+                    <div class="dr-cal-weekdays">
+                      <span v-for="wd in PICKER_WEEKDAYS" :key="wd">{{ wd }}</span>
+                    </div>
+                    <div class="dr-cal-grid">
+                      <button
+                        v-for="(d, i) in dashRightDays"
+                        :key="'dr'+i"
+                        type="button"
+                        class="dr-day"
+                        :class="{
+                          empty: d === null,
+                          'in-range': d !== null && dashIsInRange(dashPickerRightYear, dashPickerRightMonth, d),
+                          'is-start': d !== null && dashIsStart(dashPickerRightYear, dashPickerRightMonth, d),
+                          'is-end': d !== null && dashIsEnd(dashPickerRightYear, dashPickerRightMonth, d),
+                        }"
+                        :disabled="d === null"
+                        @click="d !== null && dashPickDay(dashPickerRightYear, dashPickerRightMonth, d)"
+                      >
+                        {{ d ?? '' }}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </Transition>
+          </div>
         </div>
         <div v-if="periodChangeLoading" class="period-refresh-state">
           <div class="period-refresh-inner">
@@ -674,7 +934,7 @@ const showContent = computed(() =>
         </template>
       </div>
 
-      <div class="dashboard-section-card">
+      <div v-if="isSingleMonth" class="dashboard-section-card">
         <h2 class="section-title">Plano mensal</h2>
         <div v-if="hasChartData && hasBudgetForPeriod" class="comparison-grid">
           <div class="comparison-card">
@@ -1845,4 +2105,215 @@ html.dark .patrimonio-period-btn.active {
 
 }
 
+/* ═══ Date Range Picker ═══ */
+.date-range-picker {
+  position: relative;
+}
+
+.date-range-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 0.4375rem 0.75rem;
+  font-family: inherit;
+  font-size: 0.8125rem;
+  color: var(--color-text);
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+  white-space: nowrap;
+}
+
+.date-range-btn:hover {
+  border-color: #166534;
+}
+
+.date-range-btn svg:first-child {
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+}
+
+.date-range-chevron {
+  color: var(--color-text-muted);
+  transition: transform 0.2s ease;
+  flex-shrink: 0;
+}
+
+.date-range-chevron.open {
+  transform: rotate(180deg);
+}
+
+.date-range-panel {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  left: 0;
+  z-index: 60;
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  box-shadow: 0 12px 40px -8px rgba(15, 23, 42, 0.18);
+  padding: 1rem;
+}
+
+.dr-presets {
+  display: flex;
+  gap: 0.375rem;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.dr-preset-btn {
+  padding: 0.3rem 0.625rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-family: inherit;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+  white-space: nowrap;
+}
+
+.dr-preset-btn:hover {
+  border-color: #166534;
+  color: #166534;
+}
+
+.dr-preset-btn.active {
+  border-color: #166534;
+  background: rgba(22, 101, 52, 0.1);
+  color: #166534;
+}
+
+html.dark .dr-preset-btn.active {
+  border-color: #4ade80;
+  background: rgba(74, 222, 128, 0.12);
+  color: #4ade80;
+}
+
+html.dark .dr-preset-btn:hover {
+  border-color: #4ade80;
+  color: #4ade80;
+}
+
+.date-range-calendars {
+  display: flex;
+  gap: 1.25rem;
+}
+
+.dr-calendar {
+  width: 240px;
+}
+
+.dr-cal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+.dr-cal-title {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: var(--color-text);
+  text-align: center;
+}
+
+.dr-cal-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  border-radius: 6px;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.dr-cal-nav:hover {
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--color-text);
+}
+
+html.dark .dr-cal-nav:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.dr-cal-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  margin-bottom: 0.25rem;
+}
+
+.dr-cal-weekdays span {
+  text-align: center;
+  font-size: 0.625rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+  padding: 0.25rem 0;
+}
+
+.dr-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 1px;
+}
+
+.dr-day {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 32px;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--color-text);
+  cursor: pointer;
+  border-radius: 0;
+  transition: background 0.1s ease;
+}
+
+.dr-day.empty { cursor: default; }
+
+.dr-day:not(.empty):hover { background: rgba(22, 101, 52, 0.08); }
+
+.dr-day.in-range { background: rgba(22, 101, 52, 0.08); }
+
+.dr-day.is-start,
+.dr-day.is-end {
+  background: #166534;
+  color: #fff;
+  font-weight: 700;
+}
+
+.dr-day.is-start { border-radius: 6px 0 0 6px; }
+.dr-day.is-end { border-radius: 0 6px 6px 0; }
+.dr-day.is-start.is-end { border-radius: 6px; }
+
+html.dark .dr-day.in-range { background: rgba(74, 222, 128, 0.1); }
+html.dark .dr-day.is-start,
+html.dark .dr-day.is-end { background: #4ade80; color: #0a0a0a; }
+
+.panel-enter-active,
+.panel-leave-active {
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.panel-enter-from,
+.panel-leave-to {
+  opacity: 0;
+  transform: translateY(-6px);
+}
 </style>

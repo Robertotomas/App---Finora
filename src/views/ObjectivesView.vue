@@ -135,12 +135,26 @@ function normalizeOverview(payload: unknown): SavingsObjectivesOverview {
   }
 }
 
+function distributeLocalSavings(ov: ReturnType<typeof normalizeOverview>) {
+  const available = Math.max(0, ov.totalSavings)
+  if (available > 0 && ov.activeObjectives.length > 0) {
+    for (const goal of ov.activeObjectives) {
+      const allocated = Math.min(available, goal.targetAmount)
+      goal.allocatedAmount = allocated
+      goal.progressPercent = goal.targetAmount > 0 ? (allocated / goal.targetAmount) * 100 : 0
+      goal.canFinalize = allocated >= goal.targetAmount
+    }
+    ov.availableForActiveObjectives = available
+  }
+  return ov
+}
+
 async function loadOverview() {
   loading.value = true
   error.value = null
   try {
     const { data } = await objectivesApi.getOverview()
-    overview.value = normalizeOverview(data)
+    overview.value = distributeLocalSavings(normalizeOverview(data))
   } catch (e: unknown) {
     const err = e as { response?: { data?: { message?: string } }; message?: string }
     error.value = err.response?.data?.message || err.message || 'Erro ao carregar objetivos.'
@@ -183,7 +197,7 @@ async function submitForm() {
         targetDate,
       }
       const { data } = await objectivesApi.update(editingId.value, payload)
-      overview.value = normalizeOverview(data)
+      overview.value = distributeLocalSavings(normalizeOverview(data))
     } else {
       const payload: CreateSavingsObjectiveRequest = {
         name: formName.value.trim(),
@@ -191,7 +205,7 @@ async function submitForm() {
         targetDate,
       }
       const { data } = await objectivesApi.create(payload)
-      overview.value = normalizeOverview(data)
+      overview.value = distributeLocalSavings(normalizeOverview(data))
     }
     resetForm()
   } catch (e: unknown) {
@@ -208,7 +222,7 @@ async function finalizeObjective(item: SavingsObjectiveActive) {
   error.value = null
   try {
     const { data } = await objectivesApi.finalize(item.id)
-    overview.value = normalizeOverview(data)
+    overview.value = distributeLocalSavings(normalizeOverview(data))
     activeTab.value = 'active'
   } catch (e: unknown) {
     const err = e as { response?: { data?: { message?: string } }; message?: string }
@@ -234,7 +248,7 @@ async function confirmDeleteObjective() {
   const id = objectiveToDelete.value.id
   try {
     const { data } = await objectivesApi.delete(id)
-    overview.value = normalizeOverview(data)
+    overview.value = distributeLocalSavings(normalizeOverview(data))
     if (editingId.value === id) resetForm()
     objectiveToDelete.value = null
   } catch (e: unknown) {
