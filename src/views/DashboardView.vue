@@ -707,7 +707,7 @@ const showContent = computed(() =>
                 {{ hideValues ? '••••• €' : formattedExpenses }}
               </span>
             </div>
-            <div v-if="budgetForPeriod.expectedExpenses > 0 && !hideValues" class="comparison-diff">
+            <div v-if="budgetForPeriod.expectedExpenses > 0 && !hideValues" class="comparison-diff" :class="{ 'comparison-diff--over': dashboard.monthlyExpenses.value > budgetForPeriod.expectedExpenses }">
               {{ dashboard.monthlyExpenses.value <= budgetForPeriod.expectedExpenses ? '✓' : '' }}
               {{ formatCurrency(dashboard.monthlyExpenses.value - budgetForPeriod.expectedExpenses, dashboard.currency.value) }}
               {{ dashboard.monthlyExpenses.value <= budgetForPeriod.expectedExpenses ? 'abaixo do orçamento' : 'acima do orçamento' }}
@@ -1248,6 +1248,14 @@ html.dark .summary-cards-fallback .card-savings .card-value { color: #60a5fa; }
   margin-top: 0.5rem;
   padding-top: 0.5rem;
   border-top: 1px dashed var(--color-border);
+}
+
+.comparison-diff--over {
+  color: #dc2626;
+}
+
+html.dark .comparison-diff--over {
+  color: #f87171;
 }
 
 .charts-section-inner {

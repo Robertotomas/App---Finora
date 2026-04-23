@@ -95,10 +95,29 @@ const navItems = [
   { to: '/dashboard', label: 'Dashboard', iconImg: iconDashboard },
   { to: '/monthly', label: 'Plano Mensal', iconImg: iconMonthly, iconClass: 'sidebar-nav-icon-lg' },
   { to: '/accounts', label: 'Contas', iconImg: iconCreditCard, iconClass: 'sidebar-nav-icon-sm' },
-  { to: '/transactions', label: 'Transações', iconImg: iconTransactions, iconClass: 'sidebar-nav-icon-lg' },
   { to: '/objectives', label: 'Objetivos', iconImg: iconObjectives, iconClass: 'sidebar-nav-icon-lg sidebar-nav-icon-objectives' },
   { to: '/reports', label: 'Relatórios', iconImg: iconReports, iconClass: 'sidebar-nav-icon-lg sidebar-nav-icon-reports' },
 ]
+
+const movimentsOpen = ref(false)
+const isMovimentsActive = computed(() => route.path.startsWith('/transactions'))
+
+const movimentsSubItems = [
+  { to: '/transactions?tab=summary', label: 'Resumo', tabKey: 'summary' },
+  { to: '/transactions?tab=transactions', label: 'Transações', tabKey: 'transactions' },
+  { to: '/transactions?tab=recurring', label: 'Recorrentes', tabKey: 'recurring' },
+]
+
+function toggleMoviments() {
+  movimentsOpen.value = !movimentsOpen.value
+}
+
+function isMovimentsSubActive(tabKey: string) {
+  if (!route.path.startsWith('/transactions')) return false
+  const tab = route.query.tab as string | undefined
+  if (tabKey === 'summary') return !tab || tab === 'summary'
+  return tab === tabKey
+}
 
 function isActive(path: string) {
   if (path === '/dashboard') return route.path === '/dashboard'
@@ -217,18 +236,47 @@ function isActive(path: string) {
           </RouterLink>
         </div>
         <nav v-if="authStore.isAuthenticated" class="sidebar-nav">
-          <RouterLink
-            v-for="item in navItems"
-            :key="item.to"
-            :to="item.to"
-            class="sidebar-link"
-            :class="{ active: isActive(item.to) }"
-          >
-            <span class="sidebar-icon">
-              <img :src="item.iconImg" alt="" class="sidebar-nav-icon" :class="item.iconClass" />
-            </span>
-            <span class="sidebar-label">{{ item.label }}</span>
-          </RouterLink>
+          <template v-for="item in navItems" :key="item.to">
+            <RouterLink
+              :to="item.to"
+              class="sidebar-link"
+              :class="{ active: isActive(item.to) }"
+            >
+              <span class="sidebar-icon">
+                <img :src="item.iconImg" alt="" class="sidebar-nav-icon" :class="item.iconClass" />
+              </span>
+              <span class="sidebar-label">{{ item.label }}</span>
+            </RouterLink>
+
+            <!-- Movimentos expandable (after Contas) -->
+            <template v-if="item.to === '/accounts'">
+              <button
+                type="button"
+                class="sidebar-link sidebar-link-expandable"
+                :class="{ active: isMovimentsActive }"
+                @click="toggleMoviments"
+              >
+                <span class="sidebar-icon">
+                  <img :src="iconTransactions" alt="" class="sidebar-nav-icon sidebar-nav-icon-lg" />
+                </span>
+                <span class="sidebar-label">Movimentos</span>
+                <svg class="sidebar-expand-chevron" :class="{ open: movimentsOpen || isMovimentsActive }" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+              </button>
+              <transition name="submenu">
+                <div v-show="movimentsOpen || isMovimentsActive" class="sidebar-submenu">
+                  <RouterLink
+                    v-for="sub in movimentsSubItems"
+                    :key="sub.tabKey"
+                    :to="sub.to"
+                    class="sidebar-sublink"
+                    :class="{ active: isMovimentsSubActive(sub.tabKey) }"
+                  >
+                    {{ sub.label }}
+                  </RouterLink>
+                </div>
+              </transition>
+            </template>
+          </template>
         </nav>
         <div v-if="authStore.isAuthenticated" class="sidebar-footer">
           <button type="button" class="btn-sidebar btn-logout" @click="logout">Sair</button>
@@ -347,6 +395,68 @@ html.dark .sidebar {
 html.dark .sidebar-link.active {
   background: rgba(255, 255, 255, 0.1);
   color: #ffffff;
+}
+
+.sidebar-link-expandable {
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+}
+
+.sidebar-expand-chevron {
+  margin-left: auto;
+  opacity: 0.5;
+  transition: transform 0.2s ease;
+  flex-shrink: 0;
+}
+
+.sidebar-expand-chevron.open {
+  transform: rotate(180deg);
+}
+
+.sidebar-submenu {
+  display: flex;
+  flex-direction: column;
+  gap: 0.0625rem;
+  padding-left: 2.75rem;
+  overflow: hidden;
+}
+
+.sidebar-sublink {
+  display: block;
+  padding: 0.4rem 0.875rem;
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.6);
+  text-decoration: none;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.sidebar-sublink:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+}
+
+.sidebar-sublink.active {
+  color: #ffffff;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.submenu-enter-active,
+.submenu-leave-active {
+  transition: max-height 0.2s ease, opacity 0.2s ease;
+  max-height: 200px;
+}
+
+.submenu-enter-from,
+.submenu-leave-to {
+  max-height: 0;
+  opacity: 0;
 }
 
 .sidebar-icon {

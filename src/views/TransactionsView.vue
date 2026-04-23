@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { useTransactionsStore } from '@/stores/transactions'
 import { useRecurringTransactionsStore } from '@/stores/recurringTransactions'
 import { useAccountsStore } from '@/stores/accounts'
@@ -30,8 +30,16 @@ const householdStore = useHouseholdStore()
 const authStore = useAuthStore()
 const subscriptionStore = useSubscriptionStore()
 const router = useRouter()
+const routeRef = useRoute()
 
-const activeTab = ref<'transactions' | 'recurring'>('transactions')
+const tabFromQuery = routeRef.query.tab as string | undefined
+const initialTab = tabFromQuery === 'recurring' ? 'recurring' : 'transactions'
+const activeTab = ref<'transactions' | 'recurring'>(initialTab)
+
+watch(() => routeRef.query.tab, (tab) => {
+  if (tab === 'recurring') activeTab.value = 'recurring'
+  else if (tab === 'transactions' || !tab) activeTab.value = 'transactions'
+})
 
 const createModalOpen = ref(false)
 const editModalOpen = ref(false)
@@ -593,8 +601,8 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
 <template>
   <div class="transactions-view">
     <div class="page-header">
-      <h1>Transações</h1>
-      <p class="subtitle">Gerir receitas e despesas</p>
+      <h1>{{ activeTab === 'recurring' ? 'Transações Recorrentes' : 'Transações' }}</h1>
+      <p class="subtitle">{{ activeTab === 'recurring' ? 'Gerir transações automáticas' : 'Gerir receitas e despesas' }}</p>
     </div>
 
     <div v-if="!householdStore.household && !householdStore.loading" class="empty-state">
@@ -612,23 +620,6 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
     </div>
 
     <div v-else class="content">
-      <div class="tabs">
-        <button
-          type="button"
-          :class="['tab', { active: activeTab === 'transactions' }]"
-          @click="activeTab = 'transactions'"
-        >
-          Transações
-        </button>
-        <button
-          type="button"
-          :class="['tab', { active: activeTab === 'recurring' }]"
-          @click="activeTab = 'recurring'"
-        >
-          Transações Recorrentes
-        </button>
-      </div>
-
       <div v-if="activeTab === 'transactions' && transactionsStore.error" class="global-error">
         {{ transactionsStore.error }}
       </div>
