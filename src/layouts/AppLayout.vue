@@ -94,7 +94,7 @@ const showHouseholdInUserMenu = computed(
 const navItems = [
   { to: '/dashboard', label: 'Dashboard', iconImg: iconDashboard },
   { to: '/monthly', label: 'Plano Mensal', iconImg: iconMonthly, iconClass: 'sidebar-nav-icon-lg' },
-  { to: '/accounts', label: 'Contas', iconImg: iconCreditCard, iconClass: 'sidebar-nav-icon-sm' },
+  { to: '/accounts', label: 'Contas', iconSvg: true, iconClass: '' },
   { to: '/objectives', label: 'Objetivos', iconImg: iconObjectives, iconClass: 'sidebar-nav-icon-lg sidebar-nav-icon-objectives' },
   { to: '/reports', label: 'Relatórios', iconImg: iconReports, iconClass: 'sidebar-nav-icon-lg sidebar-nav-icon-reports' },
 ]
@@ -236,47 +236,74 @@ function isActive(path: string) {
           </RouterLink>
         </div>
         <nav v-if="authStore.isAuthenticated" class="sidebar-nav">
-          <template v-for="item in navItems" :key="item.to">
-            <RouterLink
-              :to="item.to"
-              class="sidebar-link"
-              :class="{ active: isActive(item.to) }"
-            >
-              <span class="sidebar-icon">
-                <img :src="item.iconImg" alt="" class="sidebar-nav-icon" :class="item.iconClass" />
-              </span>
-              <span class="sidebar-label">{{ item.label }}</span>
-            </RouterLink>
-
-            <!-- Movimentos expandable (after Contas) -->
-            <template v-if="item.to === '/accounts'">
-              <button
-                type="button"
-                class="sidebar-link sidebar-link-expandable"
-                :class="{ active: isMovimentsActive }"
-                @click="toggleMoviments"
+          <!-- Main nav panel -->
+          <div class="sidebar-panel" :class="{ 'sidebar-panel--hidden': movimentsOpen }">
+            <template v-for="item in navItems" :key="item.to">
+              <RouterLink
+                :to="item.to"
+                class="sidebar-link"
+                :class="{ active: isActive(item.to) }"
               >
                 <span class="sidebar-icon">
-                  <img :src="iconTransactions" alt="" class="sidebar-nav-icon sidebar-nav-icon-lg" />
+                  <!-- Dashboard -->
+                  <svg v-if="item.to === '/dashboard'" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
+                  <!-- Plano Mensal -->
+                  <svg v-else-if="item.to === '/monthly'" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/><path d="m9 16 2 2 4-4"/></svg>
+                  <!-- Contas -->
+                  <svg v-else-if="item.to === '/accounts'" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 10h20"/><circle cx="17" cy="15" r="1.5"/></svg>
+                  <!-- Objetivos -->
+                  <svg v-else-if="item.to === '/objectives'" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/><line x1="22" x2="12" y1="2" y2="12"/></svg>
+                  <!-- Relatórios -->
+                  <svg v-else-if="item.to === '/reports'" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" x2="8" y1="13" y2="13"/><line x1="16" x2="8" y1="17" y2="17"/><line x1="10" x2="8" y1="9" y2="9"/></svg>
+                  <img v-else :src="item.iconImg" alt="" class="sidebar-nav-icon" :class="item.iconClass" />
                 </span>
-                <span class="sidebar-label">Movimentos</span>
-                <svg class="sidebar-expand-chevron" :class="{ open: movimentsOpen || isMovimentsActive }" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-              </button>
-              <transition name="submenu">
-                <div v-show="movimentsOpen || isMovimentsActive" class="sidebar-submenu">
-                  <RouterLink
-                    v-for="sub in movimentsSubItems"
-                    :key="sub.tabKey"
-                    :to="sub.to"
-                    class="sidebar-sublink"
-                    :class="{ active: isMovimentsSubActive(sub.tabKey) }"
-                  >
-                    {{ sub.label }}
-                  </RouterLink>
-                </div>
-              </transition>
+                <span class="sidebar-label">{{ item.label }}</span>
+              </RouterLink>
+
+              <template v-if="item.to === '/accounts'">
+                <button
+                  type="button"
+                  class="sidebar-link sidebar-link-expandable"
+                  :class="{ active: isMovimentsActive }"
+                  @click="movimentsOpen = true"
+                >
+                  <span class="sidebar-icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/><polyline points="21 3 21 9 15 9"/></svg>
+                  </span>
+                  <span class="sidebar-label">Movimentos</span>
+                  <svg class="sidebar-expand-arrow" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                </button>
+              </template>
             </template>
-          </template>
+          </div>
+
+          <!-- Movimentos sub-panel (slides in) -->
+          <div class="sidebar-panel sidebar-panel-sub" :class="{ 'sidebar-panel-sub--visible': movimentsOpen }">
+            <button type="button" class="sidebar-back-btn" @click="movimentsOpen = false">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+              <span>Movimentos</span>
+            </button>
+            <div class="sidebar-sub-items">
+              <RouterLink
+                v-for="sub in movimentsSubItems"
+                :key="sub.tabKey"
+                :to="sub.to"
+                class="sidebar-link sidebar-sub-item"
+                :class="{ active: isMovimentsSubActive(sub.tabKey) }"
+              >
+                <span v-if="sub.tabKey === 'summary'" class="sidebar-icon">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="8" x2="21" y1="6" y2="6"/><line x1="8" x2="21" y1="12" y2="12"/><line x1="8" x2="21" y1="18" y2="18"/><line x1="3" x2="3.01" y1="6" y2="6"/><line x1="3" x2="3.01" y1="12" y2="12"/><line x1="3" x2="3.01" y1="18" y2="18"/></svg>
+                </span>
+                <span v-if="sub.tabKey === 'transactions'" class="sidebar-icon">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="7 7 17 7"/><polyline points="4 12 20 12"/><polyline points="7 17 17 17"/><polyline points="3 7 5 5 3 3"/><polyline points="21 17 19 19 21 21"/></svg>
+                </span>
+                <span v-if="sub.tabKey === 'recurring'" class="sidebar-icon">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                </span>
+                <span class="sidebar-label">{{ sub.label }}</span>
+              </RouterLink>
+            </div>
+          </div>
         </nav>
         <div v-if="authStore.isAuthenticated" class="sidebar-footer">
           <button type="button" class="btn-sidebar btn-logout" @click="logout">Sair</button>
@@ -362,12 +389,14 @@ html.dark .sidebar {
   display: flex;
   flex-direction: column;
   gap: 0.125rem;
+  overflow: hidden;
+  position: relative;
 }
 
 .sidebar-link {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.4rem;
   padding: 0.6rem 0.875rem;
   border-left: none;
   border-radius: 10px;
@@ -406,57 +435,78 @@ html.dark .sidebar-link.active {
   background: transparent;
 }
 
-.sidebar-expand-chevron {
+.sidebar-expand-arrow {
   margin-left: auto;
-  opacity: 0.5;
-  transition: transform 0.2s ease;
+  opacity: 0.4;
   flex-shrink: 0;
 }
 
-.sidebar-expand-chevron.open {
-  transform: rotate(180deg);
-}
-
-.sidebar-submenu {
+/* Sliding panels */
+.sidebar-panel {
   display: flex;
   flex-direction: column;
-  gap: 0.0625rem;
-  padding-left: 2.75rem;
-  overflow: hidden;
+  gap: 0.125rem;
+  transition: transform 0.25s ease, opacity 0.25s ease;
 }
 
-.sidebar-sublink {
-  display: block;
-  padding: 0.4rem 0.875rem;
-  border-radius: 8px;
-  color: rgba(255, 255, 255, 0.6);
-  text-decoration: none;
-  font-size: 0.8125rem;
-  font-weight: 500;
-  transition: background 0.15s ease, color 0.15s ease;
-}
-
-.sidebar-sublink:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: #ffffff;
-}
-
-.sidebar-sublink.active {
-  color: #ffffff;
-  font-weight: 600;
-  background: rgba(255, 255, 255, 0.12);
-}
-
-.submenu-enter-active,
-.submenu-leave-active {
-  transition: max-height 0.2s ease, opacity 0.2s ease;
-  max-height: 200px;
-}
-
-.submenu-enter-from,
-.submenu-leave-to {
-  max-height: 0;
+.sidebar-panel--hidden {
+  transform: translateX(-100%);
   opacity: 0;
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+}
+
+.sidebar-panel-sub {
+  position: absolute;
+  inset: 0;
+  transform: translateX(100%);
+  opacity: 0;
+  pointer-events: none;
+  padding: 0;
+}
+
+.sidebar-panel-sub--visible {
+  transform: translateX(0);
+  opacity: 1;
+  pointer-events: auto;
+  position: relative;
+}
+
+.sidebar-back-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 0.875rem;
+  margin-bottom: 0.5rem;
+  border: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+  padding-bottom: 0.75rem;
+  transition: color 0.15s ease;
+}
+
+.sidebar-back-btn:hover {
+  color: #ffffff;
+}
+
+.sidebar-sub-items {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.sidebar-sub-item {
+  padding: 0.7rem 1rem;
+  font-size: 0.9375rem;
 }
 
 .sidebar-icon {
