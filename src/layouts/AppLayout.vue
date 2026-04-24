@@ -17,6 +17,22 @@ const route = useRoute()
 const router = useRouter()
 const userMenuOpen = ref(false)
 
+const SIDEBAR_KEY = 'finora-sidebar-collapsed'
+const sidebarCollapsed = ref(localStorage.getItem(SIDEBAR_KEY) === 'true')
+
+function toggleSidebar() {
+  sidebarCollapsed.value = !sidebarCollapsed.value
+  localStorage.setItem(SIDEBAR_KEY, String(sidebarCollapsed.value))
+}
+
+function openMoviments() {
+  if (sidebarCollapsed.value) {
+    sidebarCollapsed.value = false
+    localStorage.setItem(SIDEBAR_KEY, 'false')
+  }
+  movimentsOpen.value = true
+}
+
 function logout() {
   userMenuOpen.value = false
   authStore.logout()
@@ -121,6 +137,9 @@ function isActive(path: string) {
   <div class="app-layout">
     <!-- Barra superior - largura total -->
     <header class="top-header">
+      <button v-if="sidebarCollapsed && authStore.isAuthenticated" type="button" class="sidebar-expand-btn" @click="toggleSidebar" title="Expandir">
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" x2="21" y1="6" y2="6"/><line x1="3" x2="21" y1="12" y2="12"/><line x1="3" x2="21" y1="18" y2="18"/></svg>
+      </button>
       <RouterLink to="/dashboard" class="header-brand" aria-label="FinoraFlow — ir para o painel">
         <img
           :src="iconFinoraFlow"
@@ -216,7 +235,7 @@ function isActive(path: string) {
 
     <!-- Sidebar + conteúdo (abaixo da barra superior) -->
     <div class="content-row">
-      <aside class="sidebar">
+      <aside class="sidebar" :class="{ collapsed: sidebarCollapsed }">
         <div v-if="authStore.isAuthenticated" class="sidebar-plan">
           <RouterLink
             :to="{ name: 'subscription' }"
@@ -225,6 +244,9 @@ function isActive(path: string) {
           >
             {{ planLabel }}
           </RouterLink>
+          <button v-if="!sidebarCollapsed" type="button" class="sidebar-collapse-btn" @click="toggleSidebar" title="Minimizar">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="11 17 6 12 11 7"/><polyline points="18 17 13 12 18 7"/></svg>
+          </button>
         </div>
         <nav v-if="authStore.isAuthenticated" class="sidebar-nav">
           <!-- Main nav panel -->
@@ -255,7 +277,7 @@ function isActive(path: string) {
                   type="button"
                   class="sidebar-link sidebar-link-expandable"
                   :class="{ active: isMovimentsActive }"
-                  @click="movimentsOpen = true"
+                  @click="openMoviments"
                 >
                   <span class="sidebar-icon">
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/><polyline points="21 3 21 9 15 9"/></svg>
@@ -296,7 +318,10 @@ function isActive(path: string) {
           </div>
         </nav>
         <div v-if="authStore.isAuthenticated" class="sidebar-footer">
-          <button type="button" class="btn-sidebar btn-logout" @click="logout">Sair</button>
+          <button type="button" class="btn-sidebar btn-logout" @click="logout">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>
+            <span class="sidebar-label">Sair</span>
+          </button>
         </div>
         <div v-else class="sidebar-guest">
           <RouterLink to="/login" class="sidebar-link">Entrar</RouterLink>
@@ -346,6 +371,9 @@ html.dark .sidebar {
 }
 
 .sidebar-plan {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
   padding: 1.125rem 0.875rem 0.875rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.12);
 }
@@ -598,8 +626,8 @@ html.dark .sidebar-nav-icon-reports {
   --top-bar-height: 60px;
   display: flex;
   align-items: center;
-  gap: 1rem;
-  padding: 0 1.5rem;
+  gap: 0.625rem;
+  padding: 0 1rem;
   height: var(--top-bar-height);
   min-height: var(--top-bar-height);
   max-height: var(--top-bar-height);
@@ -619,6 +647,7 @@ html.dark .sidebar-nav-icon-reports {
   text-decoration: none;
   cursor: pointer;
   background: transparent;
+  margin-left: 1rem;
 }
 
 .header-brand:hover {
@@ -853,6 +882,122 @@ html.dark .theme-btn.active {
   overflow-y: auto;
 }
 
+/* ─── Sidebar collapse toggle ─── */
+.sidebar-collapse-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  margin-left: auto;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  transition: color 0.15s ease;
+  flex-shrink: 0;
+}
+
+.sidebar-collapse-btn:hover {
+  color: #fff;
+}
+
+.sidebar-expand-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.sidebar-expand-btn:hover {
+  color: var(--color-text);
+  background: rgba(0, 0, 0, 0.06);
+}
+
+html.dark .sidebar-expand-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* ─── Collapsed sidebar ─── */
+.sidebar.collapsed {
+  width: 68px;
+  min-width: 68px;
+  transition: width 0.25s ease, min-width 0.25s ease;
+}
+
+.sidebar:not(.collapsed) {
+  transition: width 0.25s ease, min-width 0.25s ease;
+}
+
+.sidebar.collapsed .sidebar-label {
+  display: none;
+}
+
+.sidebar.collapsed .sidebar-expand-arrow {
+  display: none;
+}
+
+.sidebar.collapsed .sidebar-plan {
+  padding: 0.75rem 0.5rem;
+  justify-content: center;
+}
+
+.sidebar.collapsed .sidebar-plan-link {
+  padding: 0.2rem 0.5rem;
+  font-size: 0.625rem;
+}
+
+.sidebar.collapsed .sidebar-nav {
+  padding: 1rem 0.5rem 0.5rem;
+  align-items: center;
+}
+
+.sidebar.collapsed .sidebar-link {
+  justify-content: center;
+  padding: 0.6rem;
+  width: 44px;
+  height: 44px;
+}
+
+.sidebar.collapsed .sidebar-icon {
+  width: 24px;
+  height: 24px;
+}
+
+.sidebar.collapsed .sidebar-footer {
+  padding: 0.75rem 0.5rem;
+}
+
+.sidebar.collapsed .btn-sidebar {
+  padding: 0.5rem;
+  justify-content: center;
+}
+
+.sidebar.collapsed .sidebar-back-btn {
+  justify-content: center;
+  font-size: 0;
+  padding: 0.6rem;
+}
+
+.sidebar.collapsed .sidebar-back-btn svg {
+  font-size: initial;
+}
+
+.sidebar.collapsed .sidebar-sub-item {
+  justify-content: center;
+  padding: 0.6rem;
+}
+
 /* ─── Mobile: sidebar collapses ─── */
 @media (max-width: 768px) {
   .content-row {
@@ -872,6 +1017,20 @@ html.dark .theme-btn.active {
 
   .sidebar-plan {
     display: none;
+  }
+
+  .sidebar-collapse-btn,
+  .sidebar-expand-btn {
+    display: none;
+  }
+
+  .sidebar.collapsed {
+    width: 100%;
+    min-width: 100%;
+  }
+
+  .sidebar.collapsed .sidebar-label {
+    display: inline;
   }
 
   .sidebar-nav {
