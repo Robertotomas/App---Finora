@@ -559,6 +559,116 @@ function onSettleCancelConfirm() {
   settleConfirmId.value = null
 }
 
+// Card order (drag-and-drop via pointer events)
+const CARD_ORDER_KEY = 'finora-dashboard-card-order'
+const defaultCardOrder = ['accounts', 'objectives', 'movements']
+const cardOrder = ref<string[]>([...defaultCardOrder])
+const cardEditMode = ref(false)
+const draggedCard = ref<string | null>(null)
+const staticGridRef = ref<HTMLElement | null>(null)
+
+let floatingEl: HTMLElement | null = null
+const dragOffset = { x: 0, y: 0 }
+
+function loadCardOrder() {
+  try {
+    const saved = localStorage.getItem(CARD_ORDER_KEY)
+    if (saved) {
+      const parsed = JSON.parse(saved)
+      if (Array.isArray(parsed) && parsed.length === 3 && defaultCardOrder.every(c => parsed.includes(c))) {
+        cardOrder.value = parsed
+      }
+    }
+  } catch { /* ignore */ }
+}
+
+function saveCardOrder() {
+  localStorage.setItem(CARD_ORDER_KEY, JSON.stringify(cardOrder.value))
+}
+
+let cardOrderBeforeEdit: string[] = []
+
+function toggleCardEditMode() {
+  if (!cardEditMode.value) {
+    cardOrderBeforeEdit = [...cardOrder.value]
+  }
+  cardEditMode.value = !cardEditMode.value
+  if (!cardEditMode.value) {
+    cleanupDrag()
+  }
+}
+
+function cancelCardEdit() {
+  cardOrder.value = [...cardOrderBeforeEdit]
+  saveCardOrder()
+  cardEditMode.value = false
+  cleanupDrag()
+}
+
+function onCardPointerDown(e: PointerEvent, cardId: string) {
+  if (!cardEditMode.value || e.button !== 0) return
+  e.preventDefault()
+
+  const card = e.currentTarget as HTMLElement
+  const rect = card.getBoundingClientRect()
+
+  draggedCard.value = cardId
+  dragOffset.x = e.clientX - rect.left
+  dragOffset.y = e.clientY - rect.top
+
+  // Create floating clone
+  const clone = card.cloneNode(true) as HTMLElement
+  clone.className = 'dashboard-section-card static-card card-floating'
+  clone.style.width = rect.width + 'px'
+  clone.style.left = (e.clientX - dragOffset.x) + 'px'
+  clone.style.top = (e.clientY - dragOffset.y) + 'px'
+  document.body.appendChild(clone)
+  floatingEl = clone
+
+  document.addEventListener('pointermove', onDocPointerMove)
+  document.addEventListener('pointerup', onDocPointerUp)
+}
+
+function onDocPointerMove(e: PointerEvent) {
+  if (!floatingEl || !draggedCard.value) return
+
+  floatingEl.style.left = (e.clientX - dragOffset.x) + 'px'
+  floatingEl.style.top = (e.clientY - dragOffset.y) + 'px'
+
+  // Detect target column based on mouse position in the grid
+  const grid = staticGridRef.value
+  if (!grid) return
+  const gridRect = grid.getBoundingClientRect()
+  const relX = e.clientX - gridRect.left
+  const colWidth = gridRect.width / cardOrder.value.length
+  const targetIdx = Math.min(cardOrder.value.length - 1, Math.max(0, Math.floor(relX / colWidth)))
+
+  const currentIdx = cardOrder.value.indexOf(draggedCard.value)
+  if (targetIdx !== currentIdx) {
+    const arr = [...cardOrder.value]
+    arr.splice(currentIdx, 1)
+    arr.splice(targetIdx, 0, draggedCard.value)
+    cardOrder.value = arr
+  }
+}
+
+function onDocPointerUp() {
+  if (draggedCard.value) saveCardOrder()
+  cleanupDrag()
+}
+
+function cleanupDrag() {
+  draggedCard.value = null
+  if (floatingEl) {
+    floatingEl.remove()
+    floatingEl = null
+  }
+  document.removeEventListener('pointermove', onDocPointerMove)
+  document.removeEventListener('pointerup', onDocPointerUp)
+}
+
+loadCardOrder()
+
 const hideValues = ref(false)
 
 const todayLabel = computed(() => {
@@ -709,12 +819,34 @@ const showContent = computed(() =>
       </div>
 
       <!-- ═══ STATIC GRID: Contas + Objetivos (dados atuais) ═══ -->
-      <div class="static-grid">
+      <div class="static-grid-header">
+        <template v-if="cardEditMode">
+          <button type="button" class="card-cancel-btn" @click="cancelCardEdit">Cancelar</button>
+          <button type="button" class="card-done-btn" @click="toggleCardEditMode">Concluído</button>
+        </template>
+        <button v-else type="button" class="card-edit-btn" @click="toggleCardEditMode" title="Reorganizar cards">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+          <span>Editar</span>
+        </button>
+      </div>
+      <div ref="staticGridRef" class="static-grid" :class="{ editing: cardEditMode }">
+        <template v-for="cardId in cardOrder" :key="cardId">
+
         <!-- Card: Contas -->
-        <div class="dashboard-section-card static-card">
+        <div
+          v-if="cardId === 'accounts'"
+          class="dashboard-section-card static-card"
+          :class="{ 'card-editing': cardEditMode, 'card-drag-placeholder': draggedCard === 'accounts' }"
+          @pointerdown="onCardPointerDown($event, 'accounts')"
+        >
           <div class="static-card-header">
             <h2 class="section-title">Contas bancárias</h2>
-            <router-link :to="{ name: 'accounts' }" class="static-card-link" title="Ver todas"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></router-link>
+            <div class="static-card-header-actions">
+              <span v-if="cardEditMode" class="card-drag-handle" title="Arrastar para reordenar">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="5" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="19" r="1"/></svg>
+              </span>
+              <router-link v-else :to="{ name: 'accounts' }" class="static-card-link" title="Ver todas"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></router-link>
+            </div>
           </div>
           <div v-if="accountsToShow.length > 0" class="accounts-list">
             <router-link
@@ -747,10 +879,20 @@ const showContent = computed(() =>
         </div>
 
         <!-- Card: Objetivos -->
-        <div class="dashboard-section-card static-card">
+        <div
+          v-else-if="cardId === 'objectives'"
+          class="dashboard-section-card static-card"
+          :class="{ 'card-editing': cardEditMode, 'card-drag-placeholder': draggedCard === 'objectives' }"
+          @pointerdown="onCardPointerDown($event, 'objectives')"
+        >
           <div class="static-card-header">
             <h2 class="section-title">Objetivos de poupança</h2>
-            <router-link :to="{ name: 'objectives' }" class="static-card-link" title="Ver todos"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></router-link>
+            <div class="static-card-header-actions">
+              <span v-if="cardEditMode" class="card-drag-handle" title="Arrastar para reordenar">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="5" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="19" r="1"/></svg>
+              </span>
+              <router-link v-else :to="{ name: 'objectives' }" class="static-card-link" title="Ver todos"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></router-link>
+            </div>
           </div>
           <div
             class="dashboard-objectives-body-wrap"
@@ -816,10 +958,20 @@ const showContent = computed(() =>
         </div>
 
         <!-- Card: Últimos movimentos -->
-        <div class="dashboard-section-card static-card">
+        <div
+          v-else-if="cardId === 'movements'"
+          class="dashboard-section-card static-card"
+          :class="{ 'card-editing': cardEditMode, 'card-drag-placeholder': draggedCard === 'movements' }"
+          @pointerdown="onCardPointerDown($event, 'movements')"
+        >
           <div class="static-card-header">
             <h2 class="section-title">Últimos movimentos</h2>
-            <router-link :to="{ name: 'transactions' }" class="static-card-link" title="Ver todos"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></router-link>
+            <div class="static-card-header-actions">
+              <span v-if="cardEditMode" class="card-drag-handle" title="Arrastar para reordenar">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="5" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="19" r="1"/></svg>
+              </span>
+              <router-link v-else :to="{ name: 'transactions' }" class="static-card-link" title="Ver todos"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></router-link>
+            </div>
           </div>
           <div v-if="recentTransactions.length > 0" class="movements-list">
             <router-link
@@ -849,6 +1001,7 @@ const showContent = computed(() =>
             <router-link to="/transactions" class="static-card-action">Adicionar</router-link>
           </div>
         </div>
+        </template>
       </div>
 
       <!-- ═══ FILTERED SECTIONS (dados dinâmicos por período) ═══ -->
@@ -2623,5 +2776,128 @@ html.dark .settle-item-btn:hover {
 
 .settle-confirm-cancel:hover {
   color: var(--color-text);
+}
+
+/* ── Card reorder ── */
+.static-grid-header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.card-edit-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.375rem 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+  background: var(--color-card-bg, #fff);
+  color: var(--color-text-secondary);
+  font-size: 0.8125rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.card-edit-btn:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+html.dark .card-edit-btn {
+  background: var(--color-card-bg, #1e1e2e);
+}
+
+.card-cancel-btn {
+  padding: 0.375rem 0.75rem;
+  border: none;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 0.8125rem;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+.card-cancel-btn:hover {
+  color: var(--color-text);
+}
+
+.card-done-btn {
+  padding: 0.5rem 1.25rem;
+  border: none;
+  border-radius: 2rem;
+  background: var(--color-success, #059669);
+  color: #fff;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.card-done-btn:hover {
+  background: #047857;
+}
+html.dark .card-done-btn:hover {
+  background: #10b981;
+}
+
+.card-editing {
+  outline: 2px dashed var(--color-primary);
+  outline-offset: -2px;
+  border-radius: 1rem;
+  cursor: grab;
+  transition: outline-color 0.2s ease;
+}
+.card-editing:active {
+  cursor: grabbing;
+}
+
+.card-drag-placeholder {
+  outline: 2px dashed var(--color-primary);
+  outline-offset: -2px;
+  border-radius: 1rem;
+  background: rgba(var(--color-primary-rgb, 99, 102, 241), 0.06) !important;
+}
+.card-drag-placeholder > * {
+  visibility: hidden;
+}
+html.dark .card-drag-placeholder {
+  background: rgba(var(--color-primary-rgb, 99, 102, 241), 0.1) !important;
+}
+
+.card-floating {
+  position: fixed;
+  z-index: 9999;
+  pointer-events: none;
+  border-radius: 1rem;
+  background: var(--color-bg-card, #fff);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
+  padding: 0.875rem 1rem;
+  transition: none;
+}
+html.dark .card-floating {
+  background: var(--color-bg-card, #1e1e2e);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+}
+
+.static-card-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.card-drag-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-secondary);
+  cursor: grab;
+  padding: 0.25rem;
+  border-radius: 0.25rem;
+  transition: color 0.15s ease;
+}
+.card-drag-handle:hover {
+  color: var(--color-primary);
+}
+.card-drag-handle:active {
+  cursor: grabbing;
 }
 </style>
