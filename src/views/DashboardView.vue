@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, computed, ref, nextTick, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import type { ExpenseByCategory, IncomeByCategory, MonthlyTrend } from '@/types/dashboard'
-import type { SavingsObjectiveActive } from '@/types/objective'
+import type { SavingsObjectiveActive, SavingsObjectiveHistory } from '@/types/objective'
 import { objectivesApi } from '@/api/objectives'
 import { useHouseholdStore } from '@/stores/household'
 import { useAccountsStore } from '@/stores/accounts'
@@ -24,6 +25,7 @@ import IncomePieChart from '@/components/charts/IncomePieChart.vue'
 import MonthlyLineChart from '@/components/charts/MonthlyLineChart.vue'
 import NetWorthChart from '@/components/charts/NetWorthChart.vue'
 
+const router = useRouter()
 const householdStore = useHouseholdStore()
 const accountsStore = useAccountsStore()
 const subscriptionStore = useSubscriptionStore()
@@ -44,6 +46,10 @@ const objectivesMoreCount = computed(() => Math.max(0, objectivesActiveTotal.val
 const objectivesReserved = ref(0)
 const objectivesTotalSavings = ref(0)
 const objectivesCompletedCount = ref(0)
+const objectivesHistory = ref<SavingsObjectiveHistory[]>([])
+const settleModalOpen = ref(false)
+const settleConfirmId = ref<string | null>(null)
+const settleLoading = ref(false)
 
 function parseTargetDateOnly(raw: unknown): string | null {
   if (raw == null || raw === '') return null
@@ -106,12 +112,21 @@ async function loadObjectivesPreview() {
 
     const history = pick('historyObjectives')
     objectivesCompletedCount.value = Array.isArray(history) ? history.length : 0
+    objectivesHistory.value = Array.isArray(history) ? history.map((h: Record<string, unknown>) => ({
+      id: String(h.id ?? h.Id ?? ''),
+      name: String(h.name ?? h.Name ?? ''),
+      targetAmount: Number(h.targetAmount ?? h.TargetAmount ?? 0),
+      targetDate: parseTargetDateOnly(h.targetDate ?? h.TargetDate),
+      sortOrder: Number(h.sortOrder ?? h.SortOrder ?? 0),
+      completedAt: String(h.completedAt ?? h.CompletedAt ?? ''),
+    })) : []
   } catch {
     objectivesPreview.value = []
     objectivesActiveTotal.value = 0
     objectivesReserved.value = 0
     objectivesTotalSavings.value = 0
     objectivesCompletedCount.value = 0
+    objectivesHistory.value = []
   } finally {
     objectivesLoading.value = false
     objectivesLoaded.value = true
@@ -513,6 +528,37 @@ const accountCategoryGroups = computed(() => {
 
 const totalAllocatedToObjectives = computed(() => objectivesReserved.value)
 
+function openSettleModal() { settleModalOpen.value = true; settleConfirmId.value = null }
+function closeSettleModal() { settleModalOpen.value = false; settleConfirmId.value = null }
+
+function onSettleLiquidar(id: string) {
+  settleConfirmId.value = id
+}
+
+async function onSettleConfirmYes() {
+  if (!settleConfirmId.value) return
+  settleLoading.value = true
+  try {
+    await objectivesApi.delete(settleConfirmId.value)
+    await loadObjectivesPreview()
+    settleConfirmId.value = null
+    if (objectivesHistory.value.length === 0) closeSettleModal()
+  } catch {
+    // handled
+  } finally {
+    settleLoading.value = false
+  }
+}
+
+function onSettleConfirmNo() {
+  closeSettleModal()
+  router.push({ name: 'transactions', query: { tab: 'transactions' } })
+}
+
+function onSettleCancelConfirm() {
+  settleConfirmId.value = null
+}
+
 const hideValues = ref(false)
 
 const todayLabel = computed(() => {
@@ -614,6 +660,9 @@ const showContent = computed(() =>
             <span class="patrimonio-date">{{ todayLabel }}</span>
             <span v-if="totalAllocatedToObjectives > 0" class="patrimonio-reserved">
               {{ hideValues ? '•••••' : formatCurrency(totalAllocatedToObjectives, dashboard.currency.value) }} reservado para objetivos
+              <button type="button" class="settle-btn" @click="openSettleModal" title="Liquidar objetivos concluídos">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="m9 12 2 2 4-4"/></svg>
+              </button>
             </span>
           </div>
           <div class="patrimonio-periods">
@@ -998,6 +1047,53 @@ const showContent = computed(() =>
 
     </div>
   </div>
+
+  <!-- Modal: Liquidar objetivos concluídos -->
+  <Teleport to="body">
+    <Transition name="fade">
+      <div v-if="settleModalOpen" class="settle-overlay" @click.self="closeSettleModal">
+        <div class="settle-modal">
+          <div class="settle-header">
+            <h3>Objetivos concluídos</h3>
+            <button type="button" class="settle-close" @click="closeSettleModal">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+            </button>
+          </div>
+
+          <div v-if="settleConfirmId" class="settle-confirm">
+            <p class="settle-confirm-text">Já registaste esta despesa nas transações?</p>
+            <div class="settle-confirm-actions">
+              <button type="button" class="settle-confirm-btn settle-confirm-yes" :disabled="settleLoading" @click="onSettleConfirmYes">
+                {{ settleLoading ? 'A liquidar...' : 'Sim, liquidar' }}
+              </button>
+              <button type="button" class="settle-confirm-btn settle-confirm-no" :disabled="settleLoading" @click="onSettleConfirmNo">
+                Não, registar despesa
+              </button>
+              <button type="button" class="settle-confirm-btn settle-confirm-cancel" @click="onSettleCancelConfirm">
+                Cancelar
+              </button>
+            </div>
+          </div>
+
+          <div v-else class="settle-list">
+            <div v-if="objectivesHistory.length === 0" class="settle-empty">
+              <p>Nenhum objetivo concluído por liquidar.</p>
+            </div>
+            <div v-for="h in objectivesHistory" :key="h.id" class="settle-item">
+              <div class="settle-item-info">
+                <span class="settle-item-name">{{ h.name }}</span>
+                <span class="settle-item-amount">{{ formatCurrency(h.targetAmount, dashboard.currency.value) }}</span>
+                <span class="settle-item-date">Concluído a {{ new Date(h.completedAt).toLocaleDateString('pt-PT', { day: '2-digit', month: 'short', year: 'numeric' }) }}</span>
+              </div>
+              <button type="button" class="settle-item-btn" @click="onSettleLiquidar(h.id)">
+                Liquidar
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Transition>
+  </Teleport>
 </template>
 
 <style scoped>
@@ -2315,5 +2411,217 @@ html.dark .dr-day.is-end { background: #4ade80; color: #0a0a0a; }
 .panel-leave-to {
   opacity: 0;
   transform: translateY(-6px);
+}
+
+/* Settle button */
+.settle-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: #166534;
+  cursor: pointer;
+  padding: 0.125rem;
+  margin-left: 0.25rem;
+  border-radius: 4px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.settle-btn:hover {
+  background: rgba(22, 101, 52, 0.12);
+}
+
+html.dark .settle-btn {
+  color: #4ade80;
+}
+
+html.dark .settle-btn:hover {
+  background: rgba(74, 222, 128, 0.15);
+}
+
+/* Settle modal */
+.settle-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.settle-modal {
+  background: var(--color-bg-card);
+  border-radius: 14px;
+  box-shadow: 0 16px 48px -12px rgba(0, 0, 0, 0.2);
+  width: 100%;
+  max-width: 440px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.settle-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.25rem 1.5rem 0.75rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.settle-header h3 {
+  font-size: 1rem;
+  font-weight: 700;
+  margin: 0;
+  color: var(--color-text);
+}
+
+.settle-close {
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: 0.25rem;
+  border-radius: 6px;
+  transition: background 0.15s;
+}
+
+.settle-close:hover {
+  background: var(--color-table-row-hover);
+}
+
+.settle-list {
+  padding: 0.75rem 1.5rem 1.25rem;
+}
+
+.settle-empty {
+  text-align: center;
+  padding: 1.5rem 0;
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+}
+
+.settle-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.settle-item:last-child {
+  border-bottom: none;
+}
+
+.settle-item-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.settle-item-name {
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: var(--color-text);
+}
+
+.settle-item-amount {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: #166534;
+}
+
+html.dark .settle-item-amount {
+  color: #4ade80;
+}
+
+.settle-item-date {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+.settle-item-btn {
+  padding: 0.375rem 0.875rem;
+  border: 1px solid #166534;
+  border-radius: 8px;
+  background: transparent;
+  color: #166534;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+
+.settle-item-btn:hover {
+  background: #166534;
+  color: white;
+}
+
+html.dark .settle-item-btn {
+  border-color: #4ade80;
+  color: #4ade80;
+}
+
+html.dark .settle-item-btn:hover {
+  background: #4ade80;
+  color: #0a0a0a;
+}
+
+/* Settle confirm */
+.settle-confirm {
+  padding: 1.5rem;
+  text-align: center;
+}
+
+.settle-confirm-text {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--color-text);
+  margin: 0 0 1.25rem;
+}
+
+.settle-confirm-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.settle-confirm-btn {
+  width: 100%;
+  padding: 0.625rem;
+  border-radius: 10px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: opacity 0.15s;
+  border: none;
+}
+
+.settle-confirm-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.settle-confirm-yes {
+  background: linear-gradient(135deg, #166534 0%, #15803d 100%);
+  color: white;
+}
+
+.settle-confirm-no {
+  background: var(--color-table-row-hover);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+}
+
+.settle-confirm-cancel {
+  background: transparent;
+  color: var(--color-text-muted);
+}
+
+.settle-confirm-cancel:hover {
+  color: var(--color-text);
 }
 </style>
