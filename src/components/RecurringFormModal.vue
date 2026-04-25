@@ -2,6 +2,7 @@
 import { ref, computed, watch } from 'vue'
 import BaseModal from './BaseModal.vue'
 import type { CreateRecurringTransactionRequest, RecurringTransaction } from '@/types/recurringTransaction'
+import { RecurringFrequency } from '@/types/recurringTransaction'
 import {
   TRANSACTION_TYPE_LABELS,
   TRANSACTION_CATEGORY_LABELS,
@@ -29,6 +30,7 @@ const type = ref<TransactionType>(TransactionType.Expense)
 const category = ref<TransactionCategory>(TransactionCategory.Other)
 const amount = ref<number>(0)
 const description = ref('')
+const frequency = ref<RecurringFrequency>(RecurringFrequency.Monthly)
 
 const errors = ref<Record<string, string>>({})
 
@@ -77,6 +79,7 @@ watch(
         amount.value = props.recurring.amount
         description.value = props.recurring.description ?? ''
         destinationAccountId.value = props.recurring.destinationAccountId ?? ''
+        frequency.value = props.recurring.frequency ?? RecurringFrequency.Monthly
       } else {
         accountId.value = props.accounts[0]?.id ?? ''
         type.value = props.isTransfer ? TransactionType.Transfer : TransactionType.Expense
@@ -84,6 +87,7 @@ watch(
         amount.value = 0
         description.value = ''
         destinationAccountId.value = ''
+        frequency.value = RecurringFrequency.Monthly
       }
     }
   }
@@ -116,13 +120,20 @@ function handleSubmit() {
     category: transfer ? TransactionCategory.Transfer : category.value,
     amount: amount.value,
     description: description.value.trim() || undefined,
-    destinationAccountId: transfer ? destinationAccountId.value : undefined
+    destinationAccountId: transfer ? destinationAccountId.value : undefined,
+    frequency: frequency.value
   })
 }
 
 function handleClose() {
   if (!props.loading) emit('close')
 }
+
+const monthlyEquivalent = computed(() => {
+  if (frequency.value !== RecurringFrequency.Annual || !amount.value) return ''
+  const monthly = (amount.value / 12).toFixed(2)
+  return `≈ ${monthly} €/mês`
+})
 
 const modalTitle = computed(() => {
   if (isEdit.value) {
@@ -140,8 +151,31 @@ const modalTitle = computed(() => {
   >
     <form @submit.prevent="handleSubmit" class="recurring-form">
       <p class="form-hint">
-        {{ isTransferMode ? 'Esta transferência será aplicada automaticamente ao mês atual e aos próximos.' : 'Esta receita/despesa será aplicada automaticamente ao mês atual e aos próximos.' }}
+        {{ isTransferMode ? 'Esta transferência será aplicada automaticamente ao mês atual e aos próximos.' : frequency === 0 ? 'Esta receita/despesa será aplicada automaticamente ao mês atual e aos próximos.' : 'O valor anual será dividido por 12 e contabilizado mensalmente.' }}
       </p>
+
+      <!-- Frequency selector (not shown for transfers) -->
+      <div v-if="!isTransferMode" class="form-group">
+        <label for="rec-frequency">Frequência</label>
+        <div class="frequency-toggle">
+          <button
+            type="button"
+            class="freq-btn"
+            :class="{ active: frequency === 0 }"
+            @click="frequency = 0"
+          >
+            Mensal
+          </button>
+          <button
+            type="button"
+            class="freq-btn"
+            :class="{ active: frequency === 1 }"
+            @click="frequency = 1"
+          >
+            Anual
+          </button>
+        </div>
+      </div>
 
       <!-- Transfer mode -->
       <template v-if="isTransferMode">
@@ -226,7 +260,7 @@ const modalTitle = computed(() => {
       </template>
 
       <div class="form-group">
-        <label for="rec-amount">Valor (€)</label>
+        <label for="rec-amount">{{ frequency === 1 ? 'Valor anual (€)' : 'Valor (€)' }}</label>
         <input
           id="rec-amount"
           v-model.number="amount"
@@ -234,9 +268,10 @@ const modalTitle = computed(() => {
           step="0.01"
           class="input"
           :class="{ 'input-error': errors.amount }"
-          placeholder="0.00"
+          :placeholder="frequency === 1 ? 'Ex: 600.00' : '0.00'"
         />
         <span v-if="errors.amount" class="error-text">{{ errors.amount }}</span>
+        <span v-if="monthlyEquivalent" class="monthly-hint">{{ monthlyEquivalent }}</span>
       </div>
 
       <div class="form-group">
@@ -314,6 +349,45 @@ const modalTitle = computed(() => {
 .error-text {
   font-size: 0.75rem;
   color: #dc2626;
+}
+
+.frequency-toggle {
+  display: flex;
+  gap: 0;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.freq-btn {
+  flex: 1;
+  padding: 0.5rem 0.75rem;
+  border: none;
+  background: transparent;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: #64748b;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.freq-btn:first-child {
+  border-right: 1px solid #e2e8f0;
+}
+
+.freq-btn.active {
+  background: #166534;
+  color: white;
+}
+
+.freq-btn:not(.active):hover {
+  background: #f1f5f9;
+}
+
+.monthly-hint {
+  font-size: 0.75rem;
+  color: #166534;
+  font-weight: 500;
 }
 
 .modal-actions {

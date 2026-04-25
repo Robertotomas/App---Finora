@@ -16,6 +16,7 @@ import ConfirmDeleteModal from '@/components/ConfirmDeleteModal.vue'
 import BaseModal from '@/components/BaseModal.vue'
 import type { Transaction, CreateTransactionRequest } from '@/types/transaction'
 import type { RecurringTransaction, CreateRecurringTransactionRequest } from '@/types/recurringTransaction'
+import { RecurringFrequency, RECURRING_FREQUENCY_LABELS } from '@/types/recurringTransaction'
 import {
   TRANSACTION_TYPE_LABELS,
   TRANSACTION_CATEGORY_LABELS,
@@ -531,13 +532,16 @@ async function fetchSummaryTransactions() {
         const ym = `${y}-${String(m).padStart(2, '0')}`
         const inRange = (!fromYM || ym >= fromYM) && (!toYM || ym <= toYM)
         if (inRange) {
+          const amt = r.frequency === RecurringFrequency.Annual
+            ? Math.round((r.amount / 12) * 100) / 100
+            : r.amount
           virtual.push({
             id: `recurring-${r.id}-${y}-${m}`,
             accountId: r.accountId,
             householdId: r.householdId,
             type: r.type,
             category: r.category,
-            amount: r.amount,
+            amount: amt,
             description: r.description ?? '',
             date: `${y}-${String(m).padStart(2, '0')}-01`,
             splits: []
@@ -1863,6 +1867,7 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
                 <th>Categoria</th>
                 <th>Tipo</th>
                 <th class="amount-col">Valor</th>
+                <th>Frequência</th>
                 <th>Início</th>
                 <th class="actions-col"></th>
               </tr>
@@ -1888,6 +1893,7 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
                 <td class="amount-col" :class="{ 'amount-income': r.type === TransactionType.Income, 'amount-expense': r.type === TransactionType.Expense, 'amount-transfer': r.type === TransactionType.Transfer }">
                   {{ formatAmount(r.amount, r.type) }}
                 </td>
+                <td>{{ RECURRING_FREQUENCY_LABELS[r.frequency as RecurringFrequency] }}</td>
                 <td>{{ MONTH_NAMES[r.startMonth] }} {{ r.startYear }}</td>
                 <td class="actions-col">
                   <button
@@ -2424,6 +2430,7 @@ html.dark .type-transfer {
   color: #2563eb;
   font-weight: 600;
 }
+
 
 html.dark .amount-transfer {
   color: #60a5fa;
