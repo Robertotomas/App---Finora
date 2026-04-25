@@ -10,6 +10,7 @@ import { useSubscriptionStore } from '@/stores/subscription'
 import { householdApi } from '@/api/household'
 import TransactionFormModal from '@/components/TransactionFormModal.vue'
 import RecurringFormModal from '@/components/RecurringFormModal.vue'
+import TransactionTypeSelectionModal from '@/components/TransactionTypeSelectionModal.vue'
 import RemoveRecurringModal from '@/components/RemoveRecurringModal.vue'
 import ConfirmDeleteModal from '@/components/ConfirmDeleteModal.vue'
 import BaseModal from '@/components/BaseModal.vue'
@@ -42,6 +43,11 @@ watch(() => routeRef.query.tab, (tab) => {
   else activeTab.value = 'summary'
 })
 
+const typeSelectionModalOpen = ref(false)
+const isTransferMode = ref(false)
+const recTypeSelectionModalOpen = ref(false)
+const isRecTransferMode = ref(false)
+
 const createModalOpen = ref(false)
 const editModalOpen = ref(false)
 const deleteModalOpen = ref(false)
@@ -63,7 +69,7 @@ const _txInitMonthStart = `${_txInitToday.getFullYear()}-${String(_txInitToday.g
 const _txInitTodayStr = `${_txInitToday.getFullYear()}-${String(_txInitToday.getMonth() + 1).padStart(2, '0')}-${String(_txInitToday.getDate()).padStart(2, '0')}`
 const filterFrom = ref(_txInitMonthStart)
 const filterTo = ref(_txInitTodayStr)
-const filterType = ref<'' | 'income' | 'expense'>('')
+const filterType = ref<'' | 'income' | 'expense' | 'transfer'>('')
 const filterCategory = ref<string>('')
 
 const typeDropOpen = ref(false)
@@ -77,13 +83,14 @@ function toggleTypeDrop() { typeDropOpen.value = !typeDropOpen.value; catDropOpe
 function toggleCatDrop() { catDropOpen.value = !catDropOpen.value; typeDropOpen.value = false; accDropOpen.value = false }
 function toggleAccDrop() { accDropOpen.value = !accDropOpen.value; typeDropOpen.value = false; catDropOpen.value = false }
 
-function pickType(val: '' | 'income' | 'expense') { filterType.value = val; typeDropOpen.value = false }
+function pickType(val: '' | 'income' | 'expense' | 'transfer') { filterType.value = val; typeDropOpen.value = false }
 function pickCategory(val: string) { filterCategory.value = val; catDropOpen.value = false }
 function pickAccount(val: string) { filterAccountId.value = val; accDropOpen.value = false }
 
 const typeLabel = computed(() => {
   if (filterType.value === 'income') return 'Receita'
   if (filterType.value === 'expense') return 'Despesa'
+  if (filterType.value === 'transfer') return 'Transferência'
   return 'Todos os tipos'
 })
 const categoryLabel = computed(() => {
@@ -135,14 +142,14 @@ const needsPrimarySelection = computed(
 )
 
 const accountsForCreateModal = computed(() =>
-  accountsStore.accounts.filter((a) => a.isActiveForPlan !== false)
+  accountsStore.accounts.filter((a) => a.isActiveForPlan !== false && !a.isArchived)
 )
 
 const accountsForEditModal = computed(() => {
   const tx = transactionToEdit.value
   if (!tx) return accountsForCreateModal.value
   return accountsStore.accounts.filter(
-    (a) => a.isActiveForPlan !== false || a.id === tx.accountId
+    (a) => (!a.isArchived && a.isActiveForPlan !== false) || a.id === tx.accountId || a.id === tx.destinationAccountId
   )
 })
 
@@ -515,7 +522,7 @@ async function fetchSummaryTransactions() {
     const toYM = summaryDateTo.value ? summaryDateTo.value.slice(0, 7) : null
     const virtual: Transaction[] = []
     for (const r of recurringStore.recurring) {
-      if (summaryFilterAccount.value && r.accountId !== summaryFilterAccount.value) continue
+      if (summaryFilterAccount.value && r.accountId !== summaryFilterAccount.value && r.destinationAccountId !== summaryFilterAccount.value) continue
       let y = r.startYear
       let m = r.startMonth
       const endY = r.endYear ?? new Date().getFullYear()
@@ -550,6 +557,8 @@ const summaryFiltered = computed(() => {
   let list = [...summaryTransactions.value]
   if (summaryFilterType.value === 'income') list = list.filter(t => t.type === TransactionType.Income)
   else if (summaryFilterType.value === 'expense') list = list.filter(t => t.type === TransactionType.Expense)
+  // Exclude transfers from summary totals view (they don't affect net income/expenses)
+  list = list.filter(t => t.type !== TransactionType.Transfer)
   if (summaryFilterCategory.value) list = list.filter(t => String(t.category) === summaryFilterCategory.value)
   if (summarySearch.value) {
     const q = summarySearch.value.toLowerCase()
@@ -695,7 +704,8 @@ function accountName(accountId: string): string {
 const categoryColors: Record<number, string> = {
   0: '#059669', 1: '#10b981', 2: '#0ea5e9', 3: '#8b5cf6', 4: '#6366f1',
   10: '#ef4444', 11: '#f97316', 12: '#eab308', 13: '#84cc16', 14: '#ec4899',
-  15: '#a855f7', 16: '#f43f5e', 17: '#14b8a6', 99: '#94a3b8'
+  15: '#a855f7', 16: '#f43f5e', 17: '#14b8a6', 99: '#94a3b8',
+  100: '#2563eb'
 }
 
 watch([summaryDateFrom, summaryDateTo, summaryFilterAccount], () => {
@@ -707,21 +717,21 @@ watch(activeTab, (tab) => {
 })
 
 const accountsForRecurringCreate = computed(() =>
-  accountsStore.accounts.filter((a) => a.isActiveForPlan !== false)
+  accountsStore.accounts.filter((a) => a.isActiveForPlan !== false && !a.isArchived)
 )
 
 const accountsForRecurringEdit = computed(() => {
   const r = recurringToEdit.value
   if (!r) return accountsForRecurringCreate.value
   return accountsStore.accounts.filter(
-    (a) => a.isActiveForPlan !== false || a.id === r.accountId
+    (a) => (!a.isArchived && a.isActiveForPlan !== false) || a.id === r.accountId || a.id === r.destinationAccountId
   )
 })
 
 const filteredTransactions = computed(() => {
   let list = transactionsStore.transactions
   if (filterType.value) {
-    const typeVal = filterType.value === 'income' ? TransactionType.Income : TransactionType.Expense
+    const typeVal = filterType.value === 'income' ? TransactionType.Income : filterType.value === 'transfer' ? TransactionType.Transfer : TransactionType.Expense
     list = list.filter(tx => tx.type === typeVal)
   }
   if (filterCategory.value) {
@@ -749,7 +759,7 @@ const activeRecurring = computed(() =>
 )
 
 // Recurring tab filters
-const recFilterType = ref<'' | 'income' | 'expense'>('')
+const recFilterType = ref<'' | 'income' | 'expense' | 'transfer'>('')
 const recFilterCategory = ref<string>('')
 const recFilterAccount = ref<string>('')
 
@@ -764,13 +774,14 @@ function toggleRecTypeDrop() { recTypeDropOpen.value = !recTypeDropOpen.value; r
 function toggleRecCatDrop() { recCatDropOpen.value = !recCatDropOpen.value; recTypeDropOpen.value = false; recAccDropOpen.value = false }
 function toggleRecAccDrop() { recAccDropOpen.value = !recAccDropOpen.value; recTypeDropOpen.value = false; recCatDropOpen.value = false }
 
-function pickRecType(val: '' | 'income' | 'expense') { recFilterType.value = val; recTypeDropOpen.value = false }
+function pickRecType(val: '' | 'income' | 'expense' | 'transfer') { recFilterType.value = val; recTypeDropOpen.value = false }
 function pickRecCategory(val: string) { recFilterCategory.value = val; recCatDropOpen.value = false }
 function pickRecAccount(val: string) { recFilterAccount.value = val; recAccDropOpen.value = false }
 
 const recTypeLabel = computed(() => {
   if (recFilterType.value === 'income') return 'Receita'
   if (recFilterType.value === 'expense') return 'Despesa'
+  if (recFilterType.value === 'transfer') return 'Transferência'
   return 'Todos os tipos'
 })
 const recCategoryLabel = computed(() => {
@@ -797,7 +808,7 @@ watch(recFilterType, () => { recFilterCategory.value = '' })
 const filteredRecurring = computed(() => {
   let list = activeRecurring.value
   if (recFilterType.value) {
-    const typeVal = recFilterType.value === 'income' ? TransactionType.Income : TransactionType.Expense
+    const typeVal = recFilterType.value === 'income' ? TransactionType.Income : recFilterType.value === 'transfer' ? TransactionType.Transfer : TransactionType.Expense
     list = list.filter(r => r.type === typeVal)
   }
   if (recFilterCategory.value) {
@@ -805,7 +816,7 @@ const filteredRecurring = computed(() => {
     list = list.filter(r => r.category === catVal)
   }
   if (recFilterAccount.value) {
-    list = list.filter(r => r.accountId === recFilterAccount.value)
+    list = list.filter(r => r.accountId === recFilterAccount.value || r.destinationAccountId === recFilterAccount.value)
   }
   return list
 })
@@ -905,12 +916,19 @@ function openCreateModal() {
     limitModalOpen.value = true
     return
   }
+  typeSelectionModalOpen.value = true
+}
+
+function handleTypeSelection(type: 'income-expense' | 'transfer') {
+  typeSelectionModalOpen.value = false
+  isTransferMode.value = type === 'transfer'
   transactionsStore.clearError()
   createModalOpen.value = true
 }
 
 function closeCreateModal() {
   createModalOpen.value = false
+  isTransferMode.value = false
 }
 
 /** Fecha o aviso de limite/plano, limpa erros e volta ao separador Transações (e à rota, se necessário). */
@@ -946,12 +964,14 @@ function openEditModal(tx: Transaction) {
   }
   transactionsStore.clearError()
   transactionToEdit.value = tx
+  isTransferMode.value = tx.type === TransactionType.Transfer
   editModalOpen.value = true
 }
 
 function closeEditModal() {
   editModalOpen.value = false
   transactionToEdit.value = null
+  isTransferMode.value = false
 }
 
 function openDeleteModal(tx: Transaction) {
@@ -1050,6 +1070,7 @@ function formatAmount(amount: number, type: TransactionType): string {
     currency: 'EUR',
     minimumFractionDigits: 2
   }).format(Math.abs(amount))
+  if (type === TransactionType.Transfer) return formatted
   return type === TransactionType.Expense ? `-${formatted}` : formatted
 }
 
@@ -1090,12 +1111,19 @@ function openRecurringCreateModal() {
     limitModalOpen.value = true
     return
   }
+  recTypeSelectionModalOpen.value = true
+}
+
+function handleRecTypeSelection(type: 'income-expense' | 'transfer') {
+  recTypeSelectionModalOpen.value = false
+  isRecTransferMode.value = type === 'transfer'
   recurringStore.clearError()
   recurringCreateModalOpen.value = true
 }
 
 function closeRecurringCreateModal() {
   recurringCreateModalOpen.value = false
+  isRecTransferMode.value = false
 }
 
 function openRecurringEditModal(r: RecurringTransaction) {
@@ -1116,12 +1144,14 @@ function openRecurringEditModal(r: RecurringTransaction) {
   }
   recurringStore.clearError()
   recurringToEdit.value = r
+  isRecTransferMode.value = r.type === TransactionType.Transfer
   recurringEditModalOpen.value = true
 }
 
 function closeRecurringEditModal() {
   recurringEditModalOpen.value = false
   recurringToEdit.value = null
+  isRecTransferMode.value = false
 }
 
 function openRecurringRemoveModal(r: RecurringTransaction) {
@@ -1643,6 +1673,7 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
                 <button type="button" class="custom-dropdown-item" :class="{ selected: filterType === '' }" @click="pickType('')">Todos os tipos</button>
                 <button type="button" class="custom-dropdown-item" :class="{ selected: filterType === 'income' }" @click="pickType('income')">Receita</button>
                 <button type="button" class="custom-dropdown-item" :class="{ selected: filterType === 'expense' }" @click="pickType('expense')">Despesa</button>
+                <button type="button" class="custom-dropdown-item" :class="{ selected: filterType === 'transfer' }" @click="pickType('transfer')">Transferência</button>
               </div>
             </Transition>
           </div>
@@ -1712,13 +1743,18 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
               class="table-row"
             >
               <td>{{ formatDate(tx.date) }}</td>
-              <td>{{ TRANSACTION_CATEGORY_LABELS[tx.category] }}</td>
               <td>
-                <span :class="['type-badge', tx.type === TransactionType.Income ? 'type-income' : 'type-expense']">
+                {{ TRANSACTION_CATEGORY_LABELS[tx.category] }}
+                <span v-if="tx.type === TransactionType.Transfer" class="transfer-accounts-hint">
+                  {{ getAccountName(tx.accountId) }} → {{ getAccountName(tx.destinationAccountId ?? '') }}
+                </span>
+              </td>
+              <td>
+                <span :class="['type-badge', tx.type === TransactionType.Income ? 'type-income' : tx.type === TransactionType.Transfer ? 'type-transfer' : 'type-expense']">
                   {{ TRANSACTION_TYPE_LABELS[tx.type] }}
                 </span>
               </td>
-              <td class="amount-col" :class="{ 'amount-income': tx.type === TransactionType.Income, 'amount-expense': tx.type === TransactionType.Expense }">
+              <td class="amount-col" :class="{ 'amount-income': tx.type === TransactionType.Income, 'amount-expense': tx.type === TransactionType.Expense, 'amount-transfer': tx.type === TransactionType.Transfer }">
                 {{ formatAmount(tx.amount, tx.type) }}
               </td>
               <td>{{ getResponsibleDisplay(tx) }}</td>
@@ -1773,6 +1809,7 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
                   <button type="button" class="custom-dropdown-item" :class="{ selected: recFilterType === '' }" @click="pickRecType('')">Todos os tipos</button>
                   <button type="button" class="custom-dropdown-item" :class="{ selected: recFilterType === 'income' }" @click="pickRecType('income')">Receita</button>
                   <button type="button" class="custom-dropdown-item" :class="{ selected: recFilterType === 'expense' }" @click="pickRecType('expense')">Despesa</button>
+                  <button type="button" class="custom-dropdown-item" :class="{ selected: recFilterType === 'transfer' }" @click="pickRecType('transfer')">Transferência</button>
                 </div>
               </Transition>
             </div>
@@ -1836,14 +1873,19 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
                 :key="r.id"
                 class="table-row"
               >
-                <td>{{ getAccountName(r.accountId) }}</td>
+                <td>
+                  {{ getAccountName(r.accountId) }}
+                  <span v-if="r.type === TransactionType.Transfer" class="transfer-accounts-hint">
+                    → {{ getAccountName(r.destinationAccountId ?? '') }}
+                  </span>
+                </td>
                 <td>{{ TRANSACTION_CATEGORY_LABELS[r.category] }}</td>
                 <td>
-                  <span :class="['type-badge', r.type === TransactionType.Income ? 'type-income' : 'type-expense']">
+                  <span :class="['type-badge', r.type === TransactionType.Income ? 'type-income' : r.type === TransactionType.Transfer ? 'type-transfer' : 'type-expense']">
                     {{ TRANSACTION_TYPE_LABELS[r.type] }}
                   </span>
                 </td>
-                <td class="amount-col" :class="{ 'amount-income': r.type === TransactionType.Income, 'amount-expense': r.type === TransactionType.Expense }">
+                <td class="amount-col" :class="{ 'amount-income': r.type === TransactionType.Income, 'amount-expense': r.type === TransactionType.Expense, 'amount-transfer': r.type === TransactionType.Transfer }">
                   {{ formatAmount(r.amount, r.type) }}
                 </td>
                 <td>{{ MONTH_NAMES[r.startMonth] }} {{ r.startYear }}</td>
@@ -1867,6 +1909,18 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
       </div>
     </div>
 
+    <TransactionTypeSelectionModal
+      :open="typeSelectionModalOpen"
+      @close="typeSelectionModalOpen = false"
+      @select="handleTypeSelection"
+    />
+
+    <TransactionTypeSelectionModal
+      :open="recTypeSelectionModalOpen"
+      @close="recTypeSelectionModalOpen = false"
+      @select="handleRecTypeSelection"
+    />
+
     <TransactionFormModal
       :open="createModalOpen"
       :accounts="accountsForCreateModal"
@@ -1875,6 +1929,7 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
       :current-user-id="authStore.user?.id ?? ''"
       :loading="actionLoading"
       :default-date-for-new="defaultDateForNewTransaction"
+      :is-transfer="isTransferMode"
       @close="closeCreateModal"
       @submit="handleCreate"
     />
@@ -1887,6 +1942,7 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
       :is-couple="householdStore.isCouple"
       :current-user-id="authStore.user?.id ?? ''"
       :loading="actionLoading"
+      :is-transfer="isTransferMode"
       @close="closeEditModal"
       @submit="handleEdit"
     />
@@ -1906,6 +1962,7 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
       :open="recurringCreateModalOpen"
       :accounts="accountsForRecurringCreate"
       :loading="actionLoading"
+      :is-transfer="isRecTransferMode"
       @close="closeRecurringCreateModal"
       @submit="handleRecurringCreate"
     />
@@ -1915,6 +1972,7 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
       :recurring="recurringToEdit"
       :accounts="accountsForRecurringEdit"
       :loading="actionLoading"
+      :is-transfer="isRecTransferMode"
       @close="closeRecurringEditModal"
       @submit="handleRecurringEdit"
     />
@@ -2350,6 +2408,32 @@ html.dark .custom-dropdown-item.selected {
 .type-expense {
   background: var(--color-type-expense-bg);
   color: var(--color-type-expense-text);
+}
+
+.type-transfer {
+  background: rgba(37, 99, 235, 0.1);
+  color: #2563eb;
+}
+
+html.dark .type-transfer {
+  background: rgba(96, 165, 250, 0.15);
+  color: #60a5fa;
+}
+
+.amount-transfer {
+  color: #2563eb;
+  font-weight: 600;
+}
+
+html.dark .amount-transfer {
+  color: #60a5fa;
+}
+
+.transfer-accounts-hint {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  margin-top: 0.125rem;
 }
 
 .btn-icon {

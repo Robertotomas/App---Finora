@@ -7,6 +7,8 @@ import { householdApi } from '@/api/household'
 import AccountFormModal from '@/components/AccountFormModal.vue'
 import BaseModal from '@/components/BaseModal.vue'
 import ConfirmDeleteModal from '@/components/ConfirmDeleteModal.vue'
+import DeleteAccountWithTransferModal from '@/components/DeleteAccountWithTransferModal.vue'
+import ArchiveAccountModal from '@/components/ArchiveAccountModal.vue'
 import type { Account, CreateAccountRequest } from '@/types/account'
 import { ACCOUNT_TYPE_LABELS, AccountType } from '@/types/account'
 
@@ -28,6 +30,15 @@ const actionLoading = ref(false)
 const accountLimitModalOpen = ref(false)
 const accountDeleteBlockedModalOpen = ref(false)
 const accountDeleteBlockedMessage = ref('')
+const deleteBlockedAccount = ref<Account | null>(null)
+
+// Delete with transfer modal
+const deleteWithTransferModalOpen = ref(false)
+const deleteWithTransferAccount = ref<Account | null>(null)
+
+// Archive modal
+const archiveModalOpen = ref(false)
+const archiveAccount = ref<Account | null>(null)
 
 const needsPrimarySelection = computed(
   () => subscriptionStore.limits.needsPrimaryAccountSelection === true
@@ -37,7 +48,7 @@ const needsPrimarySelection = computed(
 const showUnlockAccountsBanner = computed(
   () =>
     !needsPrimarySelection.value &&
-    accountsStore.accounts.some((a) => a.isActiveForPlan === false)
+    accountsStore.activeAccounts.some((a) => a.isActiveForPlan === false)
 )
 
 const selectedPrimaryId = ref('')
@@ -76,7 +87,7 @@ async function setPrimaryAccount() {
 
 function isPrimaryBadge(account: Account): boolean {
   const pid = subscriptionStore.limits.primaryAccountId
-  return !!pid && pid === account.id && subscriptionStore.isFree && accountsStore.accounts.length > 1
+  return !!pid && pid === account.id && subscriptionStore.isFree && accountsStore.activeAccounts.length > 1
 }
 
 onMounted(async () => {
@@ -168,9 +179,10 @@ async function handleDelete() {
     const err = e as { response?: { status: number; data?: { code?: string; message?: string } } }
     if (err.response?.status === 400 && err.response?.data?.code === 'ACCOUNT_HAS_MOVEMENTS') {
       accountsStore.clearError()
+      deleteBlockedAccount.value = accountToDelete.value
       accountDeleteBlockedMessage.value =
         err.response.data.message ??
-        'Não é possível eliminar esta conta enquanto tiver movimentos associados. Remove-os em Movimentos e tenta de novo.'
+        'Não é possível eliminar esta conta enquanto tiver movimentos associados.'
       accountDeleteBlockedModalOpen.value = true
       closeDeleteModal()
     }
@@ -182,6 +194,81 @@ async function handleDelete() {
 function closeDeleteBlockedModal() {
   accountDeleteBlockedModalOpen.value = false
   accountDeleteBlockedMessage.value = ''
+  deleteBlockedAccount.value = null
+}
+
+function handleArchiveFromBlocked() {
+  if (!deleteBlockedAccount.value) return
+  archiveAccount.value = deleteBlockedAccount.value
+  archiveModalOpen.value = true
+  closeDeleteBlockedModal()
+}
+
+function handleDeleteWithTransferFromBlocked() {
+  if (!deleteBlockedAccount.value) return
+  deleteWithTransferAccount.value = deleteBlockedAccount.value
+  deleteWithTransferModalOpen.value = true
+  closeDeleteBlockedModal()
+}
+
+function openDeleteArchivedModal(account: Account) {
+  deleteWithTransferAccount.value = account
+  deleteWithTransferModalOpen.value = true
+}
+
+function closeDeleteWithTransferModal() {
+  deleteWithTransferModalOpen.value = false
+  deleteWithTransferAccount.value = null
+}
+
+async function handleDeleteWithTransfer(targetAccountId: string) {
+  if (!deleteWithTransferAccount.value) return
+  actionLoading.value = true
+  try {
+    await accountsStore.deleteAccountWithTransfer(deleteWithTransferAccount.value.id, targetAccountId)
+    await Promise.all([subscriptionStore.fetchSubscription(), accountsStore.fetchAccounts()])
+    closeDeleteWithTransferModal()
+  } catch {
+    // Error shown in store
+  } finally {
+    actionLoading.value = false
+  }
+}
+
+function openArchiveModal(account: Account) {
+  archiveAccount.value = account
+  archiveModalOpen.value = true
+}
+
+function closeArchiveModal() {
+  archiveModalOpen.value = false
+  archiveAccount.value = null
+}
+
+async function handleArchiveConfirm(targetAccountId: string | undefined) {
+  if (!archiveAccount.value) return
+  actionLoading.value = true
+  try {
+    await accountsStore.archiveAccount(archiveAccount.value.id, targetAccountId)
+    await Promise.all([subscriptionStore.fetchSubscription(), accountsStore.fetchAccounts()])
+    closeArchiveModal()
+  } catch {
+    // Error shown in store
+  } finally {
+    actionLoading.value = false
+  }
+}
+
+async function handleReactivate(account: Account) {
+  actionLoading.value = true
+  try {
+    await accountsStore.reactivateAccount(account.id)
+    await subscriptionStore.fetchSubscription()
+  } catch {
+    // Error shown in store
+  } finally {
+    actionLoading.value = false
+  }
 }
 
 function formatBalance(balance: number, currency: string): string {
@@ -219,7 +306,7 @@ function formatBalance(balance: number, currency: string): string {
       </div>
 
       <div
-        v-if="needsPrimarySelection && accountsStore.accounts.length > 1"
+        v-if="needsPrimarySelection && accountsStore.activeAccounts.length > 1"
         class="primary-banner"
       >
         <p class="primary-banner-title">Escolhe a conta principal</p>
@@ -228,7 +315,7 @@ function formatBalance(balance: number, currency: string): string {
           eliminares ou atualizares o plano.
         </p>
         <div class="primary-radio-list">
-          <label v-for="a in accountsStore.accounts" :key="a.id" class="primary-radio">
+          <label v-for="a in accountsStore.activeAccounts" :key="a.id" class="primary-radio">
             <input v-model="selectedPrimaryId" type="radio" name="primary" :value="a.id" />
             <span>{{ a.name }}</span>
           </label>
@@ -258,11 +345,12 @@ function formatBalance(balance: number, currency: string): string {
         </div>
       </div>
 
+      <!-- Active accounts section -->
       <div class="section-card">
         <div class="section-header">
           <h2 class="section-title">As minhas contas</h2>
           <button
-            v-if="accountsStore.accounts.length > 0"
+            v-if="accountsStore.activeAccounts.length > 0"
             type="button"
             class="btn-add"
             @click="openCreateModal"
@@ -276,16 +364,23 @@ function formatBalance(balance: number, currency: string): string {
           <p>A carregar contas...</p>
         </div>
 
-        <div v-else-if="accountsStore.accounts.length === 0" class="section-empty">
+        <div v-else-if="accountsStore.activeAccounts.length === 0 && accountsStore.archivedAccounts.length === 0" class="section-empty">
           <p class="section-empty-text">Ainda não tens contas.</p>
           <button type="button" class="btn-section-add" @click="openCreateModal">
             Adicionar a sua primeira conta
           </button>
         </div>
 
+        <div v-else-if="accountsStore.activeAccounts.length === 0" class="section-empty">
+          <p class="section-empty-text">Nenhuma conta ativa.</p>
+          <button type="button" class="btn-section-add" @click="openCreateModal">
+            + Nova conta
+          </button>
+        </div>
+
         <div v-else class="cards-grid">
         <div
-          v-for="account in accountsStore.accounts"
+          v-for="account in accountsStore.activeAccounts"
           :key="account.id"
           class="account-card"
           :class="{ 'account-card--locked': account.isActiveForPlan === false }"
@@ -329,6 +424,14 @@ function formatBalance(balance: number, currency: string): string {
             </button>
             <button
               type="button"
+              class="btn-icon"
+              title="Arquivar"
+              @click="openArchiveModal(account)"
+            >
+              Arquivar
+            </button>
+            <button
+              type="button"
               class="btn-icon btn-delete"
               title="Eliminar"
               @click="openDeleteModal(account)"
@@ -337,6 +440,52 @@ function formatBalance(balance: number, currency: string): string {
             </button>
           </div>
         </div>
+        </div>
+      </div>
+
+      <!-- Archived accounts section -->
+      <div v-if="accountsStore.archivedAccounts.length > 0" class="section-card archived-section">
+        <div class="section-header">
+          <h2 class="section-title">Contas Arquivadas</h2>
+        </div>
+
+        <div class="cards-grid">
+          <div
+            v-for="account in accountsStore.archivedAccounts"
+            :key="account.id"
+            class="account-card account-card--archived"
+          >
+            <div class="card-main">
+              <div class="account-header">
+                <h3 class="account-name">{{ account.name }}</h3>
+                <span class="archived-badge">Arquivada</span>
+              </div>
+              <p class="account-balance account-balance--muted">
+                {{ formatBalance(account.balance, account.currency) }}
+              </p>
+              <span class="account-type-badge">
+                {{ ACCOUNT_TYPE_LABELS[account.type] }}
+              </span>
+            </div>
+            <div class="card-actions">
+              <button
+                type="button"
+                class="btn-icon"
+                title="Reativar"
+                @click="handleReactivate(account)"
+              >
+                Reativar
+              </button>
+              <button
+                type="button"
+                class="btn-icon btn-delete"
+                title="Eliminar"
+                @click="openDeleteArchivedModal(account)"
+              >
+                Eliminar
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -367,6 +516,7 @@ function formatBalance(balance: number, currency: string): string {
       @confirm="handleDelete"
     />
 
+    <!-- Delete blocked modal with 3 options -->
     <BaseModal
       v-if="accountDeleteBlockedModalOpen"
       title="Não é possível eliminar"
@@ -374,18 +524,40 @@ function formatBalance(balance: number, currency: string): string {
     >
       <div class="locked-modal-body">
         <p>{{ accountDeleteBlockedMessage }}</p>
+        <p class="blocked-options-hint">O que queres fazer?</p>
+        <div class="blocked-options">
+          <button type="button" class="blocked-option-btn blocked-option-archive" @click="handleArchiveFromBlocked" :disabled="actionLoading">
+            Arquivar conta
+            <span class="blocked-option-desc">Remove do património sem perder dados</span>
+          </button>
+          <button type="button" class="blocked-option-btn blocked-option-transfer" @click="handleDeleteWithTransferFromBlocked" :disabled="actionLoading">
+            Eliminar com transferência
+            <span class="blocked-option-desc">Transferir saldo e movimentos para outra conta</span>
+          </button>
+        </div>
         <div class="locked-modal-actions">
-          <button type="button" class="btn-secondary" @click="closeDeleteBlockedModal">Fechar</button>
-          <router-link
-            :to="{ name: 'transactions' }"
-            class="locked-modal-cta"
-            @click="closeDeleteBlockedModal"
-          >
-            Ir para Movimentos
-          </router-link>
+          <button type="button" class="btn-secondary" @click="closeDeleteBlockedModal">Cancelar</button>
         </div>
       </div>
     </BaseModal>
+
+    <DeleteAccountWithTransferModal
+      :open="deleteWithTransferModalOpen"
+      :account="deleteWithTransferAccount"
+      :accounts="accountsStore.accounts"
+      :loading="actionLoading"
+      @close="closeDeleteWithTransferModal"
+      @confirm="handleDeleteWithTransfer"
+    />
+
+    <ArchiveAccountModal
+      :open="archiveModalOpen"
+      :account="archiveAccount"
+      :accounts="accountsStore.accounts"
+      :loading="actionLoading"
+      @close="closeArchiveModal"
+      @confirm="handleArchiveConfirm"
+    />
 
     <BaseModal
       v-if="accountLimitModalOpen"
@@ -586,6 +758,10 @@ html.dark .primary-banner-text {
   border: 1px solid var(--color-border);
 }
 
+.archived-section {
+  margin-top: 1.5rem;
+}
+
 .section-header {
   display: flex;
   align-items: center;
@@ -685,6 +861,16 @@ html.dark .account-card {
   border-color: var(--color-text-muted);
 }
 
+.account-card--archived {
+  opacity: 0.7;
+  border-top-color: var(--color-text-muted);
+  border-style: dashed;
+}
+
+html.dark .account-card--archived {
+  border-top-color: var(--color-text-muted);
+}
+
 .account-locked-hint {
   margin: 0.5rem 0 0 0;
   font-size: 0.75rem;
@@ -720,6 +906,17 @@ html.dark .account-card {
   border-radius: 999px;
 }
 
+.archived-badge {
+  font-size: 0.625rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #fff;
+  background: #64748b;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+}
+
 .account-type-icon {
   display: inline-flex;
   width: 28px;
@@ -751,6 +948,10 @@ html.dark .account-card {
 
 .account-balance.negative {
   color: var(--color-expense);
+}
+
+.account-balance--muted {
+  color: var(--color-text-muted);
 }
 
 .account-type-badge {
@@ -797,6 +998,52 @@ html.dark .account-card {
   margin: 0;
   color: var(--color-text-muted);
   line-height: 1.45;
+}
+
+.blocked-options-hint {
+  margin-top: 1rem !important;
+  font-weight: 600;
+  color: var(--color-text) !important;
+}
+
+.blocked-options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.blocked-option-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 0.75rem 1rem;
+  border: 1.5px solid var(--color-border, #e2e8f0);
+  border-radius: 10px;
+  background: var(--color-bg-card, #fff);
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-text, #1e293b);
+  transition: border-color 0.2s, box-shadow 0.2s;
+  text-align: left;
+}
+
+.blocked-option-btn:hover:not(:disabled) {
+  border-color: #166534;
+  box-shadow: 0 1px 4px rgba(22, 101, 52, 0.1);
+}
+
+.blocked-option-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.blocked-option-desc {
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--color-text-muted, #64748b);
+  margin-top: 0.125rem;
 }
 
 .locked-modal-actions {

@@ -8,6 +8,7 @@ export interface RecurringTransaction {
   category: TransactionCategory
   amount: number
   description?: string
+  destinationAccountId?: string
   startMonth: number
   startYear: number
   endMonth?: number
@@ -20,6 +21,7 @@ export interface CreateRecurringTransactionRequest {
   category: TransactionCategory
   amount: number
   description?: string
+  destinationAccountId?: string
 }
 
 export interface UpdateRecurringTransactionRequest {
@@ -28,4 +30,5 @@ export interface UpdateRecurringTransactionRequest {
   category: TransactionCategory
   amount: number
   description?: string
+  destinationAccountId?: string
 }

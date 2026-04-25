@@ -36,6 +36,7 @@ function mapRecurring(d: {
   category: number
   amount: number
   description?: string
+  destinationAccountId?: string
   startMonth: number
   startYear: number
   endMonth?: number
@@ -49,6 +50,7 @@ function mapRecurring(d: {
     category: d.category,
     amount: Number(d.amount),
     description: d.description,
+    destinationAccountId: d.destinationAccountId,
     startMonth: d.startMonth,
     startYear: d.startYear,
     endMonth: d.endMonth,

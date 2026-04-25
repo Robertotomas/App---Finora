@@ -16,4 +16,13 @@ export const accountsApi = {
 
   delete: (id: string) =>
     api.delete(`/api/accounts/${id}`),
+
+  archive: (id: string, targetAccountId?: string) =>
+    api.post<Account>(`/api/accounts/${id}/archive`, targetAccountId ? { targetAccountId } : {}),
+
+  reactivate: (id: string) =>
+    api.post<Account>(`/api/accounts/${id}/reactivate`),
+
+  deleteWithTransfer: (id: string, targetAccountId: string) =>
+    api.delete(`/api/accounts/${id}/transfer`, { data: { targetAccountId } }),
 }

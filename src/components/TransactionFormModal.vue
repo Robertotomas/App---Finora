@@ -21,6 +21,8 @@ const props = defineProps<{
   loading?: boolean
   /** Para nova transação: data inicial (yyyy-MM-dd), p.ex. 1.º dia do mês do filtro na lista */
   defaultDateForNew?: string | null
+  /** Se true, o form mostra modo transferência (sem tipo/categoria, com conta destino) */
+  isTransfer?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -29,6 +31,7 @@ const emit = defineEmits<{
 }>()
 
 const accountId = ref('')
+const destinationAccountId = ref('')
 const type = ref<TransactionType>(TransactionType.Expense)
 const category = ref<TransactionCategory>(TransactionCategory.Other)
 const amount = ref<number>(0)
@@ -71,6 +74,10 @@ const splitsTotal = computed(() =>
   splits.value.reduce((sum, s) => sum + s.percentage, 0)
 )
 
+const destinationOptions = computed(() =>
+  props.accounts.filter((a) => a.id !== accountId.value)
+)
+
 watch(
   () => props.open,
   (open) => {
@@ -83,6 +90,7 @@ watch(
         amount.value = props.transaction.amount
         date.value = props.transaction.date.slice(0, 10)
         description.value = props.transaction.description ?? ''
+        destinationAccountId.value = props.transaction.destinationAccountId ?? ''
         if (props.transaction.splits.length > 0) {
           splits.value = props.transaction.splits.map((s) => ({
             userId: s.userId,
@@ -95,14 +103,15 @@ watch(
         }
       } else {
         accountId.value = props.accounts[0]?.id ?? ''
-        type.value = TransactionType.Expense
-        category.value = TransactionCategory.Other
+        type.value = props.isTransfer ? TransactionType.Transfer : TransactionType.Expense
+        category.value = props.isTransfer ? TransactionCategory.Transfer : TransactionCategory.Other
         amount.value = 0
         const fallback = new Date().toISOString().slice(0, 10)
         const fromFilter = props.defaultDateForNew?.trim()
         date.value =
           fromFilter && /^\d{4}-\d{2}-\d{2}$/.test(fromFilter) ? fromFilter : fallback
         description.value = ''
+        destinationAccountId.value = ''
         if (props.isCouple && props.members.length >= 2) {
           const n = props.members.length
           const base = Math.floor(100 / n)
@@ -120,7 +129,7 @@ watch(
 )
 
 watch(type, () => {
-  if (!categoryOptions.value.includes(category.value)) {
+  if (type.value !== TransactionType.Transfer && !categoryOptions.value.includes(category.value)) {
     category.value = categoryOptions.value[0]
   }
 })
@@ -130,7 +139,11 @@ function validate(): boolean {
   if (!accountId.value) e.accountId = 'Seleciona uma conta'
   if (amount.value === 0) e.amount = 'O valor não pode ser zero'
   if (!date.value) e.date = 'Data é obrigatória'
-  if (props.isCouple && splits.value.length > 0) {
+  if (props.isTransfer || type.value === TransactionType.Transfer) {
+    if (!destinationAccountId.value) e.destinationAccountId = 'Seleciona a conta de destino'
+    if (destinationAccountId.value === accountId.value) e.destinationAccountId = 'A conta de destino deve ser diferente'
+  }
+  if (props.isCouple && splits.value.length > 0 && type.value !== TransactionType.Transfer) {
     const total = splitsTotal.value
     if (Math.abs(total - 100) > 0.01) e.splits = 'As percentagens devem somar 100%'
     const invalid = splits.value.some((s) => s.percentage <= 0 || s.percentage > 100)
@@ -142,15 +155,17 @@ function validate(): boolean {
 
 function handleSubmit() {
   if (!validate()) return
+  const isTransferMode = props.isTransfer || type.value === TransactionType.Transfer
   const payload: CreateTransactionRequest = {
     accountId: accountId.value,
-    type: type.value,
-    category: category.value,
+    type: isTransferMode ? TransactionType.Transfer : type.value,
+    category: isTransferMode ? TransactionCategory.Transfer : category.value,
     amount: amount.value,
     date: date.value,
-    description: description.value.trim() || undefined
+    description: description.value.trim() || undefined,
+    destinationAccountId: isTransferMode ? destinationAccountId.value : undefined
   }
-  if (props.isCouple && splits.value.length > 0) {
+  if (props.isCouple && splits.value.length > 0 && !isTransferMode) {
     payload.splits = splits.value.map((s) => ({
       userId: s.userId,
       percentage: s.percentage
@@ -167,57 +182,105 @@ function getMemberName(userId: string): string {
   const m = props.members.find((x) => x.id === userId)
   return m ? `${m.firstName} ${m.lastName}` : '?'
 }
+
+const isTransferMode = computed(() => props.isTransfer || type.value === TransactionType.Transfer)
+
+const modalTitle = computed(() => {
+  if (isEdit.value) {
+    return isTransferMode.value ? 'Editar transferência' : 'Editar transação'
+  }
+  return isTransferMode.value ? 'Nova transferência' : 'Nova transação'
+})
 </script>
 
 <template>
   <BaseModal
     v-if="open"
-    :title="isEdit ? 'Editar transação' : 'Nova transação'"
+    :title="modalTitle"
     @close="handleClose"
   >
     <form @submit.prevent="handleSubmit" class="transaction-form">
-      <div class="form-group">
-        <label for="tx-account">Conta</label>
-        <select
-          id="tx-account"
-          v-model="accountId"
-          class="input"
-          :class="{ 'input-error': errors.accountId }"
-        >
-          <option value="">Seleciona uma conta</option>
-          <option v-for="a in accounts" :key="a.id" :value="a.id">
-            {{ a.name }}
-          </option>
-        </select>
-        <span v-if="errors.accountId" class="error-text">{{ errors.accountId }}</span>
-      </div>
+      <!-- Transfer mode: source & destination accounts -->
+      <template v-if="isTransferMode">
+        <div class="form-group">
+          <label for="tx-account">Conta de origem</label>
+          <select
+            id="tx-account"
+            v-model="accountId"
+            class="input"
+            :class="{ 'input-error': errors.accountId }"
+          >
+            <option value="">Seleciona uma conta</option>
+            <option v-for="a in accounts" :key="a.id" :value="a.id">
+              {{ a.name }}
+            </option>
+          </select>
+          <span v-if="errors.accountId" class="error-text">{{ errors.accountId }}</span>
+        </div>
 
-      <div class="form-row">
         <div class="form-group">
-          <label for="tx-type">Tipo</label>
-          <select id="tx-type" v-model="type" class="input">
-            <option
-              v-for="(label, val) in TRANSACTION_TYPE_LABELS"
-              :key="val"
-              :value="Number(val)"
-            >
-              {{ label }}
+          <label for="tx-dest-account">Conta de destino</label>
+          <select
+            id="tx-dest-account"
+            v-model="destinationAccountId"
+            class="input"
+            :class="{ 'input-error': errors.destinationAccountId }"
+          >
+            <option value="">Seleciona uma conta</option>
+            <option v-for="a in destinationOptions" :key="a.id" :value="a.id">
+              {{ a.name }}
             </option>
           </select>
+          <span v-if="errors.destinationAccountId" class="error-text">{{ errors.destinationAccountId }}</span>
         </div>
+      </template>
+
+      <!-- Normal mode: account + type/category -->
+      <template v-else>
         <div class="form-group">
-          <label for="tx-category">Categoria</label>
-          <select id="tx-category" v-model="category" class="input">
-            <option
-              v-for="c in categoryOptions"
-              :key="c"
-              :value="c"
-            >
-              {{ TRANSACTION_CATEGORY_LABELS[c] }}
+          <label for="tx-account">Conta</label>
+          <select
+            id="tx-account"
+            v-model="accountId"
+            class="input"
+            :class="{ 'input-error': errors.accountId }"
+          >
+            <option value="">Seleciona uma conta</option>
+            <option v-for="a in accounts" :key="a.id" :value="a.id">
+              {{ a.name }}
             </option>
           </select>
+          <span v-if="errors.accountId" class="error-text">{{ errors.accountId }}</span>
         </div>
-      </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="tx-type">Tipo</label>
+            <select id="tx-type" v-model="type" class="input">
+              <option
+                v-for="(label, val) in TRANSACTION_TYPE_LABELS"
+                :key="val"
+                :value="Number(val)"
+                v-show="Number(val) !== TransactionType.Transfer"
+              >
+                {{ label }}
+              </option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="tx-category">Categoria</label>
+            <select id="tx-category" v-model="category" class="input">
+              <option
+                v-for="c in categoryOptions"
+                :key="c"
+                :value="c"
+              >
+                {{ TRANSACTION_CATEGORY_LABELS[c] }}
+              </option>
+            </select>
+          </div>
+        </div>
+      </template>
 
       <div class="form-row">
         <div class="form-group">
@@ -258,7 +321,7 @@ function getMemberName(userId: string): string {
         />
       </div>
 
-      <div v-if="isCouple && members.length > 0" class="form-group splits-section">
+      <div v-if="isCouple && members.length > 0 && !isTransferMode" class="form-group splits-section">
         <label>Repartição (%)</label>
         <p class="splits-hint">Percentagens devem somar 100%</p>
         <div v-for="(s, i) in splits" :key="s.userId" class="split-row">

@@ -15,6 +15,7 @@ const props = defineProps<{
   recurring?: RecurringTransaction | null
   accounts: Account[]
   loading?: boolean
+  isTransfer?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -23,6 +24,7 @@ const emit = defineEmits<{
 }>()
 
 const accountId = ref('')
+const destinationAccountId = ref('')
 const type = ref<TransactionType>(TransactionType.Expense)
 const category = ref<TransactionCategory>(TransactionCategory.Other)
 const amount = ref<number>(0)
@@ -57,6 +59,12 @@ const categoryOptions = computed(() =>
   type.value === TransactionType.Income ? incomeCategories : expenseCategories
 )
 
+const destinationOptions = computed(() =>
+  props.accounts.filter((a) => a.id !== accountId.value)
+)
+
+const isTransferMode = computed(() => props.isTransfer || type.value === TransactionType.Transfer)
+
 watch(
   () => props.open,
   (open) => {
@@ -68,19 +76,21 @@ watch(
         category.value = props.recurring.category
         amount.value = props.recurring.amount
         description.value = props.recurring.description ?? ''
+        destinationAccountId.value = props.recurring.destinationAccountId ?? ''
       } else {
         accountId.value = props.accounts[0]?.id ?? ''
-        type.value = TransactionType.Expense
-        category.value = TransactionCategory.Other
+        type.value = props.isTransfer ? TransactionType.Transfer : TransactionType.Expense
+        category.value = props.isTransfer ? TransactionCategory.Transfer : TransactionCategory.Other
         amount.value = 0
         description.value = ''
+        destinationAccountId.value = ''
       }
     }
   }
 )
 
 watch(type, () => {
-  if (!categoryOptions.value.includes(category.value)) {
+  if (type.value !== TransactionType.Transfer && !categoryOptions.value.includes(category.value)) {
     category.value = categoryOptions.value[0]
   }
 })
@@ -89,76 +99,131 @@ function validate(): boolean {
   const e: Record<string, string> = {}
   if (!accountId.value) e.accountId = 'Seleciona uma conta'
   if (amount.value === 0) e.amount = 'O valor não pode ser zero'
+  if (isTransferMode.value) {
+    if (!destinationAccountId.value) e.destinationAccountId = 'Seleciona a conta de destino'
+    if (destinationAccountId.value === accountId.value) e.destinationAccountId = 'A conta de destino deve ser diferente'
+  }
   errors.value = e
   return Object.keys(e).length === 0
 }
 
 function handleSubmit() {
   if (!validate()) return
+  const transfer = isTransferMode.value
   emit('submit', {
     accountId: accountId.value,
-    type: type.value,
-    category: category.value,
+    type: transfer ? TransactionType.Transfer : type.value,
+    category: transfer ? TransactionCategory.Transfer : category.value,
     amount: amount.value,
-    description: description.value.trim() || undefined
+    description: description.value.trim() || undefined,
+    destinationAccountId: transfer ? destinationAccountId.value : undefined
   })
 }
 
 function handleClose() {
   if (!props.loading) emit('close')
 }
+
+const modalTitle = computed(() => {
+  if (isEdit.value) {
+    return isTransferMode.value ? 'Editar transferência recorrente' : 'Editar transação recorrente'
+  }
+  return isTransferMode.value ? 'Nova transferência recorrente' : 'Nova transação recorrente'
+})
 </script>
 
 <template>
   <BaseModal
     v-if="open"
-    :title="isEdit ? 'Editar transação recorrente' : 'Nova transação recorrente'"
+    :title="modalTitle"
     @close="handleClose"
   >
     <form @submit.prevent="handleSubmit" class="recurring-form">
-      <p class="form-hint">Esta receita/despesa será aplicada automaticamente ao mês atual e aos próximos.</p>
-      <div class="form-group">
-        <label for="rec-account">Conta</label>
-        <select
-          id="rec-account"
-          v-model="accountId"
-          class="input"
-          :class="{ 'input-error': errors.accountId }"
-        >
-          <option value="">Seleciona uma conta</option>
-          <option v-for="a in accounts" :key="a.id" :value="a.id">
-            {{ a.name }}
-          </option>
-        </select>
-        <span v-if="errors.accountId" class="error-text">{{ errors.accountId }}</span>
-      </div>
+      <p class="form-hint">
+        {{ isTransferMode ? 'Esta transferência será aplicada automaticamente ao mês atual e aos próximos.' : 'Esta receita/despesa será aplicada automaticamente ao mês atual e aos próximos.' }}
+      </p>
 
-      <div class="form-row">
+      <!-- Transfer mode -->
+      <template v-if="isTransferMode">
         <div class="form-group">
-          <label for="rec-type">Tipo</label>
-          <select id="rec-type" v-model="type" class="input">
-            <option
-              v-for="(label, val) in TRANSACTION_TYPE_LABELS"
-              :key="val"
-              :value="Number(val)"
-            >
-              {{ label }}
+          <label for="rec-account">Conta de origem</label>
+          <select
+            id="rec-account"
+            v-model="accountId"
+            class="input"
+            :class="{ 'input-error': errors.accountId }"
+          >
+            <option value="">Seleciona uma conta</option>
+            <option v-for="a in accounts" :key="a.id" :value="a.id">
+              {{ a.name }}
             </option>
           </select>
+          <span v-if="errors.accountId" class="error-text">{{ errors.accountId }}</span>
         </div>
+
         <div class="form-group">
-          <label for="rec-category">Categoria</label>
-          <select id="rec-category" v-model="category" class="input">
-            <option
-              v-for="c in categoryOptions"
-              :key="c"
-              :value="c"
-            >
-              {{ TRANSACTION_CATEGORY_LABELS[c] }}
+          <label for="rec-dest-account">Conta de destino</label>
+          <select
+            id="rec-dest-account"
+            v-model="destinationAccountId"
+            class="input"
+            :class="{ 'input-error': errors.destinationAccountId }"
+          >
+            <option value="">Seleciona uma conta</option>
+            <option v-for="a in destinationOptions" :key="a.id" :value="a.id">
+              {{ a.name }}
             </option>
           </select>
+          <span v-if="errors.destinationAccountId" class="error-text">{{ errors.destinationAccountId }}</span>
         </div>
-      </div>
+      </template>
+
+      <!-- Normal mode -->
+      <template v-else>
+        <div class="form-group">
+          <label for="rec-account">Conta</label>
+          <select
+            id="rec-account"
+            v-model="accountId"
+            class="input"
+            :class="{ 'input-error': errors.accountId }"
+          >
+            <option value="">Seleciona uma conta</option>
+            <option v-for="a in accounts" :key="a.id" :value="a.id">
+              {{ a.name }}
+            </option>
+          </select>
+          <span v-if="errors.accountId" class="error-text">{{ errors.accountId }}</span>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="rec-type">Tipo</label>
+            <select id="rec-type" v-model="type" class="input">
+              <option
+                v-for="(label, val) in TRANSACTION_TYPE_LABELS"
+                :key="val"
+                :value="Number(val)"
+                v-show="Number(val) !== TransactionType.Transfer"
+              >
+                {{ label }}
+              </option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="rec-category">Categoria</label>
+            <select id="rec-category" v-model="category" class="input">
+              <option
+                v-for="c in categoryOptions"
+                :key="c"
+                :value="c"
+              >
+                {{ TRANSACTION_CATEGORY_LABELS[c] }}
+              </option>
+            </select>
+          </div>
+        </div>
+      </template>
 
       <div class="form-group">
         <label for="rec-amount">Valor (€)</label>

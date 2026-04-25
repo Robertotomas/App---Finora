@@ -25,6 +25,8 @@ export interface Account {
   householdId: string
   /** No Free com várias contas, só a principal tem movimentos; as outras ficam false */
   isActiveForPlan?: boolean
+  isArchived?: boolean
+  archivedAt?: string
 }
 
 export interface CreateAccountRequest {

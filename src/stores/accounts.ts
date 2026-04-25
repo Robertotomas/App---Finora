@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { accountsApi } from '@/api/accounts'
 import type { Account, CreateAccountRequest, UpdateAccountRequest } from '@/types/account'
 
@@ -19,25 +19,34 @@ function extractError(e: unknown): string {
   return 'Ocorreu um erro. Tenta novamente.'
 }
 
+function mapAccount(a: Account): Account {
+  return {
+    id: a.id,
+    name: a.name,
+    type: a.type,
+    balance: Number(a.balance),
+    currency: a.currency,
+    householdId: a.householdId,
+    isActiveForPlan: a.isActiveForPlan ?? true,
+    isArchived: a.isArchived ?? false,
+    archivedAt: a.archivedAt
+  }
+}
+
 export const useAccountsStore = defineStore('accounts', () => {
   const accounts = ref<Account[]>([])
   const loading = ref(false)
   const error = ref<string | null>(null)
+
+  const activeAccounts = computed(() => accounts.value.filter((a) => !a.isArchived))
+  const archivedAccounts = computed(() => accounts.value.filter((a) => a.isArchived))
 
   async function fetchAccounts() {
     loading.value = true
     error.value = null
     try {
       const { data } = await accountsApi.getAll()
-      accounts.value = data.map((a) => ({
-        id: a.id,
-        name: a.name,
-        type: a.type,
-        balance: Number(a.balance),
-        currency: a.currency,
-        householdId: a.householdId,
-        isActiveForPlan: a.isActiveForPlan ?? true
-      }))
+      accounts.value = data.map(mapAccount)
       return accounts.value
     } catch (e: unknown) {
       error.value = extractError(e)
@@ -52,14 +61,7 @@ export const useAccountsStore = defineStore('accounts', () => {
     error.value = null
     try {
       const { data } = await accountsApi.create(request)
-      const account: Account = {
-        id: data.id,
-        name: data.name,
-        type: data.type,
-        balance: Number(data.balance),
-        currency: data.currency,
-        householdId: data.householdId
-      }
+      const account = mapAccount(data)
       accounts.value = [...accounts.value, account]
       return account
     } catch (e: unknown) {
@@ -75,15 +77,7 @@ export const useAccountsStore = defineStore('accounts', () => {
     error.value = null
     try {
       const { data } = await accountsApi.update(id, request)
-      const account: Account = {
-        id: data.id,
-        name: data.name,
-        type: data.type,
-        balance: Number(data.balance),
-        currency: data.currency,
-        householdId: data.householdId,
-        isActiveForPlan: data.isActiveForPlan ?? true
-      }
+      const account = mapAccount(data)
       const idx = accounts.value.findIndex((a) => a.id === id)
       if (idx >= 0) {
         accounts.value = [...accounts.value]
@@ -114,18 +108,77 @@ export const useAccountsStore = defineStore('accounts', () => {
     }
   }
 
+  async function archiveAccount(id: string, targetAccountId?: string) {
+    loading.value = true
+    error.value = null
+    try {
+      const { data } = await accountsApi.archive(id, targetAccountId)
+      const account = mapAccount(data)
+      const idx = accounts.value.findIndex((a) => a.id === id)
+      if (idx >= 0) {
+        accounts.value = [...accounts.value]
+        accounts.value[idx] = account
+      }
+      return account
+    } catch (e: unknown) {
+      error.value = extractError(e)
+      throw e
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function reactivateAccount(id: string) {
+    loading.value = true
+    error.value = null
+    try {
+      const { data } = await accountsApi.reactivate(id)
+      const account = mapAccount(data)
+      const idx = accounts.value.findIndex((a) => a.id === id)
+      if (idx >= 0) {
+        accounts.value = [...accounts.value]
+        accounts.value[idx] = account
+      }
+      return account
+    } catch (e: unknown) {
+      error.value = extractError(e)
+      throw e
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function deleteAccountWithTransfer(id: string, targetAccountId: string) {
+    loading.value = true
+    error.value = null
+    try {
+      await accountsApi.deleteWithTransfer(id, targetAccountId)
+      accounts.value = accounts.value.filter((a) => a.id !== id)
+    } catch (e: unknown) {
+      error.value = extractError(e)
+      throw e
+    } finally {
+      loading.value = false
+    }
+  }
+
   function clearError() {
     error.value = null
   }
 
   return {
     accounts,
+    activeAccounts,
+    archivedAccounts,
     loading,
     error,
     fetchAccounts,
     createAccount,
     updateAccount,
     deleteAccount,
+    archiveAccount,
+    reactivateAccount,
+    deleteAccountWithTransfer,
     clearError
   }
 })

@@ -1,6 +1,7 @@
 export enum TransactionType {
   Income = 0,
-  Expense = 1
+  Expense = 1,
+  Transfer = 2
 }
 
 export enum TransactionCategory {
@@ -17,12 +18,14 @@ export enum TransactionCategory {
   Entertainment = 15,
   Shopping = 16,
   Education = 17,
+  Transfer = 100,
   Other = 99
 }
 
 export const TRANSACTION_TYPE_LABELS: Record<TransactionType, string> = {
   [TransactionType.Income]: 'Receita',
-  [TransactionType.Expense]: 'Despesa'
+  [TransactionType.Expense]: 'Despesa',
+  [TransactionType.Transfer]: 'Transferência'
 }
 
 export const TRANSACTION_CATEGORY_LABELS: Record<TransactionCategory, string> = {
@@ -39,6 +42,7 @@ export const TRANSACTION_CATEGORY_LABELS: Record<TransactionCategory, string> = 
   [TransactionCategory.Entertainment]: 'Entretenimento',
   [TransactionCategory.Shopping]: 'Compras',
   [TransactionCategory.Education]: 'Educação',
+  [TransactionCategory.Transfer]: 'Transferência',
   [TransactionCategory.Other]: 'Outro'
 }
 
@@ -56,6 +60,7 @@ export interface Transaction {
   amount: number
   date: string
   description?: string
+  destinationAccountId?: string
   splits: TransactionSplit[]
 }
 
@@ -66,6 +71,7 @@ export interface CreateTransactionRequest {
   amount: number
   date: string
   description?: string
+  destinationAccountId?: string
   splits?: TransactionSplitInput[]
 }
 
@@ -76,6 +82,7 @@ export interface UpdateTransactionRequest {
   amount: number
   date: string
   description?: string
+  destinationAccountId?: string
   splits?: TransactionSplitInput[]
 }
 
