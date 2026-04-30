@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useHouseholdStore } from '@/stores/household'
 import { objectivesApi } from '@/api/objectives'
 import { useSubscriptionStore } from '@/stores/subscription'
@@ -12,13 +13,19 @@ import type {
   UpdateSavingsObjectiveRequest,
 } from '@/types/objective'
 
+const route = useRoute()
+const router = useRouter()
 const householdStore = useHouseholdStore()
 const subscriptionStore = useSubscriptionStore()
 
 const loading = ref(false)
 const saving = ref(false)
 const error = ref<string | null>(null)
-const activeTab = ref<'active' | 'history'>('active')
+
+const activeTab = computed<'active' | 'history'>({
+  get: () => (route.query.tab === 'history' ? 'history' : 'active'),
+  set: (val) => router.replace({ query: { ...route.query, tab: val } })
+})
 
 const overview = ref<SavingsObjectivesOverview>({
   totalSavings: 0,
@@ -34,7 +41,6 @@ const formName = ref('')
 const formTarget = ref<number | null>(null)
 const formTargetDate = ref('')
 
-/** Objetivo em confirmação de eliminação */
 const objectiveToDelete = ref<{ id: string; name: string } | null>(null)
 
 const activeObjectives = computed<SavingsObjectiveActive[]>(() => overview.value.activeObjectives)
@@ -163,7 +169,6 @@ async function loadOverview() {
   }
 }
 
-/** Plano muda: recarrega overview (valores atualizados ao voltar ao Pro). */
 watch(
   () => subscriptionStore.limits.objectivesEnabled,
   async (enabled) => {
@@ -288,260 +293,242 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="objectives-view">
-    <div class="page-header">
-      <h1>Objetivos</h1>
-      <p class="subtitle">Define objetivos de poupança e acompanha o progresso de cada um.</p>
-    </div>
-
-    <div v-if="!householdStore.household && !householdStore.loading" class="empty-state">
-      <p>Configura primeiro o teu household.</p>
-      <router-link to="/household" class="link">Ir para Household</router-link>
-    </div>
-
-    <div v-else-if="householdStore.loading" class="loading-state">
+  <div class="objectives-page">
+    <!-- Loading -->
+    <div v-if="!householdStore.household && householdStore.loading" class="loading-state">
       <div class="spinner"></div>
       <p>A carregar...</p>
     </div>
 
+    <!-- No household -->
+    <div v-else-if="!householdStore.household && !householdStore.loading" class="empty-state">
+      <p>Configura primeiro o teu household.</p>
+      <router-link to="/household" class="link">Ir para Household</router-link>
+    </div>
+
+    <!-- Main content -->
     <template v-else>
+      <!-- Page header -->
+      <div class="page-header">
+        <div class="page-header-text">
+          <h1 class="page-title">{{ activeTab === 'active' ? 'Objetivos Ativos' : 'Objetivos Concluídos' }}</h1>
+          <p class="page-subtitle">{{ activeTab === 'active' ? 'Define objetivos de poupança e acompanha o progresso' : 'Histórico dos objetivos já alcançados' }}</p>
+        </div>
+        <button
+          v-if="activeTab === 'active'"
+          type="button"
+          class="btn-add"
+          :disabled="objectivesLocked"
+          @click="openCreateForm"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="5" y2="19"/><line x1="5" x2="19" y1="12" y2="12"/></svg>
+          Novo objetivo
+        </button>
+      </div>
+
       <div class="objectives-shell-wrap" :class="{ 'objectives-shell-wrap--locked': objectivesLocked }">
         <div class="objectives-shell objectives-shell-inner">
-      <div class="summary-strip">
-        <div class="summary-item">
-          <span class="summary-label">Poupança acumulada</span>
-          <span class="summary-value">{{ formatCurrency(overview.totalSavings) }}</span>
-        </div>
-        <div class="summary-item">
-          <span class="summary-label">Reservado por finalizados</span>
-          <span class="summary-value">{{ formatCurrency(overview.reservedByCompletedObjectives) }}</span>
-        </div>
-        <div class="summary-item">
-          <span class="summary-label">Disponível para objetivos ativos</span>
-          <span class="summary-value">{{ formatCurrency(overview.availableForActiveObjectives) }}</span>
-        </div>
-      </div>
 
-      <div class="objectives-tabs-row">
-        <div class="objectives-segment" role="tablist" aria-label="Secção de objetivos">
-          <button
-            type="button"
-            class="objectives-segment__btn"
-            role="tab"
-            :aria-selected="activeTab === 'active'"
-            :class="{ 'objectives-segment__btn--active': activeTab === 'active' }"
-            @click="activeTab = 'active'"
-          >
-            Objetivos ativos
-          </button>
-          <button
-            type="button"
-            class="objectives-segment__btn"
-            role="tab"
-            :aria-selected="activeTab === 'history'"
-            :class="{ 'objectives-segment__btn--active': activeTab === 'history' }"
-            @click="activeTab = 'history'"
-          >
-            Objetivos concluídos
-          </button>
-        </div>
-        <div v-if="activeTab === 'active'" class="objectives-tabs-row__action">
-          <button
-            type="button"
-            class="btn-add"
-            :disabled="objectivesLocked"
-            @click="openCreateForm"
-          >
-            + Novo objetivo
-          </button>
-        </div>
-      </div>
-
-      <div v-if="error" class="global-error">{{ error }}</div>
-
-      <section v-if="activeTab === 'active'" class="content-section">
-        <div v-if="formOpen" class="goal-form-card">
-          <h2 class="section-title">{{ editingId ? 'Editar objetivo' : 'Novo objetivo' }}</h2>
-          <div class="goal-form-grid">
-            <label class="field">
-              <span class="field-label">Nome do objetivo</span>
-              <input v-model="formName" class="field-input" type="text" maxlength="200" placeholder="Ex.: Viagem, fundo de emergência..." />
-            </label>
-            <label class="field">
-              <span class="field-label">Valor necessário</span>
-              <input v-model.number="formTarget" class="field-input" type="number" min="0.01" step="0.01" placeholder="0,00" />
-            </label>
-            <label class="field field-span-2">
-              <span class="field-label">Quer atingir até (opcional)</span>
-              <input v-model="formTargetDate" class="field-input" type="date" />
-            </label>
-          </div>
-          <div class="form-actions">
-            <button type="button" class="btn-secondary" :disabled="saving" @click="resetForm">Cancelar</button>
-            <button type="button" class="btn-add" :disabled="saving" @click="submitForm">
-              {{ saving ? 'A guardar...' : 'Guardar' }}
-            </button>
-          </div>
-        </div>
-
-        <div v-if="loading" class="loading-state">
-          <div class="spinner"></div>
-          <p>A carregar objetivos...</p>
-        </div>
-
-        <div v-else-if="activeObjectives.length === 0" class="empty-state">
-          <p>Ainda não tens objetivos ativos.</p>
-          <button
-            v-if="!objectivesLocked"
-            type="button"
-            class="btn-add"
-            @click="openCreateForm()"
-          >
-            Criar primeiro objetivo
-          </button>
-          <p v-else class="objectives-free-hint">
-            No plano Free podes criar objetivos ao subires de plano.
-            <router-link :to="{ name: 'subscription' }" class="link">Ver planos</router-link>
-          </p>
-        </div>
-
-        <div v-else class="goals-grid">
-          <article v-for="goal in activeObjectives" :key="goal.id" class="goal-card">
-            <header class="goal-card-header">
-              <h3 class="goal-name">{{ goal.name }}</h3>
-              <span class="goal-order">#{{ goal.sortOrder }}</span>
-            </header>
-
-            <p class="goal-amounts">
-              {{ formatCurrency(goal.allocatedAmount) }} / {{ formatCurrency(goal.targetAmount) }}
-            </p>
-            <p v-if="goal.targetDate" class="goal-target-date">Meta: {{ formatDate(goal.targetDate) }}</p>
-
-            <div class="progress-track" role="progressbar" :aria-valuenow="goal.progressPercent" aria-valuemin="0" aria-valuemax="100">
-              <div class="progress-fill" :style="{ width: `${Math.min(100, goal.progressPercent)}%` }"></div>
+          <!-- Summary stats -->
+          <div class="stats-grid">
+            <div class="stat-card">
+              <p class="stat-label">Poupança acumulada</p>
+              <p class="stat-value">{{ formatCurrency(overview.totalSavings) }}</p>
             </div>
-            <p class="progress-text">{{ goal.progressPercent.toFixed(2) }}%</p>
-
-            <div class="goal-actions">
-              <button
-                type="button"
-                class="btn-secondary"
-                :disabled="saving || objectivesLocked"
-                @click="openEditForm(goal)"
-              >
-                Editar
-              </button>
-              <button
-                type="button"
-                class="btn-finish"
-                :disabled="saving || !goal.canFinalize || objectivesLocked"
-                @click="finalizeObjective(goal)"
-              >
-                Finalizar
-              </button>
-              <button
-                type="button"
-                class="goal-btn-delete"
-                :disabled="saving || objectivesLocked"
-                title="Eliminar objetivo"
-                :aria-label="`Eliminar objetivo ${goal.name}`"
-                @click="openDeleteObjective(goal)"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="18"
-                  height="18"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  aria-hidden="true"
-                >
-                  <path d="M3 6h18" />
-                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                  <line x1="10" x2="10" y1="11" y2="17" />
-                  <line x1="14" x2="14" y1="11" y2="17" />
-                </svg>
-              </button>
+            <div class="stat-card">
+              <p class="stat-label">Reservado por finalizados</p>
+              <p class="stat-value">{{ formatCurrency(overview.reservedByCompletedObjectives) }}</p>
             </div>
-          </article>
-        </div>
-      </section>
+            <div class="stat-card">
+              <p class="stat-label">Disponível para ativos</p>
+              <p class="stat-value">{{ formatCurrency(overview.availableForActiveObjectives) }}</p>
+            </div>
+          </div>
 
-      <section v-else class="content-section">
-        <div v-if="loading" class="loading-state">
-          <div class="spinner"></div>
-          <p>A carregar objetivos concluídos...</p>
-        </div>
+          <!-- Error -->
+          <div v-if="error" class="global-error">{{ error }}</div>
 
-        <div v-else-if="historyObjectives.length === 0" class="empty-state">
-          <p>Sem objetivos finalizados ainda.</p>
-        </div>
+          <!-- ═══ ACTIVE TAB ═══ -->
+          <section v-if="activeTab === 'active'">
+            <!-- Create/Edit form -->
+            <div v-if="formOpen" class="form-card">
+              <h2 class="form-title">{{ editingId ? 'Editar objetivo' : 'Novo objetivo' }}</h2>
+              <div class="form-grid">
+                <label class="field">
+                  <span class="field-label">Nome do objetivo</span>
+                  <input v-model="formName" class="field-input" type="text" maxlength="200" placeholder="Ex.: Viagem, fundo de emergência..." />
+                </label>
+                <label class="field">
+                  <span class="field-label">Valor necessário</span>
+                  <div class="input-wrap">
+                    <input v-model.number="formTarget" class="field-input field-input--suffixed" type="number" min="0.01" step="0.01" placeholder="0,00" />
+                    <span class="input-suffix">&euro;</span>
+                  </div>
+                </label>
+                <label class="field field-span-full">
+                  <span class="field-label">Atingir até (opcional)</span>
+                  <input v-model="formTargetDate" class="field-input" type="date" />
+                </label>
+              </div>
+              <div class="form-actions">
+                <button type="button" class="btn-cancel" :disabled="saving" @click="resetForm">Cancelar</button>
+                <button type="button" class="btn-confirm" :disabled="saving" @click="submitForm">
+                  {{ saving ? 'A guardar...' : 'Guardar' }}
+                </button>
+              </div>
+            </div>
 
-        <div v-else class="table-container">
-          <table class="history-table">
-            <thead>
-              <tr>
-                <th>Objetivo</th>
-                <th>Valor</th>
-                <th>Meta até</th>
-                <th>Ordem</th>
-                <th>Finalizado em</th>
-                <th class="history-actions-col" scope="col">
-                  <span class="visually-hidden">Ações</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="item in historyObjectives" :key="item.id">
-                <td>{{ item.name }}</td>
-                <td>{{ formatCurrency(item.targetAmount) }}</td>
-                <td>{{ item.targetDate ? formatDate(item.targetDate) : '—' }}</td>
-                <td>#{{ item.sortOrder }}</td>
-                <td>{{ formatDate(item.completedAt) }}</td>
-                <td class="history-actions-cell">
+            <!-- Loading -->
+            <div v-if="loading" class="loading-state">
+              <div class="spinner"></div>
+              <p>A carregar objetivos...</p>
+            </div>
+
+            <!-- Empty -->
+            <div v-else-if="activeObjectives.length === 0 && !formOpen" class="empty-card">
+              <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="empty-icon"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/><line x1="22" x2="12" y1="2" y2="12"/></svg>
+              <p class="empty-text">Ainda não tens objetivos ativos</p>
+              <p class="empty-hint">Cria um objetivo de poupança para começar a acompanhar o progresso.</p>
+              <button
+                v-if="!objectivesLocked"
+                type="button"
+                class="btn-confirm"
+                @click="openCreateForm()"
+              >
+                Criar primeiro objetivo
+              </button>
+              <p v-else class="empty-hint">
+                Atualiza o plano para criar objetivos.
+                <router-link :to="{ name: 'subscription' }" class="link">Ver planos</router-link>
+              </p>
+            </div>
+
+            <!-- Goals grid -->
+            <div v-else-if="activeObjectives.length > 0" class="goals-grid">
+              <article v-for="goal in activeObjectives" :key="goal.id" class="goal-card">
+                <div class="goal-top">
+                  <div class="goal-icon-wrap">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/><line x1="22" x2="12" y1="2" y2="12"/></svg>
+                  </div>
+                  <div class="goal-info">
+                    <div class="goal-name-row">
+                      <h3 class="goal-name">{{ goal.name }}</h3>
+                      <span class="goal-order">#{{ goal.sortOrder }}</span>
+                    </div>
+                    <p class="goal-amounts">
+                      {{ formatCurrency(goal.allocatedAmount) }}
+                      <span class="goal-amounts-separator">/</span>
+                      {{ formatCurrency(goal.targetAmount) }}
+                    </p>
+                    <p v-if="goal.targetDate" class="goal-date">Meta: {{ formatDate(goal.targetDate) }}</p>
+                  </div>
+                </div>
+
+                <!-- Progress -->
+                <div class="progress-section">
+                  <div class="progress-header">
+                    <span class="progress-pct">{{ goal.progressPercent.toFixed(1) }}%</span>
+                    <span v-if="goal.canFinalize" class="badge badge--ready">Pronto</span>
+                  </div>
+                  <div class="progress-track">
+                    <div
+                      class="progress-fill"
+                      :class="{ 'progress-fill--complete': goal.canFinalize }"
+                      :style="{ width: `${Math.min(100, goal.progressPercent)}%` }"
+                    ></div>
+                  </div>
+                </div>
+
+                <!-- Actions -->
+                <div class="goal-actions">
                   <button
                     type="button"
-                    class="goal-btn-delete goal-btn-delete--table"
+                    class="action-btn"
+                    title="Editar"
                     :disabled="saving || objectivesLocked"
-                    title="Eliminar objetivo"
-                    :aria-label="`Eliminar objetivo ${item.name}`"
+                    @click="openEditForm(goal)"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+                  </button>
+                  <button
+                    type="button"
+                    class="action-btn action-btn--finalize"
+                    title="Finalizar"
+                    :disabled="saving || !goal.canFinalize || objectivesLocked"
+                    @click="finalizeObjective(goal)"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                  </button>
+                  <button
+                    type="button"
+                    class="action-btn action-btn--danger"
+                    title="Eliminar"
+                    :disabled="saving || objectivesLocked"
+                    @click="openDeleteObjective(goal)"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                  </button>
+                </div>
+              </article>
+            </div>
+          </section>
+
+          <!-- ═══ HISTORY TAB ═══ -->
+          <section v-else>
+            <div v-if="loading" class="loading-state">
+              <div class="spinner"></div>
+              <p>A carregar objetivos concluídos...</p>
+            </div>
+
+            <div v-else-if="historyObjectives.length === 0" class="empty-card">
+              <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="empty-icon"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+              <p class="empty-text">Sem objetivos finalizados</p>
+              <p class="empty-hint">Quando finalizares um objetivo ativo, ele aparece aqui.</p>
+            </div>
+
+            <div v-else class="goals-grid">
+              <article v-for="item in historyObjectives" :key="item.id" class="goal-card goal-card--completed">
+                <div class="goal-top">
+                  <div class="goal-icon-wrap goal-icon-wrap--completed">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                  </div>
+                  <div class="goal-info">
+                    <div class="goal-name-row">
+                      <h3 class="goal-name">{{ item.name }}</h3>
+                      <span class="badge badge--completed">Concluído</span>
+                    </div>
+                    <p class="goal-amounts">{{ formatCurrency(item.targetAmount) }}</p>
+                    <div class="goal-meta">
+                      <span v-if="item.targetDate" class="goal-meta-item">Meta: {{ formatDate(item.targetDate) }}</span>
+                      <span class="goal-meta-item">Finalizado: {{ formatDate(item.completedAt) }}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="goal-actions">
+                  <button
+                    type="button"
+                    class="action-btn action-btn--danger"
+                    title="Eliminar"
+                    :disabled="saving || objectivesLocked"
                     @click="openDeleteObjective(item)"
                   >
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      width="18"
-                      height="18"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="2"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      aria-hidden="true"
-                    >
-                      <path d="M3 6h18" />
-                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                      <line x1="10" x2="10" y1="11" y2="17" />
-                      <line x1="14" x2="14" y1="11" y2="17" />
-                    </svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
                   </button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+                </div>
+              </article>
+            </div>
+          </section>
         </div>
-      </section>
-        </div>
-        <div v-if="objectivesLocked" class="objectives-lock-overlay" aria-hidden="true">
-          <div class="objectives-lock-panel">
-            <p class="objectives-lock-title">Atualize o plano para visualização completa</p>
-            <p class="objectives-lock-text">
-              Os valores dos teus objetivos mantêm-se guardados. Voltam a aparecer ao atualizares o plano.
+
+        <!-- Lock overlay -->
+        <div v-if="objectivesLocked" class="lock-overlay" aria-hidden="true">
+          <div class="lock-panel">
+            <p class="lock-title">Atualiza o plano para aceder aos objetivos</p>
+            <p class="lock-text">
+              Os teus objetivos mantêm-se guardados. Voltam a aparecer ao atualizares o plano.
             </p>
-            <router-link :to="{ name: 'subscription' }" class="btn-add objectives-lock-cta">Ver planos</router-link>
+            <router-link :to="{ name: 'subscription' }" class="btn-confirm">Ver planos</router-link>
           </div>
         </div>
       </div>
@@ -563,12 +550,495 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.objectives-view {
-  max-width: min(960px, 100%);
+.objectives-page {
+  max-width: min(860px, 100%);
   margin: 0 auto;
-  padding: 0 0 2.5rem;
+  padding: 0 0 3rem;
 }
 
+/* ── Page header ── */
+.page-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.page-header-text {
+  min-width: 0;
+}
+
+.page-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--color-text);
+  margin: 0;
+  letter-spacing: -0.02em;
+}
+
+.page-subtitle {
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+  margin: 0.25rem 0 0;
+}
+
+.btn-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.5rem 1rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #fff;
+  background: #166534;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.15s;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.btn-add:hover:not(:disabled) {
+  background: #15803d;
+  transform: translateY(-1px);
+}
+
+.btn-add:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Stats grid ── */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.875rem;
+  margin-bottom: 1.5rem;
+}
+
+.stat-card {
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  padding: 1.125rem 1.25rem;
+  box-shadow: var(--app-shadow-card, 0 1px 3px rgba(0, 0, 0, 0.06));
+}
+
+.stat-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+  margin: 0;
+}
+
+.stat-value {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--color-text);
+  margin: 0.25rem 0 0;
+  letter-spacing: -0.02em;
+}
+
+/* ── Goals grid ── */
+.goals-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 0.875rem;
+}
+
+.goal-card {
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  transition: box-shadow 0.2s, transform 0.2s;
+  box-shadow: var(--app-shadow-card, 0 1px 3px rgba(0, 0, 0, 0.06));
+}
+
+.goal-card:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  transform: translateY(-1px);
+}
+
+.goal-card--completed {
+  opacity: 0.85;
+}
+
+/* ── Goal top row ── */
+.goal-top {
+  display: flex;
+  gap: 0.875rem;
+  align-items: flex-start;
+}
+
+.goal-icon-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  background: #ecfdf5;
+  color: #166534;
+}
+
+html.dark .goal-icon-wrap {
+  background: rgba(22, 101, 52, 0.2);
+  color: #4ade80;
+}
+
+.goal-icon-wrap--completed {
+  background: #f0fdf4;
+  color: #059669;
+}
+
+html.dark .goal-icon-wrap--completed {
+  background: rgba(5, 150, 105, 0.15);
+  color: #34d399;
+}
+
+.goal-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.goal-name-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.125rem;
+}
+
+.goal-name {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--color-text);
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.goal-order {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+}
+
+.goal-amounts {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--color-text);
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+.goal-amounts-separator {
+  color: var(--color-text-muted);
+  font-weight: 400;
+  margin: 0 0.125rem;
+}
+
+.goal-date {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  margin: 0.25rem 0 0;
+}
+
+.goal-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.75rem;
+  margin-top: 0.25rem;
+}
+
+.goal-meta-item {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+/* ── Progress ── */
+.progress-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.progress-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.progress-pct {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.progress-track {
+  width: 100%;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--color-table-row-hover);
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #166534 0%, #16a34a 100%);
+  transition: width 0.3s ease;
+}
+
+.progress-fill--complete {
+  background: linear-gradient(90deg, #059669 0%, #34d399 100%);
+}
+
+/* ── Badges ── */
+.badge {
+  font-size: 0.5625rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.15rem 0.4rem;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.badge--ready {
+  color: #fff;
+  background: #059669;
+}
+
+.badge--completed {
+  color: #fff;
+  background: #64748b;
+}
+
+/* ── Goal actions ── */
+.goal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.375rem;
+}
+
+.action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.action-btn:hover:not(:disabled) {
+  background: var(--color-table-row-hover);
+  color: var(--color-text);
+  border-color: var(--color-text-muted);
+}
+
+.action-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.action-btn--finalize:hover:not(:disabled) {
+  color: #059669;
+  border-color: #a7f3d0;
+  background: #ecfdf5;
+}
+
+html.dark .action-btn--finalize:hover:not(:disabled) {
+  color: #34d399;
+  border-color: rgba(52, 211, 153, 0.3);
+  background: rgba(52, 211, 153, 0.1);
+}
+
+.action-btn--danger:hover:not(:disabled) {
+  color: #dc2626;
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+
+html.dark .action-btn--danger:hover:not(:disabled) {
+  color: #f87171;
+  border-color: rgba(248, 113, 113, 0.3);
+  background: rgba(248, 113, 113, 0.1);
+}
+
+/* ── Form card ── */
+.form-card {
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  padding: 1.25rem;
+  margin-bottom: 1rem;
+  box-shadow: var(--app-shadow-card, 0 1px 3px rgba(0, 0, 0, 0.06));
+}
+
+.form-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--color-text);
+  margin: 0 0 1rem;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.875rem;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.field-span-full {
+  grid-column: 1 / -1;
+}
+
+.field-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--color-text-muted);
+}
+
+.field-input {
+  padding: 0.625rem 0.875rem;
+  border: 1px solid var(--color-input-border);
+  border-radius: 10px;
+  font-size: 0.875rem;
+  background: var(--color-input-bg);
+  color: var(--color-text);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.field-input:focus {
+  outline: none;
+  border-color: #166534;
+  box-shadow: 0 0 0 3px rgba(22, 101, 52, 0.12);
+}
+
+.field-input--suffixed {
+  padding-right: 2.25rem;
+}
+
+.input-wrap {
+  position: relative;
+}
+
+.input-suffix {
+  position: absolute;
+  right: 0.875rem;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  pointer-events: none;
+}
+
+.form-actions {
+  margin-top: 1rem;
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+/* ── Buttons ── */
+.btn-confirm {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem 1rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #fff;
+  background: #166534;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 0.15s;
+}
+
+.btn-confirm:hover:not(:disabled) {
+  background: #15803d;
+}
+
+.btn-confirm:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-cancel {
+  padding: 0.5rem 0.85rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-text);
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.btn-cancel:hover {
+  background: var(--color-table-row-hover);
+}
+
+/* ── Empty state ── */
+.empty-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 3rem 1.5rem;
+  background: var(--color-bg-card);
+  border: 1px dashed var(--color-border);
+  border-radius: 14px;
+  text-align: center;
+}
+
+.empty-icon {
+  color: var(--color-text-muted);
+  margin-bottom: 1rem;
+  opacity: 0.5;
+}
+
+.empty-text {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--color-text);
+  margin: 0 0 0.25rem;
+}
+
+.empty-hint {
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+  margin: 0 0 1.25rem;
+}
+
+/* ── Lock overlay ── */
 .objectives-shell-wrap {
   position: relative;
 }
@@ -580,7 +1050,11 @@ onMounted(async () => {
   user-select: none;
 }
 
-.objectives-lock-overlay {
+.objectives-shell {
+  transition: opacity 0.2s ease, filter 0.2s ease;
+}
+
+.lock-overlay {
   position: absolute;
   inset: 0;
   display: flex;
@@ -591,378 +1065,40 @@ onMounted(async () => {
   pointer-events: none;
 }
 
-html.dark .objectives-lock-overlay {
+html.dark .lock-overlay {
   background: rgba(0, 0, 0, 0.28);
 }
 
-.objectives-lock-panel {
+.lock-panel {
   pointer-events: auto;
   max-width: 420px;
   text-align: center;
-  padding: 1.25rem 1.5rem;
-  border-radius: 12px;
+  padding: 1.5rem 2rem;
+  border-radius: 14px;
   background: var(--color-bg-card);
   border: 1px solid var(--color-border);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
 }
 
-.objectives-lock-title {
+.lock-title {
   margin: 0 0 0.5rem;
   font-size: 1rem;
   font-weight: 700;
   color: var(--color-text);
 }
 
-.objectives-lock-text {
-  margin: 0 0 1rem;
+.lock-text {
+  margin: 0 0 1.25rem;
   font-size: 0.875rem;
-  line-height: 1.45;
+  line-height: 1.5;
   color: var(--color-text-muted);
 }
 
-.objectives-lock-cta {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  text-decoration: none;
-}
-
-.objectives-free-hint {
-  margin: 0.75rem 0 0;
-  font-size: 0.875rem;
-  color: var(--color-text-muted);
-  line-height: 1.45;
-}
-
-.objectives-shell {
-  transition: opacity 0.2s ease, filter 0.2s ease;
-}
-
-.summary-strip {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 0.75rem;
-  margin-bottom: 1rem;
-}
-
-.summary-item {
-  background: var(--color-bg-card);
-  border: 1px solid var(--color-border);
-  border-radius: 10px;
-  padding: 0.75rem 0.875rem;
-}
-
-.summary-label {
-  display: block;
-  font-size: 0.75rem;
-  color: var(--color-text-muted);
-  margin-bottom: 0.25rem;
-}
-
-.summary-value {
-  font-size: 0.95rem;
-  font-weight: 700;
-  color: var(--color-text);
-}
-
-/* Separadores + «Novo objetivo» na mesma linha */
-.objectives-tabs-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.75rem 1rem;
-  margin-bottom: 1rem;
-}
-
-.objectives-tabs-row__action {
-  flex-shrink: 0;
-  margin-left: auto;
-}
-
-/* Controlo segmentado (evita estilos globais .tabs / .tab) */
-.objectives-segment {
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: center;
-  padding: 4px;
-  border-radius: 11px;
-  background: var(--color-table-row-hover);
-  border: 1px solid var(--color-border);
-  gap: 4px;
-}
-
-.objectives-segment__btn {
-  border: none;
-  border-radius: 8px;
-  padding: 0.45rem 0.95rem;
-  font-size: 0.875rem;
-  font-weight: 500;
-  font-family: inherit;
-  cursor: pointer;
-  background: transparent;
-  color: var(--color-text-muted);
-  margin: 0;
-  transition: color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
-}
-
-.objectives-segment__btn:hover {
-  color: var(--color-text);
-  background: rgba(255, 255, 255, 0.55);
-}
-
-html.dark .objectives-segment__btn:hover {
-  background: rgba(255, 255, 255, 0.06);
-}
-
-.objectives-segment__btn--active {
-  background: var(--color-bg-card);
-  color: var(--app-brand-tab, #166534);
-  font-weight: 600;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
-}
-
-html.dark .objectives-segment__btn--active {
-  color: #4ade80;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
-}
-
-.objectives-segment__btn:focus-visible {
-  outline: 2px solid var(--color-link-hover);
-  outline-offset: 2px;
-}
-
-.goal-form-card {
-  background: var(--color-bg-card);
-  border: 1px solid var(--color-border);
-  border-radius: 12px;
-  padding: 1rem;
-  margin-bottom: 1rem;
-}
-
-.goal-form-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 0.75rem;
-}
-
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-}
-
-.field-label {
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: var(--color-text-muted);
-}
-
-.field-input {
-  padding: 0.5rem 0.75rem;
-  border: 1px solid var(--color-input-border);
-  border-radius: 8px;
-  font-size: 0.875rem;
-  background: var(--color-input-bg);
-  color: var(--color-text);
-}
-
-.form-actions {
-  margin-top: 0.875rem;
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.5rem;
-}
-
-.goals-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 1rem;
-}
-
-.goal-card {
-  background: var(--color-bg-card);
-  border: 1px solid var(--color-border);
-  border-radius: 12px;
-  padding: 1rem;
-}
-
-.goal-card-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  margin-bottom: 0.5rem;
-}
-
-.goal-name {
-  font-size: 1rem;
-  color: var(--color-text);
-  margin: 0;
-}
-
-.goal-order {
-  font-size: 0.75rem;
-  color: var(--color-text-muted);
-  font-weight: 600;
-}
-
-.goal-amounts {
-  margin: 0 0 0.625rem;
-  color: var(--color-text);
-  font-weight: 600;
-}
-
-.goal-target-date {
-  margin: -0.25rem 0 0.5rem;
-  font-size: 0.8125rem;
-  color: var(--color-text-muted);
-}
-
-.field-span-2 {
-  grid-column: 1 / -1;
-}
-
-.progress-track {
-  width: 100%;
-  height: 10px;
-  border-radius: 999px;
-  background: var(--color-table-row-hover);
-  overflow: hidden;
-}
-
-.progress-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #166534 0%, #16a34a 100%);
-  transition: width 0.2s ease;
-}
-
-.progress-text {
-  margin: 0.4rem 0 0.8rem;
-  font-size: 0.8125rem;
-  color: var(--color-text-muted);
-}
-
-.goal-actions {
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
-.visually-hidden {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
-}
-
-.goal-btn-delete {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  width: 2.25rem;
-  height: 2.25rem;
-  padding: 0;
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  background: transparent;
-  color: #b91c1c;
-  cursor: pointer;
-  transition:
-    background 0.15s ease,
-    color 0.15s ease,
-    border-color 0.15s ease;
-}
-
-.goal-btn-delete:hover:not(:disabled) {
-  background: #fef2f2;
-  border-color: #fecaca;
-  color: #991b1b;
-}
-
-html.dark .goal-btn-delete {
-  color: #f87171;
-}
-
-html.dark .goal-btn-delete:hover:not(:disabled) {
-  background: rgba(248, 113, 113, 0.12);
-  border-color: rgba(248, 113, 113, 0.45);
-}
-
-.goal-btn-delete--table {
-  width: 2rem;
-  height: 2rem;
-}
-
-.goal-btn-delete:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.btn-add,
-.btn-secondary,
-.btn-finish {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.5rem 0.85rem;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.btn-add {
-  background: #166534;
-  color: #fff;
-}
-
-.btn-add:hover {
-  background: #15803d;
-}
-
-.btn-secondary {
-  background: transparent;
-  border-color: var(--color-border);
-  color: var(--color-text);
-}
-
-.btn-finish {
-  background: #0f766e;
-  color: #fff;
-}
-
-.btn-finish:disabled,
-.btn-add:disabled,
-.btn-secondary:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.content-section {
-  margin-top: 0.75rem;
-}
-
-.global-error {
-  margin-top: 0.75rem;
-  margin-bottom: 0.75rem;
-  padding: 0.6rem 0.75rem;
-  border-radius: 8px;
-  background: #fef2f2;
-  color: #dc2626;
-  border: 1px solid #fecaca;
-  font-size: 0.875rem;
-}
-
+/* ── Loading / Error ── */
 .loading-state,
 .empty-state {
   text-align: center;
-  padding: 2rem 1rem;
+  padding: 3rem;
   color: var(--color-text-muted);
 }
 
@@ -973,50 +1109,27 @@ html.dark .goal-btn-delete:hover:not(:disabled) {
   border-top-color: #166534;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
-  margin: 0 auto 0.8rem;
+  margin: 0 auto 1rem;
 }
 
-.table-container {
-  background: var(--color-bg-card);
-  border: 1px solid var(--color-border);
-  border-radius: 12px;
-  overflow: hidden;
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
-.history-table {
-  width: 100%;
-  border-collapse: collapse;
+.global-error {
+  padding: 0.625rem 1rem;
+  background: #fef2f2;
+  color: #dc2626;
+  border-radius: 10px;
+  font-size: 0.8125rem;
+  margin-bottom: 1rem;
+  border: 1px solid #fecaca;
 }
 
-.history-table th,
-.history-table td {
-  text-align: left;
-  padding: 0.75rem 0.85rem;
-  border-bottom: 1px solid var(--color-border);
-}
-
-.history-table th {
-  font-size: 0.75rem;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--color-text-muted);
-}
-
-.history-table td {
-  color: var(--color-text);
-  font-size: 0.875rem;
-}
-
-.history-actions-col,
-.history-actions-cell {
-  width: 3.25rem;
-  text-align: center;
-  vertical-align: middle;
-}
-
-.history-actions-col {
-  text-transform: none;
-  letter-spacing: normal;
+html.dark .global-error {
+  background: rgba(220, 38, 38, 0.1);
+  color: #f87171;
+  border-color: rgba(248, 113, 113, 0.3);
 }
 
 .link {
@@ -1028,7 +1141,24 @@ html.dark .goal-btn-delete:hover:not(:disabled) {
   text-decoration: underline;
 }
 
-@keyframes spin {
-  to { transform: rotate(360deg); }
+/* ── Responsive ── */
+@media (max-width: 600px) {
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .goals-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .stat-value {
+    font-size: 1.125rem;
+  }
 }
 </style>

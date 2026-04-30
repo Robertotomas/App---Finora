@@ -393,6 +393,10 @@ function accountIcon(type: AccountType): string {
 
       <!-- Active accounts -->
       <template v-if="accountsStore.activeAccounts.length > 0">
+        <div class="section-label">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 10h20"/><circle cx="17" cy="15" r="1.5"/></svg>
+          Contas Ativas
+        </div>
         <div class="accounts-grid">
           <div
             v-for="account in accountsStore.activeAccounts"
