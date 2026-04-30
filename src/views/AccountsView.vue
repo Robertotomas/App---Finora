@@ -55,6 +55,7 @@ const selectedPrimaryId = ref('')
 const primarySelectionLoading = ref(false)
 const primaryError = ref<string | null>(null)
 
+
 watch(
   () => [accountsStore.accounts, needsPrimarySelection.value] as const,
   () => {
@@ -277,219 +278,235 @@ function formatBalance(balance: number, currency: string): string {
     currency: currency || 'EUR'
   }).format(balance)
 }
+
+function accountIcon(type: AccountType): string {
+  const icons: Record<number, string> = {
+    [AccountType.Bank]: 'M3 21h18M3 10h18M5 6l7-3 7 3M4 10v11M20 10v11M8 14v3M12 14v3M16 14v3',
+    [AccountType.Cash]: 'M2 6h20v12H2zM12 12a2 2 0 100-4 2 2 0 000 4z',
+    [AccountType.Savings]: 'M19 5c-1.5 0-2.8 1.4-3 2-3.5-1.5-11-.3-11 5 0 1.8 0 3 2 4.5V20h4v-2h3v2h4v-4c1-0.5 2-2 2-3.5V8c0-1-1-3-1-3z',
+    [AccountType.Investment]: 'M22 12h-4l-3 9L9 3l-3 9H2',
+    [AccountType.Other]: 'M12 2a10 10 0 100 20 10 10 0 000-20zM12 6v6l4 2',
+  }
+  return icons[type] || icons[AccountType.Other]
+}
 </script>
 
 <template>
-  <div class="accounts-view">
-    <div class="page-header">
-      <h1>Contas</h1>
-      <p class="subtitle">Gerir as tuas contas financeiras</p>
-    </div>
-
-    <div v-if="!householdStore.household && !householdStore.loading" class="empty-state">
-      <p>Configura primeiro o teu household.</p>
-      <router-link to="/household" class="link">Ir para Household</router-link>
-    </div>
-
-    <div v-else-if="householdStore.loading && !householdStore.household" class="loading-state">
+  <div class="accounts-page">
+    <!-- Loading -->
+    <div v-if="!householdStore.household && householdStore.loading" class="loading-state">
       <div class="spinner"></div>
       <p>A carregar...</p>
     </div>
 
+    <!-- No household -->
+    <div v-else-if="!householdStore.household && !householdStore.loading" class="empty-state">
+      <p>Configura primeiro o teu household.</p>
+      <router-link to="/household" class="link">Ir para Household</router-link>
+    </div>
+
+    <!-- Error -->
     <div v-else-if="householdStore.error && !householdStore.household" class="error-state">
       <p>{{ householdStore.error }}</p>
     </div>
 
-    <div v-else class="content">
+    <!-- Main content -->
+    <template v-else>
+      <!-- Page header -->
+      <div class="page-header">
+        <div class="page-header-text">
+          <h1 class="page-title">Contas</h1>
+          <p class="page-subtitle">Gere as tuas contas financeiras</p>
+        </div>
+        <button
+          v-if="accountsStore.activeAccounts.length > 0"
+          type="button"
+          class="btn-add"
+          @click="openCreateModal"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="5" y2="19"/><line x1="5" x2="19" y1="12" y2="12"/></svg>
+          Nova conta
+        </button>
+      </div>
+
+      <!-- Global error -->
       <div v-if="accountsStore.error" class="global-error">
         {{ accountsStore.error }}
       </div>
 
+      <!-- Primary selection banner -->
       <div
         v-if="needsPrimarySelection && accountsStore.activeAccounts.length > 1"
-        class="primary-banner"
+        class="banner banner--warning"
       >
-        <p class="primary-banner-title">Escolhe a conta principal</p>
-        <p class="primary-banner-text">
-          No plano Free só uma conta pode estar ativa para movimentos e edições. As outras ficam só para consulta até
-          eliminares ou atualizares o plano.
-        </p>
-        <div class="primary-radio-list">
-          <label v-for="a in accountsStore.activeAccounts" :key="a.id" class="primary-radio">
-            <input v-model="selectedPrimaryId" type="radio" name="primary" :value="a.id" />
-            <span>{{ a.name }}</span>
-          </label>
+        <div class="banner-content">
+          <p class="banner-title">Escolhe a conta principal</p>
+          <p class="banner-text">
+            No plano Free só uma conta pode estar ativa para movimentos e edições.
+          </p>
+          <div class="primary-radio-list">
+            <label v-for="a in accountsStore.activeAccounts" :key="a.id" class="primary-radio">
+              <input v-model="selectedPrimaryId" type="radio" name="primary" :value="a.id" />
+              <span>{{ a.name }}</span>
+            </label>
+          </div>
+          <p v-if="primaryError" class="banner-error">{{ primaryError }}</p>
+          <button
+            type="button"
+            class="btn-confirm"
+            :disabled="primarySelectionLoading || !selectedPrimaryId"
+            @click="setPrimaryAccount"
+          >
+            {{ primarySelectionLoading ? 'A guardar...' : 'Confirmar' }}
+          </button>
         </div>
-        <p v-if="primaryError" class="primary-banner-error">{{ primaryError }}</p>
-        <button
-          type="button"
-          class="btn-primary-confirm"
-          :disabled="primarySelectionLoading || !selectedPrimaryId"
-          @click="setPrimaryAccount"
-        >
-          {{ primarySelectionLoading ? 'A guardar...' : 'Confirmar conta principal' }}
-        </button>
       </div>
 
-      <div v-if="showUnlockAccountsBanner" class="primary-banner accounts-unlock-banner">
-        <div class="accounts-unlock-banner-inner">
-          <div class="accounts-unlock-banner-copy">
-            <p class="primary-banner-title">Outras contas</p>
-            <p class="primary-banner-text accounts-unlock-banner-desc">
-              Para desbloquear as outras contas para movimentos e edições, atualize o plano para Pro ou Couple.
-            </p>
+      <!-- Unlock banner -->
+      <div v-if="showUnlockAccountsBanner" class="banner banner--warning">
+        <div class="banner-content banner-row">
+          <div>
+            <p class="banner-title">Contas bloqueadas</p>
+            <p class="banner-text">Atualiza para Pro ou Couple para desbloquear todas as contas.</p>
           </div>
-          <router-link :to="{ name: 'subscription' }" class="accounts-unlock-banner-cta">
+          <router-link :to="{ name: 'subscription' }" class="btn-confirm">
             Ver planos
           </router-link>
         </div>
       </div>
 
-      <!-- Active accounts section -->
-      <div class="section-card">
-        <div class="section-header">
-          <h2 class="section-title">As minhas contas</h2>
-          <button
-            v-if="accountsStore.activeAccounts.length > 0"
-            type="button"
-            class="btn-add"
-            @click="openCreateModal"
-          >
-            + Nova conta
-          </button>
-        </div>
-
-        <div v-if="accountsStore.loading && accountsStore.accounts.length === 0" class="loading-state loading-in-card">
-          <div class="spinner"></div>
-          <p>A carregar contas...</p>
-        </div>
-
-        <div v-else-if="accountsStore.activeAccounts.length === 0 && accountsStore.archivedAccounts.length === 0" class="section-empty">
-          <p class="section-empty-text">Ainda não tens contas.</p>
-          <button type="button" class="btn-section-add" @click="openCreateModal">
-            Adicionar a sua primeira conta
-          </button>
-        </div>
-
-        <div v-else-if="accountsStore.activeAccounts.length === 0" class="section-empty">
-          <p class="section-empty-text">Nenhuma conta ativa.</p>
-          <button type="button" class="btn-section-add" @click="openCreateModal">
-            + Nova conta
-          </button>
-        </div>
-
-        <div v-else class="cards-grid">
-        <div
-          v-for="account in accountsStore.activeAccounts"
-          :key="account.id"
-          class="account-card"
-          :class="{ 'account-card--locked': account.isActiveForPlan === false }"
-        >
-          <div class="card-main">
-            <div class="account-header">
-              <span v-if="isCreditCard(account.type)" class="account-type-icon" aria-hidden="true">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <rect width="20" height="14" x="2" y="5" rx="2"/>
-                  <line x1="2" x2="22" y1="10" y2="10"/>
-                </svg>
-              </span>
-              <h3 class="account-name">{{ account.name }}</h3>
-              <span v-if="isPrimaryBadge(account)" class="primary-badge">Principal</span>
-            </div>
-            <p class="account-balance" :class="{ negative: account.balance < 0 }">
-              {{ formatBalance(account.balance, account.currency) }}
-            </p>
-            <span class="account-type-badge">
-              {{ ACCOUNT_TYPE_LABELS[account.type] }}
-            </span>
-            <p v-if="account.isActiveForPlan === false" class="account-locked-hint">
-              Conta só de consulta no plano Free com várias contas.
-            </p>
-          </div>
-          <div class="card-actions">
-            <button
-              type="button"
-              class="btn-icon"
-              :title="
-                needsPrimarySelection
-                  ? 'Escolhe primeiro a conta principal acima'
-                  : account.isActiveForPlan === false
-                    ? 'No plano Free só podes editar a conta principal'
-                    : 'Editar'
-              "
-              :disabled="needsPrimarySelection || account.isActiveForPlan === false"
-              @click="openEditModal(account)"
-            >
-              Editar
-            </button>
-            <button
-              type="button"
-              class="btn-icon"
-              title="Arquivar"
-              @click="openArchiveModal(account)"
-            >
-              Arquivar
-            </button>
-            <button
-              type="button"
-              class="btn-icon btn-delete"
-              title="Eliminar"
-              @click="openDeleteModal(account)"
-            >
-              Eliminar
-            </button>
-          </div>
-        </div>
-        </div>
+      <!-- Loading accounts -->
+      <div v-if="accountsStore.loading && accountsStore.accounts.length === 0" class="loading-state">
+        <div class="spinner"></div>
+        <p>A carregar contas...</p>
       </div>
 
-      <!-- Archived accounts section -->
-      <div v-if="accountsStore.archivedAccounts.length > 0" class="section-card archived-section">
-        <div class="section-header">
-          <h2 class="section-title">Contas Arquivadas</h2>
+      <!-- Empty state -->
+      <div v-else-if="accountsStore.activeAccounts.length === 0 && accountsStore.archivedAccounts.length === 0" class="empty-card">
+        <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="empty-icon"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 10h20"/><circle cx="17" cy="15" r="1.5"/></svg>
+        <p class="empty-text">Ainda não tens contas</p>
+        <p class="empty-hint">Adiciona a tua primeira conta para começar a controlar as finanças.</p>
+        <button type="button" class="btn-confirm" @click="openCreateModal">
+          Adicionar conta
+        </button>
+      </div>
+
+      <!-- Active accounts -->
+      <template v-if="accountsStore.activeAccounts.length > 0">
+        <div class="accounts-grid">
+          <div
+            v-for="account in accountsStore.activeAccounts"
+            :key="account.id"
+            class="account-card"
+            :class="{
+              'account-card--locked': account.isActiveForPlan === false,
+            }"
+          >
+            <!-- Icon -->
+            <div class="card-icon-wrap">
+              <svg v-if="isCreditCard(account.type)" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
+              <svg v-else xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path :d="accountIcon(account.type)"/></svg>
+            </div>
+
+            <!-- Info -->
+            <div class="card-body">
+              <div class="card-name-row">
+                <h3 class="card-name">{{ account.name }}</h3>
+                <span v-if="isPrimaryBadge(account)" class="badge badge--primary">Principal</span>
+              </div>
+              <p class="card-balance" :class="{ negative: account.balance < 0 }">
+                {{ formatBalance(account.balance, account.currency) }}
+              </p>
+              <span class="card-type">{{ ACCOUNT_TYPE_LABELS[account.type] }}</span>
+              <p v-if="account.isActiveForPlan === false" class="card-locked-hint">
+                Só consulta no plano Free
+              </p>
+            </div>
+
+            <!-- Actions -->
+            <div class="card-actions">
+              <button
+                type="button"
+                class="action-btn"
+                title="Editar"
+                :disabled="needsPrimarySelection || account.isActiveForPlan === false"
+                @click="openEditModal(account)"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+              </button>
+              <button
+                type="button"
+                class="action-btn"
+                title="Arquivar"
+                @click="openArchiveModal(account)"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></svg>
+              </button>
+              <button
+                type="button"
+                class="action-btn action-btn--danger"
+                title="Eliminar"
+                @click="openDeleteModal(account)"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </template>
+
+      <!-- Archived accounts -->
+      <div v-if="accountsStore.archivedAccounts.length > 0" class="archived-section">
+        <div class="section-label">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></svg>
+          Contas Arquivadas
         </div>
 
-        <div class="cards-grid">
+        <div class="accounts-grid">
           <div
             v-for="account in accountsStore.archivedAccounts"
             :key="account.id"
             class="account-card account-card--archived"
           >
-            <div class="card-main">
-              <div class="account-header">
-                <h3 class="account-name">{{ account.name }}</h3>
-                <span class="archived-badge">Arquivada</span>
+            <div class="card-icon-wrap card-icon-wrap--muted">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></svg>
+            </div>
+
+            <div class="card-body">
+              <div class="card-name-row">
+                <h3 class="card-name">{{ account.name }}</h3>
+                <span class="badge badge--archived">Arquivada</span>
               </div>
-              <p class="account-balance account-balance--muted">
+              <p class="card-balance card-balance--muted">
                 {{ formatBalance(account.balance, account.currency) }}
               </p>
-              <span class="account-type-badge">
-                {{ ACCOUNT_TYPE_LABELS[account.type] }}
-              </span>
+              <span class="card-type">{{ ACCOUNT_TYPE_LABELS[account.type] }}</span>
             </div>
+
             <div class="card-actions">
               <button
                 type="button"
-                class="btn-icon"
+                class="action-btn action-btn--reactivate"
                 title="Reativar"
                 @click="handleReactivate(account)"
               >
-                Reativar
+                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.22-8.56"/><polyline points="21 3 21 9 15 9"/></svg>
               </button>
               <button
                 type="button"
-                class="btn-icon btn-delete"
+                class="action-btn action-btn--danger"
                 title="Eliminar"
                 @click="openDeleteArchivedModal(account)"
               >
-                Eliminar
+                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
               </button>
             </div>
           </div>
         </div>
       </div>
-    </div>
+    </template>
 
+    <!-- Modals -->
     <AccountFormModal
       :open="createModalOpen"
       :loading="actionLoading"
@@ -516,27 +533,37 @@ function formatBalance(balance: number, currency: string): string {
       @confirm="handleDelete"
     />
 
-    <!-- Delete blocked modal with 3 options -->
+    <!-- Delete blocked modal with options -->
     <BaseModal
       v-if="accountDeleteBlockedModalOpen"
       title="Não é possível eliminar"
       @close="closeDeleteBlockedModal"
     >
-      <div class="locked-modal-body">
-        <p>{{ accountDeleteBlockedMessage }}</p>
-        <p class="blocked-options-hint">O que queres fazer?</p>
+      <div class="blocked-body">
+        <p class="blocked-msg">{{ accountDeleteBlockedMessage }}</p>
+        <p class="blocked-question">O que queres fazer?</p>
         <div class="blocked-options">
-          <button type="button" class="blocked-option-btn blocked-option-archive" @click="handleArchiveFromBlocked" :disabled="actionLoading">
-            Arquivar conta
-            <span class="blocked-option-desc">Remove do património sem perder dados</span>
+          <button type="button" class="blocked-option" @click="handleArchiveFromBlocked" :disabled="actionLoading">
+            <div class="blocked-option-icon">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></svg>
+            </div>
+            <div>
+              <span class="blocked-option-label">Arquivar conta</span>
+              <span class="blocked-option-desc">Remove do património sem perder dados</span>
+            </div>
           </button>
-          <button type="button" class="blocked-option-btn blocked-option-transfer" @click="handleDeleteWithTransferFromBlocked" :disabled="actionLoading">
-            Eliminar com transferência
-            <span class="blocked-option-desc">Transferir saldo e movimentos para outra conta</span>
+          <button type="button" class="blocked-option" @click="handleDeleteWithTransferFromBlocked" :disabled="actionLoading">
+            <div class="blocked-option-icon">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="7 7 17 7"/><polyline points="4 12 20 12"/><polyline points="7 17 17 17"/><polyline points="3 7 5 5 3 3"/><polyline points="21 17 19 19 21 21"/></svg>
+            </div>
+            <div>
+              <span class="blocked-option-label">Eliminar com transferência</span>
+              <span class="blocked-option-desc">Move saldo e movimentos para outra conta</span>
+            </div>
           </button>
         </div>
-        <div class="locked-modal-actions">
-          <button type="button" class="btn-secondary" @click="closeDeleteBlockedModal">Cancelar</button>
+        <div class="blocked-footer">
+          <button type="button" class="btn-cancel" @click="closeDeleteBlockedModal">Cancelar</button>
         </div>
       </div>
     </BaseModal>
@@ -564,13 +591,13 @@ function formatBalance(balance: number, currency: string): string {
       title="Limite do plano Free"
       @close="accountLimitModalOpen = false"
     >
-      <div class="locked-modal-body">
-        <p>
-          Atingiste o limite de contas do plano Free: só podes ter uma conta. Atualiza para Pro ou Couple para adicionares mais.
+      <div class="blocked-body">
+        <p class="blocked-msg">
+          Atingiste o limite de contas do plano Free. Atualiza para Pro ou Couple para adicionares mais.
         </p>
-        <div class="locked-modal-actions">
-          <button type="button" class="btn-secondary" @click="accountLimitModalOpen = false">Agora não</button>
-          <router-link :to="{ name: 'subscription' }" class="locked-modal-cta" @click="accountLimitModalOpen = false">
+        <div class="blocked-footer">
+          <button type="button" class="btn-cancel" @click="accountLimitModalOpen = false">Agora não</button>
+          <router-link :to="{ name: 'subscription' }" class="btn-confirm" @click="accountLimitModalOpen = false">
             Ver planos
           </router-link>
         </div>
@@ -580,12 +607,423 @@ function formatBalance(balance: number, currency: string): string {
 </template>
 
 <style scoped>
-.accounts-view {
-  max-width: min(800px, 100%);
+.accounts-page {
+  max-width: min(860px, 100%);
   margin: 0 auto;
-  padding: 0 0 2.5rem;
+  padding: 0 0 3rem;
 }
 
+/* ── Page header ── */
+.page-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.page-header-text {
+  min-width: 0;
+}
+
+.page-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--color-text);
+  margin: 0;
+  letter-spacing: -0.02em;
+}
+
+.page-subtitle {
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+  margin: 0.25rem 0 0;
+}
+
+.btn-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.5rem 1rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #fff;
+  background: #166534;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.15s;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.btn-add:hover {
+  background: #15803d;
+  transform: translateY(-1px);
+}
+
+/* ── Accounts grid ── */
+.accounts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 0.875rem;
+}
+
+.account-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.875rem;
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  padding: 1.125rem 1.25rem;
+  transition: box-shadow 0.2s, transform 0.2s;
+  box-shadow: var(--app-shadow-card, 0 1px 3px rgba(0, 0, 0, 0.06));
+}
+
+.account-card:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  transform: translateY(-1px);
+}
+
+.account-card--locked {
+  opacity: 0.65;
+  border-style: dashed;
+}
+
+.account-card--archived {
+  opacity: 0.6;
+  border-style: dashed;
+}
+
+/* ── Card icon ── */
+.card-icon-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  background: #ecfdf5;
+  color: #166534;
+}
+
+html.dark .card-icon-wrap {
+  background: rgba(22, 101, 52, 0.2);
+  color: #4ade80;
+}
+
+.card-icon-wrap--muted {
+  background: var(--color-table-row-hover);
+  color: var(--color-text-muted);
+}
+
+html.dark .card-icon-wrap--muted {
+  background: rgba(100, 116, 139, 0.15);
+  color: var(--color-text-muted);
+}
+
+/* ── Card body ── */
+.card-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.card-name-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+
+.card-name {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--color-text);
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.card-balance {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--color-text);
+  margin: 0 0 0.375rem;
+  letter-spacing: -0.02em;
+}
+
+.card-balance.negative {
+  color: var(--color-expense);
+}
+
+.card-balance--muted {
+  color: var(--color-text-muted);
+}
+
+.card-type {
+  display: inline-block;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  background: var(--color-table-row-hover);
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+}
+
+.card-locked-hint {
+  font-size: 0.6875rem;
+  color: var(--color-text-muted);
+  margin: 0.375rem 0 0;
+  line-height: 1.35;
+}
+
+/* ── Badges ── */
+.badge {
+  font-size: 0.5625rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.15rem 0.4rem;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.badge--primary {
+  color: #fff;
+  background: #166534;
+}
+
+.badge--archived {
+  color: #fff;
+  background: #64748b;
+}
+
+/* ── Card actions ── */
+.card-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  flex-shrink: 0;
+}
+
+.action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.action-btn:hover {
+  background: var(--color-table-row-hover);
+  color: var(--color-text);
+  border-color: var(--color-text-muted);
+}
+
+.action-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.action-btn--danger:hover {
+  color: #dc2626;
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+
+html.dark .action-btn--danger:hover {
+  color: #f87171;
+  border-color: rgba(248, 113, 113, 0.3);
+  background: rgba(248, 113, 113, 0.1);
+}
+
+.action-btn--reactivate:hover {
+  color: #166534;
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+}
+
+html.dark .action-btn--reactivate:hover {
+  color: #4ade80;
+  border-color: rgba(74, 222, 128, 0.3);
+  background: rgba(74, 222, 128, 0.1);
+}
+
+/* ── Archived section ── */
+.archived-section {
+  margin-top: 2rem;
+}
+
+.section-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 0.75rem;
+}
+
+/* ── Banners ── */
+.banner {
+  border-radius: 12px;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1rem;
+}
+
+.banner--warning {
+  border: 1px solid #fde68a;
+  background: #fffbeb;
+}
+
+html.dark .banner--warning {
+  border-color: rgba(250, 204, 21, 0.3);
+  background: rgba(120, 53, 15, 0.2);
+}
+
+.banner-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.banner-row {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.banner-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #92400e;
+  margin: 0 0 0.25rem;
+}
+
+html.dark .banner-title {
+  color: #fcd34d;
+}
+
+.banner-text {
+  font-size: 0.8125rem;
+  color: #78350f;
+  margin: 0 0 0.75rem;
+  line-height: 1.45;
+}
+
+html.dark .banner-text {
+  color: #fde68a;
+}
+
+.banner-error {
+  font-size: 0.8125rem;
+  color: #dc2626;
+  margin: 0 0 0.5rem;
+}
+
+.primary-radio-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  margin-bottom: 0.75rem;
+}
+
+.primary-radio {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+/* ── Buttons ── */
+.btn-confirm {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem 1rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #fff;
+  background: #166534;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 0.15s;
+  white-space: nowrap;
+}
+
+.btn-confirm:hover {
+  background: #15803d;
+}
+
+.btn-confirm:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-cancel {
+  padding: 0.5rem 0.85rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-text);
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.btn-cancel:hover {
+  background: var(--color-table-row-hover);
+}
+
+/* ── Empty state ── */
+.empty-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 3rem 1.5rem;
+  background: var(--color-bg-card);
+  border: 1px dashed var(--color-border);
+  border-radius: 14px;
+  text-align: center;
+}
+
+.empty-icon {
+  color: var(--color-text-muted);
+  margin-bottom: 1rem;
+  opacity: 0.5;
+}
+
+.empty-text {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--color-text);
+  margin: 0 0 0.25rem;
+}
+
+.empty-hint {
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+  margin: 0 0 1.25rem;
+}
+
+/* ── Loading / Error ── */
 .loading-state,
 .error-state,
 .empty-state {
@@ -595,8 +1033,8 @@ function formatBalance(balance: number, currency: string): string {
 }
 
 .spinner {
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
   border: 3px solid var(--color-border);
   border-top-color: #166534;
   border-radius: 50%;
@@ -612,13 +1050,6 @@ function formatBalance(balance: number, currency: string): string {
   color: var(--color-error);
 }
 
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1rem;
-}
-
 .link {
   color: var(--color-link-hover);
   border-bottom: 1px solid transparent;
@@ -629,456 +1060,130 @@ function formatBalance(balance: number, currency: string): string {
 }
 
 .global-error {
-  padding: 0.75rem 1rem;
+  padding: 0.625rem 1rem;
   background: #fef2f2;
   color: #dc2626;
-  border-radius: 8px;
-  font-size: 0.875rem;
-  margin-bottom: 1rem;
-}
-
-.primary-banner {
-  margin-bottom: 1rem;
-  padding: 1rem 1.25rem;
-  border-radius: var(--app-radius-md, 12px);
-  border: 1px solid #fde68a;
-  background: #fffbeb;
-}
-
-.primary-banner-title {
-  margin: 0 0 0.5rem 0;
-  font-size: 1rem;
-  font-weight: 600;
-  color: #92400e;
-}
-
-.primary-banner-text {
-  margin: 0 0 1rem 0;
-  font-size: 0.875rem;
-  line-height: 1.45;
-  color: #78350f;
-}
-
-html.dark .primary-banner {
-  border-color: rgba(250, 204, 21, 0.38);
-  background: rgba(120, 53, 15, 0.28);
-}
-
-html.dark .primary-banner-title {
-  color: #fcd34d;
-}
-
-html.dark .primary-banner-text {
-  color: #fde68a;
-}
-
-.primary-radio-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
-}
-
-.primary-radio {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.9375rem;
-  color: var(--color-text);
-  cursor: pointer;
-}
-
-.primary-banner-error {
-  margin: 0 0 0.75rem 0;
-  font-size: 0.8125rem;
-  color: #dc2626;
-}
-
-.btn-primary-confirm {
-  padding: 0.5rem 1rem;
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: #fff;
-  background: #166534;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-}
-
-.btn-primary-confirm:hover:not(:disabled) {
-  background: #15803d;
-}
-
-.btn-primary-confirm:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.accounts-unlock-banner-inner {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.875rem 1rem;
-}
-
-.accounts-unlock-banner-copy {
-  flex: 1;
-  min-width: min(100%, 240px);
-}
-
-.accounts-unlock-banner-desc {
-  margin-bottom: 0;
-}
-
-.accounts-unlock-banner-cta {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0.5rem 1rem;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: #fff;
-  background: #166534;
-  border-radius: 8px;
-  text-decoration: none;
-  transition: background 0.2s;
-}
-
-.accounts-unlock-banner-cta:hover {
-  background: #15803d;
-}
-
-.section-card {
-  background: var(--color-bg-card);
-  border-radius: var(--app-radius-md, 12px);
-  padding: 1.5rem;
-  box-shadow: var(--app-shadow-card, 0 1px 3px rgba(0, 0, 0, 0.06));
-  border: 1px solid var(--color-border);
-}
-
-.archived-section {
-  margin-top: 1.5rem;
-}
-
-.section-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 1.25rem;
-  padding-bottom: 0.75rem;
-  border-bottom: 2px solid var(--color-border);
-}
-
-.section-title {
-  font-size: 1rem;
-  font-weight: 600;
-  color: var(--color-text);
-  margin: 0;
-}
-
-.section-empty {
-  text-align: center;
-  padding: 2rem 1rem;
-}
-
-.section-empty-text {
-  font-size: 0.9375rem;
-  color: var(--color-text-muted);
-  margin: 0 0 1rem 0;
-}
-
-.btn-section-add {
-  padding: 0.625rem 1.25rem;
-  font-size: 0.9375rem;
-  font-weight: 600;
-  color: #fff;
-  background: #166534;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-
-.btn-section-add:hover {
-  background: #15803d;
-}
-
-.loading-in-card {
-  padding: 2rem;
-}
-
-.btn-add {
-  padding: 0.5rem 1rem;
-  background: linear-gradient(135deg, #166534 0%, #15803d 100%);
-  color: white;
-  border: none;
   border-radius: 10px;
-  font-weight: 600;
   font-size: 0.8125rem;
-  cursor: pointer;
-  transition: transform 0.15s, box-shadow 0.15s;
-  box-shadow: 0 1px 3px rgba(22, 101, 52, 0.2);
+  margin-bottom: 1rem;
 }
 
-.btn-add:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(22, 101, 52, 0.25);
+html.dark .global-error {
+  background: rgba(220, 38, 38, 0.1);
+  color: #f87171;
 }
 
-.cards-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 1rem;
-}
-
-.account-card {
-  background: var(--color-bg-card);
-  border-radius: 14px;
-  padding: 1.375rem;
-  box-shadow: var(--app-shadow-card, 0 1px 3px rgba(0, 0, 0, 0.06));
-  border: 1px solid var(--color-border);
-  border-top: 3px solid #166534;
+/* ── Blocked modal ── */
+.blocked-body {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
-  transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s;
 }
 
-.account-card:hover {
-  box-shadow: var(--app-shadow-card-hover, 0 4px 16px rgba(0, 0, 0, 0.1));
-  transform: translateY(-2px);
-}
-
-html.dark .account-card {
-  border-top-color: #4ade80;
-}
-
-.account-card--locked {
-  opacity: 0.92;
-  border-style: dashed;
-  border-color: var(--color-text-muted);
-}
-
-.account-card--archived {
-  opacity: 0.7;
-  border-top-color: var(--color-text-muted);
-  border-style: dashed;
-}
-
-html.dark .account-card--archived {
-  border-top-color: var(--color-text-muted);
-}
-
-.account-locked-hint {
-  margin: 0.5rem 0 0 0;
-  font-size: 0.75rem;
+.blocked-msg {
+  font-size: 0.875rem;
   color: var(--color-text-muted);
-  line-height: 1.35;
-}
-
-.btn-icon:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.card-main {
-  flex: 1;
-}
-
-.account-header {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-bottom: 0.5rem;
-}
-
-.primary-badge {
-  font-size: 0.625rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: #ffffff;
-  background: #166534;
-  padding: 0.2rem 0.5rem;
-  border-radius: 999px;
-}
-
-.archived-badge {
-  font-size: 0.625rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: #fff;
-  background: #64748b;
-  padding: 0.2rem 0.5rem;
-  border-radius: 999px;
-}
-
-.account-type-icon {
-  display: inline-flex;
-  width: 28px;
-  height: 28px;
-  flex-shrink: 0;
-  color: var(--color-text);
-}
-
-.account-type-icon svg {
-  width: 100%;
-  height: 100%;
-}
-
-.account-name {
-  font-size: 1rem;
-  font-weight: 700;
-  color: var(--color-text);
+  line-height: 1.5;
   margin: 0;
-  letter-spacing: -0.01em;
 }
 
-.account-balance {
-  font-size: 1.375rem;
-  font-weight: 700;
-  color: var(--color-income);
-  margin: 0 0 0.5rem 0;
-  letter-spacing: -0.02em;
-}
-
-.account-balance.negative {
-  color: var(--color-expense);
-}
-
-.account-balance--muted {
-  color: var(--color-text-muted);
-}
-
-.account-type-badge {
-  display: inline-flex;
-  align-items: center;
-  font-size: 0.6875rem;
+.blocked-question {
+  font-size: 0.875rem;
   font-weight: 600;
-  color: var(--color-text-muted);
-  background: var(--color-table-row-hover);
-  padding: 0.2rem 0.625rem;
-  border-radius: 999px;
-  letter-spacing: 0.02em;
-}
-
-.card-actions {
-  display: flex;
-  gap: 0.5rem;
-}
-
-.btn-icon {
-  padding: 0.3rem 0.625rem;
-  font-size: 0.75rem;
-  font-weight: 500;
-  color: var(--color-text-muted);
-  background: transparent;
-  border: 1px solid var(--color-border);
-  border-radius: 6px;
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
-}
-
-.btn-icon:hover {
-  background: var(--color-table-row-hover);
   color: var(--color-text);
-}
-
-.btn-delete:hover {
-  color: #dc2626;
-  border-color: #fecaca;
-  background: #fef2f2;
-}
-
-.locked-modal-body p {
-  margin: 0;
-  color: var(--color-text-muted);
-  line-height: 1.45;
-}
-
-.blocked-options-hint {
-  margin-top: 1rem !important;
-  font-weight: 600;
-  color: var(--color-text) !important;
+  margin: 1rem 0 0.625rem;
 }
 
 .blocked-options {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  margin-top: 0.75rem;
 }
 
-.blocked-option-btn {
+.blocked-option {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  padding: 0.75rem 1rem;
-  border: 1.5px solid var(--color-border, #e2e8f0);
-  border-radius: 10px;
-  background: var(--color-bg-card, #fff);
+  align-items: center;
+  gap: 0.875rem;
+  padding: 0.875rem 1rem;
+  border: 1.5px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-bg-card);
   cursor: pointer;
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: var(--color-text, #1e293b);
-  transition: border-color 0.2s, box-shadow 0.2s;
   text-align: left;
+  transition: border-color 0.2s, box-shadow 0.2s;
 }
 
-.blocked-option-btn:hover:not(:disabled) {
+.blocked-option:hover:not(:disabled) {
   border-color: #166534;
-  box-shadow: 0 1px 4px rgba(22, 101, 52, 0.1);
+  box-shadow: 0 2px 8px rgba(22, 101, 52, 0.08);
 }
 
-.blocked-option-btn:disabled {
-  opacity: 0.5;
+.blocked-option:disabled {
+  opacity: 0.4;
   cursor: not-allowed;
 }
 
-.blocked-option-desc {
-  font-size: 0.75rem;
-  font-weight: 400;
-  color: var(--color-text-muted, #64748b);
-  margin-top: 0.125rem;
-}
-
-.locked-modal-actions {
-  margin-top: 1rem;
+.blocked-option-icon {
   display: flex;
-  justify-content: flex-end;
-  gap: 0.5rem;
-}
-
-.locked-modal-actions .btn-secondary,
-.locked-modal-actions .locked-modal-cta {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.5rem 0.85rem;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  cursor: pointer;
-  text-decoration: none;
-  display: inline-flex;
   align-items: center;
   justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  background: #ecfdf5;
+  color: #166534;
 }
 
-.locked-modal-actions .btn-secondary {
-  background: transparent;
-  border-color: var(--color-border);
+html.dark .blocked-option-icon {
+  background: rgba(22, 101, 52, 0.2);
+  color: #4ade80;
+}
+
+.blocked-option-label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 600;
   color: var(--color-text);
 }
 
-.locked-modal-actions .locked-modal-cta {
-  background: #166534;
-  color: #fff;
+.blocked-option-desc {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--color-text-muted);
+  margin-top: 0.125rem;
 }
 
-.locked-modal-actions .locked-modal-cta:hover {
-  background: #15803d;
+.blocked-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1.25rem;
+}
+
+/* ── Responsive ── */
+@media (max-width: 600px) {
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+
+  .accounts-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .patrimonio-hero {
+    padding: 1.25rem;
+  }
+
+  .patrimonio-value {
+    font-size: 1.5rem;
+  }
+
+  .banner-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 }
 </style>
