@@ -1098,22 +1098,22 @@ const showContent = computed(() =>
         <template v-else>
         <div class="summary-cards summary-cards-fallback">
           <div class="card card-income">
-            <p class="card-title">Receitas</p>
+            <p class="card-title card-title--with-arrow">Receitas <svg class="card-arrow card-arrow--income" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 11 12 6 7 11"/><line x1="12" x2="12" y1="6" y2="18"/></svg></p>
             <p class="card-value">{{ hideValues ? '••••• €' : formattedIncome }}</p>
             <p class="card-subtitle">{{ periodLabel }}</p>
           </div>
           <div class="card card-expense">
-            <p class="card-title">Despesas</p>
+            <p class="card-title card-title--with-arrow">Despesas <svg class="card-arrow card-arrow--expense" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="7 13 12 18 17 13"/><line x1="12" x2="12" y1="18" y2="6"/></svg></p>
             <p class="card-value">{{ hideValues ? '••••• €' : formattedExpenses }}</p>
             <p class="card-subtitle">{{ periodLabel }}</p>
           </div>
           <div class="card card-savings">
-            <p class="card-title">Poupança</p>
+            <p class="card-title card-title--with-arrow">Poupança <svg class="card-arrow card-arrow--savings" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 5c-1.5 0-2.8 1.4-3 2-3.5-1.5-11-.3-11 5 0 1.8 0 3 2 4.5V20h4v-2h3v2h4v-4c1-.5 1.7-1 2-2h2v-4h-2c0-1-.5-1.5-1-2"/><path d="M2 9.1C1.7 11 2 12 2 12"/><circle cx="15.5" cy="9.5" r=".5" fill="currentColor"/></svg></p>
             <p class="card-value">{{ hideValues ? '••••• €' : formattedSavings }}</p>
             <p class="card-subtitle">{{ periodLabel }}</p>
           </div>
-          <div class="card card-income">
-            <p class="card-title">Taxa de poupança</p>
+          <div class="card card-savings">
+            <p class="card-title card-title--with-arrow">Taxa de poupança <svg class="card-arrow card-arrow--rate" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" x2="9" y1="9" y2="15"/><line x1="9" x2="9.01" y1="9" y2="9"/><line x1="15" x2="15.01" y1="15" y2="15"/></svg></p>
             <p class="card-value">{{ hideValues ? '•••' : formatPercent(savingsRate) }}</p>
             <p class="card-subtitle">% da receita real poupada</p>
           </div>
@@ -1140,16 +1140,14 @@ const showContent = computed(() =>
         <h2 class="section-title">Plano mensal</h2>
         <div v-if="hasChartData && hasBudgetForPeriod" class="comparison-grid">
           <div class="comparison-card">
-            <h3 class="comparison-title">Receitas</h3>
+            <h3 class="comparison-title comparison-title--with-icon">Receitas <svg class="comparison-icon comparison-icon--income" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 11 12 6 7 11"/><line x1="12" x2="12" y1="6" y2="18"/></svg></h3>
             <div class="comparison-row">
               <span class="comparison-label">Esperado</span>
               <span class="comparison-value expected">{{ hideValues ? '••••• €' : formatCurrency(budgetForPeriod.expectedIncome, dashboard.currency.value) }}</span>
             </div>
             <div class="comparison-row">
               <span class="comparison-label">Real</span>
-              <span class="comparison-value" :class="{ 'above': dashboard.monthlyIncome.value > budgetForPeriod.expectedIncome, 'below': dashboard.monthlyIncome.value < budgetForPeriod.expectedIncome }">
-                {{ hideValues ? '••••• €' : formattedIncome }}
-              </span>
+              <span class="comparison-value">{{ hideValues ? '••••• €' : formattedIncome }}</span>
             </div>
             <div v-if="budgetForPeriod.expectedIncome > 0 && !hideValues" class="comparison-diff">
               {{ dashboard.monthlyIncome.value >= budgetForPeriod.expectedIncome ? '✓' : '' }}
@@ -1158,16 +1156,14 @@ const showContent = computed(() =>
             </div>
           </div>
           <div class="comparison-card">
-            <h3 class="comparison-title">Despesas</h3>
+            <h3 class="comparison-title comparison-title--with-icon">Despesas <svg class="comparison-icon comparison-icon--expense" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="7 13 12 18 17 13"/><line x1="12" x2="12" y1="18" y2="6"/></svg></h3>
             <div class="comparison-row">
               <span class="comparison-label">Esperado</span>
               <span class="comparison-value expected">{{ hideValues ? '••••• €' : formatCurrency(budgetForPeriod.expectedExpenses, dashboard.currency.value) }}</span>
             </div>
             <div class="comparison-row">
               <span class="comparison-label">Real</span>
-              <span class="comparison-value" :class="{ 'above': dashboard.monthlyExpenses.value < budgetForPeriod.expectedExpenses, 'below': dashboard.monthlyExpenses.value > budgetForPeriod.expectedExpenses }">
-                {{ hideValues ? '••••• €' : formattedExpenses }}
-              </span>
+              <span class="comparison-value">{{ hideValues ? '••••• €' : formattedExpenses }}</span>
             </div>
             <div v-if="budgetForPeriod.expectedExpenses > 0 && !hideValues" class="comparison-diff" :class="{ 'comparison-diff--over': dashboard.monthlyExpenses.value > budgetForPeriod.expectedExpenses }">
               {{ dashboard.monthlyExpenses.value <= budgetForPeriod.expectedExpenses ? '✓' : '' }}
@@ -1176,18 +1172,19 @@ const showContent = computed(() =>
             </div>
           </div>
           <div class="comparison-card">
-            <h3 class="comparison-title">Poupança</h3>
+            <h3 class="comparison-title comparison-title--with-icon">Poupança <svg class="comparison-icon comparison-icon--savings" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 5c-1.5 0-2.8 1.4-3 2-3.5-1.5-11-.3-11 5 0 1.8 0 3 2 4.5V20h4v-2h3v2h4v-4c1-.5 1.7-1 2-2h2v-4h-2c0-1-.5-1.5-1-2"/><path d="M2 9.1C1.8 10 2 11 2 12"/><circle cx="12.5" cy="11.5" r=".5" fill="currentColor"/></svg></h3>
             <div class="comparison-row">
               <span class="comparison-label">Esperado</span>
-              <span class="comparison-value" :class="(budgetForPeriod.expectedIncome - budgetForPeriod.expectedExpenses) >= 0 ? 'income' : 'expense'">
-                {{ hideValues ? '••••• €' : formatCurrency(budgetForPeriod.expectedIncome - budgetForPeriod.expectedExpenses, dashboard.currency.value) }}
-              </span>
+              <span class="comparison-value expected">{{ hideValues ? '••••• €' : formatCurrency(budgetForPeriod.expectedIncome - budgetForPeriod.expectedExpenses, dashboard.currency.value) }}</span>
             </div>
             <div class="comparison-row">
               <span class="comparison-label">Real</span>
-              <span class="comparison-value" :class="dashboard.monthlySavings.value >= 0 ? 'income' : 'expense'">
-                {{ hideValues ? '••••• €' : formattedSavings }}
-              </span>
+              <span class="comparison-value">{{ hideValues ? '••••• €' : formattedSavings }}</span>
+            </div>
+            <div v-if="(budgetForPeriod.expectedIncome - budgetForPeriod.expectedExpenses) > 0 && !hideValues" class="comparison-diff" :class="{ 'comparison-diff--over': dashboard.monthlySavings.value < (budgetForPeriod.expectedIncome - budgetForPeriod.expectedExpenses) }">
+              {{ dashboard.monthlySavings.value >= (budgetForPeriod.expectedIncome - budgetForPeriod.expectedExpenses) ? '✓' : '' }}
+              {{ formatCurrency(dashboard.monthlySavings.value - (budgetForPeriod.expectedIncome - budgetForPeriod.expectedExpenses), dashboard.currency.value) }}
+              {{ dashboard.monthlySavings.value >= (budgetForPeriod.expectedIncome - budgetForPeriod.expectedExpenses) ? 'acima do esperado' : 'abaixo do esperado' }}
             </div>
           </div>
         </div>
@@ -1290,8 +1287,8 @@ const showContent = computed(() =>
 }
 
 .spinner {
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
   border: 3px solid var(--color-border);
   border-top-color: #166534;
   border-radius: 50%;
@@ -1448,14 +1445,15 @@ const showContent = computed(() =>
 }
 
 .section-title {
-  font-size: 0.9375rem;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  color: var(--color-text);
-  margin: 0 0 1.125rem 0;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  margin: 0 0 1rem 0;
   line-height: 1.3;
-  padding-bottom: 0.75rem;
-  border-bottom: 2px solid var(--color-border);
+  padding-bottom: 0.625rem;
+  border-bottom: 1px solid var(--color-border);
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -1531,11 +1529,11 @@ html.dark .dashboard-objectives-lock-overlay {
 .dashboard-objectives-lock-panel {
   pointer-events: auto;
   text-align: center;
-  padding: 0.75rem 1rem;
-  border-radius: 10px;
+  padding: 1rem 1.25rem;
+  border-radius: 14px;
   background: var(--color-bg-card);
   border: 1px solid var(--color-border);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
 }
 
 .dashboard-objectives-lock-text {
@@ -1651,30 +1649,63 @@ html.dark .objectives-completed-badge {
 
 .summary-cards-fallback .card {
   background: var(--color-bg-card);
-  border-radius: 12px;
-  padding: 1.125rem 1.25rem 1.125rem 1.375rem;
+  border-radius: 14px;
+  padding: 1.125rem 1.25rem;
   box-shadow: var(--app-shadow-card, 0 1px 3px rgba(0, 0, 0, 0.06));
   border: 1px solid var(--color-border);
-  border-left: 1px solid var(--color-border);
-  transition: box-shadow 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
 }
 
 .summary-cards-fallback .card:hover {
-  box-shadow: var(--app-shadow-card-hover, 0 4px 12px rgba(0, 0, 0, 0.08));
-  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  transform: translateY(-1px);
+}
+
+.summary-cards-fallback .card-title--with-arrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.summary-cards-fallback .card-arrow {
+  flex-shrink: 0;
+}
+
+.summary-cards-fallback .card-arrow--income {
+  color: var(--color-income);
+}
+
+.summary-cards-fallback .card-arrow--expense {
+  color: var(--color-expense);
+}
+
+.summary-cards-fallback .card-arrow--savings {
+  color: #ca8a04;
+}
+
+html.dark .summary-cards-fallback .card-arrow--savings {
+  color: #facc15;
+}
+
+.summary-cards-fallback .card-arrow--rate {
+  color: #16a34a;
+}
+
+html.dark .summary-cards-fallback .card-arrow--rate {
+  color: #4ade80;
 }
 
 .summary-cards-fallback .card-title {
-  font-size: 0.75rem;
+  font-size: 0.6875rem;
   font-weight: 600;
   color: var(--color-text-muted);
-  margin: 0 0 0.625rem 0;
+  margin: 0 0 0.5rem 0;
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
 
 .summary-cards-fallback .card-value {
-  font-size: 1.625rem;
+  font-size: 1.5rem;
   font-weight: 700;
   color: var(--color-text);
   margin: 0;
@@ -1689,10 +1720,9 @@ html.dark .objectives-completed-badge {
   font-weight: 500;
 }
 
-.summary-cards-fallback .card-income .card-value { color: var(--color-income); }
-.summary-cards-fallback .card-expense .card-value { color: var(--color-expense); }
-.summary-cards-fallback .card-savings .card-value { color: #2563eb; }
-html.dark .summary-cards-fallback .card-savings .card-value { color: #60a5fa; }
+.summary-cards-fallback .card-income .card-value,
+.summary-cards-fallback .card-expense .card-value,
+.summary-cards-fallback .card-savings .card-value,
 .summary-cards-fallback .card-balance .card-value { color: var(--color-text); }
 
 
@@ -1705,14 +1735,16 @@ html.dark .summary-cards-fallback .card-savings .card-value { color: #60a5fa; }
 
 .comparison-card {
   background: var(--color-bg);
-  border-radius: 12px;
+  border-radius: 14px;
   padding: 1.25rem;
   border: 1px solid var(--color-border);
-  transition: border-color 0.2s;
+  transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s;
 }
 
 .comparison-card:hover {
   border-color: rgba(22, 101, 52, 0.3);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  transform: translateY(-1px);
 }
 
 .comparison-title {
@@ -1722,6 +1754,40 @@ html.dark .summary-cards-fallback .card-savings .card-value { color: #60a5fa; }
   margin: 0 0 1rem 0;
   padding-bottom: 0.5rem;
   border-bottom: 1px solid var(--color-border);
+}
+
+.comparison-title--with-icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.comparison-icon {
+  flex-shrink: 0;
+}
+
+.comparison-icon--income {
+  color: #16a34a;
+}
+
+.comparison-icon--expense {
+  color: #dc2626;
+}
+
+.comparison-icon--savings {
+  color: #ca8a04;
+}
+
+html.dark .comparison-icon--income {
+  color: #4ade80;
+}
+
+html.dark .comparison-icon--expense {
+  color: #f87171;
+}
+
+html.dark .comparison-icon--savings {
+  color: #facc15;
 }
 
 .comparison-row {
@@ -1769,8 +1835,8 @@ html.dark .comparison-diff--over {
 
 .charts-section-inner {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: 1.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.25rem;
   margin-top: 1.5rem;
   padding-top: 1.25rem;
   border-top: 1px solid var(--color-border);
@@ -1778,7 +1844,7 @@ html.dark .comparison-diff--over {
 
 .chart-card {
   background: var(--color-bg-card);
-  border-radius: 12px;
+  border-radius: 14px;
   padding: 1.375rem;
   box-shadow: var(--app-shadow-card, 0 1px 3px rgba(0, 0, 0, 0.06));
   border: 1px solid var(--color-border);
@@ -1786,14 +1852,16 @@ html.dark .comparison-diff--over {
 }
 
 .chart-card:hover {
-  box-shadow: var(--app-shadow-card-hover, 0 4px 12px rgba(0, 0, 0, 0.08));
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
   transform: translateY(-1px);
 }
 
 .chart-title {
-  font-size: 0.9375rem;
+  font-size: 0.8125rem;
   font-weight: 600;
-  color: var(--color-text);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
   margin: 0 0 1rem 0;
 }
 
@@ -1807,7 +1875,7 @@ html.dark .comparison-diff--over {
 .static-card {
   display: flex;
   flex-direction: column;
-  padding: 0.875rem 1rem;
+  padding: 1rem 1.125rem;
 }
 
 .static-card-header {
@@ -1815,9 +1883,9 @@ html.dark .comparison-diff--over {
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  margin-bottom: 0.625rem;
-  padding-bottom: 0.5rem;
-  border-bottom: 2px solid var(--color-border);
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.625rem;
+  border-bottom: 1px solid var(--color-border);
 }
 
 .static-card-header .section-title {
@@ -1830,18 +1898,20 @@ html.dark .comparison-diff--over {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
-  color: #64748b;
+  color: var(--color-text-muted);
   text-decoration: none;
   flex-shrink: 0;
-  transition: background 0.15s, color 0.15s;
+  transition: all 0.15s;
 }
 
 .static-card-link:hover {
-  background: var(--color-table-row-hover, rgba(0, 0, 0, 0.04));
+  background: var(--color-table-row-hover);
   color: #166534;
+  border-color: #bbf7d0;
 }
 
 html.dark .static-card-link {
@@ -1849,8 +1919,9 @@ html.dark .static-card-link {
 }
 
 html.dark .static-card-link:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(74, 222, 128, 0.1);
   color: #4ade80;
+  border-color: rgba(74, 222, 128, 0.3);
 }
 
 /* Account rows inside static card */
@@ -1865,10 +1936,11 @@ html.dark .static-card-link:hover {
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
-  padding: 0.375rem 0.125rem;
+  padding: 0.5rem 0.25rem;
   text-decoration: none;
   color: inherit;
   border-bottom: 1px solid var(--color-border);
+  border-radius: 8px;
   transition: background 0.15s;
 }
 
@@ -2018,10 +2090,11 @@ html.dark .static-card-action {
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
-  padding: 0.375rem 0.125rem;
+  padding: 0.5rem 0.25rem;
   text-decoration: none;
   color: inherit;
   border-bottom: 1px solid var(--color-border);
+  border-radius: 8px;
   transition: background 0.15s;
 }
 
@@ -2123,10 +2196,15 @@ html.dark .movement-row-amount.expense {
 .patrimonio-hero {
   background: var(--color-bg-card);
   border-radius: 14px;
-  padding: 1.5rem 2rem 1.25rem;
+  padding: 1.75rem 2rem 1.5rem;
   box-shadow: var(--app-shadow-card, 0 1px 3px rgba(0, 0, 0, 0.06));
   border: 1px solid var(--color-border);
   margin-top: 0;
+  transition: box-shadow 0.2s;
+}
+
+.patrimonio-hero:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
 }
 
 .patrimonio-top {
@@ -2214,14 +2292,14 @@ html.dark .patrimonio-reserved {
   display: flex;
   gap: 0;
   border: 1px solid var(--color-border);
-  border-radius: 8px;
+  border-radius: 10px;
   overflow: hidden;
   flex-shrink: 0;
 }
 
 .patrimonio-period-btn {
-  padding: 0.375rem 0.75rem;
-  font-size: 0.8125rem;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.75rem;
   font-weight: 600;
   color: var(--color-text-muted);
   background: transparent;
@@ -2229,6 +2307,7 @@ html.dark .patrimonio-reserved {
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
   border-right: 1px solid var(--color-border);
+  font-family: inherit;
 }
 
 .patrimonio-period-btn:last-child {
@@ -2365,18 +2444,20 @@ html.dark .patrimonio-period-btn.active {
   gap: 0.375rem;
   background: var(--color-bg-card);
   border: 1px solid var(--color-border);
-  border-radius: 8px;
-  padding: 0.4375rem 0.75rem;
+  border-radius: 10px;
+  padding: 0.5rem 0.875rem;
   font-family: inherit;
   font-size: 0.8125rem;
+  font-weight: 500;
   color: var(--color-text);
   cursor: pointer;
-  transition: border-color 0.15s ease;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
   white-space: nowrap;
 }
 
 .date-range-btn:hover {
   border-color: #166534;
+  box-shadow: 0 2px 8px rgba(22, 101, 52, 0.08);
 }
 
 .date-range-btn svg:first-child {
@@ -2401,9 +2482,9 @@ html.dark .patrimonio-period-btn.active {
   z-index: 60;
   background: var(--color-bg-card);
   border: 1px solid var(--color-border);
-  border-radius: 12px;
+  border-radius: 14px;
   box-shadow: 0 12px 40px -8px rgba(15, 23, 42, 0.18);
-  padding: 1rem;
+  padding: 1.125rem;
 }
 
 .dr-presets {
@@ -2415,12 +2496,12 @@ html.dark .patrimonio-period-btn.active {
 }
 
 .dr-preset-btn {
-  padding: 0.3rem 0.625rem;
+  padding: 0.35rem 0.75rem;
   font-size: 0.75rem;
   font-weight: 600;
   font-family: inherit;
   border: 1px solid var(--color-border);
-  border-radius: 6px;
+  border-radius: 8px;
   background: transparent;
   color: var(--color-text-muted);
   cursor: pointer;
@@ -2793,19 +2874,24 @@ html.dark .settle-item-btn:hover {
   gap: 0.375rem;
   padding: 0.375rem 0.75rem;
   border: 1px solid var(--color-border);
-  border-radius: 0.5rem;
-  background: var(--color-card-bg, #fff);
-  color: var(--color-text-secondary);
+  border-radius: 8px;
+  background: var(--color-bg-card);
+  color: var(--color-text-muted);
   font-size: 0.8125rem;
+  font-family: inherit;
   cursor: pointer;
   transition: all 0.15s ease;
 }
 .card-edit-btn:hover {
-  border-color: var(--color-primary);
-  color: var(--color-primary);
+  border-color: #166534;
+  color: #166534;
 }
 html.dark .card-edit-btn {
-  background: var(--color-card-bg, #1e1e2e);
+  background: var(--color-bg-card);
+}
+html.dark .card-edit-btn:hover {
+  border-color: #4ade80;
+  color: #4ade80;
 }
 
 .card-cancel-btn {
@@ -2824,19 +2910,21 @@ html.dark .card-edit-btn {
 .card-done-btn {
   padding: 0.5rem 1.25rem;
   border: none;
-  border-radius: 2rem;
-  background: var(--color-success, #059669);
+  border-radius: 10px;
+  background: #166534;
   color: #fff;
   font-size: 0.8125rem;
   font-weight: 600;
+  font-family: inherit;
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: background 0.15s ease, transform 0.15s;
 }
 .card-done-btn:hover {
-  background: #047857;
+  background: #15803d;
+  transform: translateY(-1px);
 }
 html.dark .card-done-btn:hover {
-  background: #10b981;
+  background: #15803d;
 }
 
 .card-editing {
