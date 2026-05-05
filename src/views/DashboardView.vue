@@ -24,6 +24,7 @@ import ExpensesPieChart from '@/components/charts/ExpensesPieChart.vue'
 import IncomePieChart from '@/components/charts/IncomePieChart.vue'
 import MonthlyLineChart from '@/components/charts/MonthlyLineChart.vue'
 import NetWorthChart from '@/components/charts/NetWorthChart.vue'
+import IncomeVsExpensesBarChart from '@/components/charts/IncomeVsExpensesBarChart.vue'
 
 const router = useRouter()
 const householdStore = useHouseholdStore()
@@ -367,6 +368,7 @@ onMounted(async () => {
             loadObjectivesPreview(),
             subscriptionStore.fetchSubscription(),
             fetchChartTrend(),
+            fetchTrendChartData(),
             transactionsStore.fetchTransactions(),
           ])
         }
@@ -489,6 +491,35 @@ const savingsRate = computed(() => {
 function formatPercent(value: number): string {
   return `${value > 0 ? '+' : ''}${value}%`
 }
+
+/* ── Média diária de gastos + projeção ── */
+const dailyAverage = computed(() => {
+  const expenses = dashboard.monthlyExpenses.value
+  if (expenses <= 0) return null
+
+  const now = new Date()
+  const y = selectedYear.value || now.getFullYear()
+  const m = selectedMonth.value
+
+  // Only show for single month view
+  if (m < 1 || m > 12) return null
+
+  const today = now.getDate()
+  const isCurrentMonth = y === now.getFullYear() && m === now.getMonth() + 1
+  const daysInMonth = new Date(y, m, 0).getDate()
+  const daysPassed = isCurrentMonth ? today : daysInMonth
+
+  const avg = expenses / daysPassed
+  const projected = isCurrentMonth ? avg * daysInMonth : expenses
+
+  return {
+    avg,
+    projected,
+    daysPassed,
+    daysInMonth,
+    isCurrentMonth,
+  }
+})
 
 /* ── Património Total: account category groups ── */
 const accountCategoryGroups = computed(() => {
@@ -720,6 +751,44 @@ async function fetchChartTrend() {
 }
 
 watch(chartPeriod, () => fetchChartTrend())
+
+/* ── Seletor de período para gráficos de tendência (line + bar) ── */
+type TrendChartPeriod = 'YTD' | '3M' | '6M' | '1A' | '5A'
+const trendChartPeriod = ref<TrendChartPeriod>('6M')
+const trendChartPeriods: TrendChartPeriod[] = ['YTD', '3M', '6M', '1A', '5A']
+const trendChartData = ref<MonthlyTrend[]>([])
+const trendChartLoading = ref(false)
+
+const trendChartMonths = computed(() => {
+  if (trendChartPeriod.value === 'YTD') return new Date().getMonth() + 1
+  const map: Record<TrendChartPeriod, number> = { YTD: 0, '3M': 3, '6M': 6, '1A': 12, '5A': 60 }
+  return map[trendChartPeriod.value]
+})
+
+async function fetchTrendChartData() {
+  trendChartLoading.value = true
+  try {
+    const response = await import('@/api/dashboard').then((m) =>
+      m.dashboardApi.get({ trendMonths: trendChartMonths.value })
+    )
+    const res = (((response as Record<string, unknown>).data) ?? response) as Record<string, unknown>
+    const get = (key: string) => res[key] ?? res[key.charAt(0).toUpperCase() + key.slice(1)]
+    const arr = get('monthlyTrend')
+    if (Array.isArray(arr)) {
+      trendChartData.value = arr.map((x: Record<string, unknown>) => ({
+        year: Number(x.year ?? x.Year) || 0,
+        month: Number(x.month ?? x.Month) || 0,
+        label: String(x.label ?? x.Label ?? ''),
+        income: Number(x.income ?? x.Income) || 0,
+        expenses: Number(x.expenses ?? x.Expenses) || 0,
+        savings: Number(x.savings ?? x.Savings) || 0,
+      }))
+    }
+  } catch { /* keep existing */ }
+  finally { trendChartLoading.value = false }
+}
+
+watch(trendChartPeriod, () => fetchTrendChartData())
 
 const showContent = computed(() =>
   mounted.value &&
@@ -1004,6 +1073,41 @@ const showContent = computed(() =>
         </template>
       </div>
 
+      <!-- ═══ TENDÊNCIAS — Card dedicado com seletor tipo patrimônio ═══ -->
+      <div v-if="trendChartData.length > 0" class="dashboard-section-card">
+        <div class="trend-card-top">
+          <h2 class="section-title">Tendências</h2>
+          <div class="patrimonio-periods">
+            <button
+              v-for="p in trendChartPeriods"
+              :key="p"
+              class="patrimonio-period-btn"
+              :class="{ active: trendChartPeriod === p }"
+              @click="trendChartPeriod = p"
+            >{{ p }}</button>
+          </div>
+        </div>
+        <div v-if="trendChartLoading" class="trend-loading"><div class="spinner"></div></div>
+        <div v-else class="trend-card-charts">
+          <div class="chart-card">
+            <h3 class="chart-title">Evolução mensal</h3>
+            <div class="trend-charts-scroll" :class="{ 'trend-charts-scroll--wide': trendChartData.length > 8 }">
+              <div class="trend-charts-inner" :style="trendChartData.length > 8 ? { minWidth: (trendChartData.length * 80) + 'px' } : {}">
+                <MonthlyLineChart :data="trendChartData" />
+              </div>
+            </div>
+          </div>
+          <div v-if="trendChartData.length > 1" class="chart-card">
+            <h3 class="chart-title">Receitas vs Despesas</h3>
+            <div class="trend-charts-scroll" :class="{ 'trend-charts-scroll--wide': trendChartData.length > 8 }">
+              <div class="trend-charts-inner" :style="trendChartData.length > 8 ? { minWidth: (trendChartData.length * 80) + 'px' } : {}">
+                <IncomeVsExpensesBarChart :data="trendChartData" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- ═══ FILTERED SECTIONS (dados dinâmicos por período) ═══ -->
       <div class="dashboard-section-card">
         <div class="period-filter-bar">
@@ -1118,6 +1222,29 @@ const showContent = computed(() =>
             <p class="card-subtitle">% da receita real poupada</p>
           </div>
         </div>
+        <div v-if="dailyAverage" class="daily-avg-banner">
+          <div class="daily-avg-banner-left">
+            <div class="daily-avg-banner-info">
+              <span class="daily-avg-banner-title">
+                <svg class="daily-avg-banner-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                Média diária de gastos
+              </span>
+              <span class="daily-avg-banner-value-row">
+                <span class="daily-avg-banner-value">{{ hideValues ? '••••• €' : formatCurrency(dailyAverage.avg, dashboard.currency.value) }}</span>
+                <span v-if="dailyAverage.isCurrentMonth" class="daily-avg-banner-days">{{ dailyAverage.daysPassed }}/{{ dailyAverage.daysInMonth }} dias</span>
+              </span>
+            </div>
+          </div>
+          <div class="daily-avg-banner-right">
+            <div v-if="dailyAverage.isCurrentMonth" class="daily-avg-banner-proj-block">
+              <span class="daily-avg-banner-proj-label">Projeção fim do mês</span>
+              <span class="daily-avg-banner-proj-value">{{ hideValues ? '•••••' : formatCurrency(dailyAverage.projected, dashboard.currency.value) }}</span>
+            </div>
+          </div>
+          <div v-if="dailyAverage.isCurrentMonth" class="daily-avg-banner-progress">
+            <div class="daily-avg-banner-progress-bar" :style="{ width: Math.round((dailyAverage.daysPassed / dailyAverage.daysInMonth) * 100) + '%' }"></div>
+          </div>
+        </div>
         <!-- Gráficos de movimentos (dentro do mesmo card) -->
         <div v-if="hasChartData" class="charts-section-inner">
           <div v-if="hasExpensesForChart" class="chart-card">
@@ -1128,70 +1255,66 @@ const showContent = computed(() =>
             <h3 class="chart-title">Receitas por categoria</h3>
             <IncomePieChart :data="incomeForChart" />
           </div>
-          <div class="chart-card">
-            <h3 class="chart-title">Evolução mensal</h3>
-            <MonthlyLineChart :data="trendForChart" />
+        </div>
+        <!-- Plano mensal (dentro do card filtrado) -->
+        <div v-if="isSingleMonth" class="plan-section">
+          <h2 class="section-title">Plano mensal</h2>
+          <div v-if="hasChartData && hasBudgetForPeriod" class="comparison-grid">
+            <div class="comparison-card">
+              <h3 class="comparison-title comparison-title--with-icon">Receitas <svg class="comparison-icon comparison-icon--income" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 11 12 6 7 11"/><line x1="12" x2="12" y1="6" y2="18"/></svg></h3>
+              <div class="comparison-row">
+                <span class="comparison-label">Esperado</span>
+                <span class="comparison-value expected">{{ hideValues ? '••••• €' : formatCurrency(budgetForPeriod.expectedIncome, dashboard.currency.value) }}</span>
+              </div>
+              <div class="comparison-row">
+                <span class="comparison-label">Real</span>
+                <span class="comparison-value">{{ hideValues ? '••••• €' : formattedIncome }}</span>
+              </div>
+              <div v-if="budgetForPeriod.expectedIncome > 0 && !hideValues" class="comparison-diff">
+                {{ dashboard.monthlyIncome.value >= budgetForPeriod.expectedIncome ? '✓' : '' }}
+                {{ formatCurrency(dashboard.monthlyIncome.value - budgetForPeriod.expectedIncome, dashboard.currency.value) }}
+                {{ dashboard.monthlyIncome.value >= budgetForPeriod.expectedIncome ? 'acima' : 'abaixo' }}
+              </div>
+            </div>
+            <div class="comparison-card">
+              <h3 class="comparison-title comparison-title--with-icon">Despesas <svg class="comparison-icon comparison-icon--expense" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="7 13 12 18 17 13"/><line x1="12" x2="12" y1="18" y2="6"/></svg></h3>
+              <div class="comparison-row">
+                <span class="comparison-label">Esperado</span>
+                <span class="comparison-value expected">{{ hideValues ? '••••• €' : formatCurrency(budgetForPeriod.expectedExpenses, dashboard.currency.value) }}</span>
+              </div>
+              <div class="comparison-row">
+                <span class="comparison-label">Real</span>
+                <span class="comparison-value">{{ hideValues ? '••••• €' : formattedExpenses }}</span>
+              </div>
+              <div v-if="budgetForPeriod.expectedExpenses > 0 && !hideValues" class="comparison-diff" :class="{ 'comparison-diff--over': dashboard.monthlyExpenses.value > budgetForPeriod.expectedExpenses }">
+                {{ dashboard.monthlyExpenses.value <= budgetForPeriod.expectedExpenses ? '✓' : '' }}
+                {{ formatCurrency(dashboard.monthlyExpenses.value - budgetForPeriod.expectedExpenses, dashboard.currency.value) }}
+                {{ dashboard.monthlyExpenses.value <= budgetForPeriod.expectedExpenses ? 'abaixo do orçamento' : 'acima do orçamento' }}
+              </div>
+            </div>
+            <div class="comparison-card">
+              <h3 class="comparison-title comparison-title--with-icon">Poupança <svg class="comparison-icon comparison-icon--savings" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 5c-1.5 0-2.8 1.4-3 2-3.5-1.5-11-.3-11 5 0 1.8 0 3 2 4.5V20h4v-2h3v2h4v-4c1-.5 1.7-1 2-2h2v-4h-2c0-1-.5-1.5-1-2"/><path d="M2 9.1C1.8 10 2 11 2 12"/><circle cx="12.5" cy="11.5" r=".5" fill="currentColor"/></svg></h3>
+              <div class="comparison-row">
+                <span class="comparison-label">Esperado</span>
+                <span class="comparison-value expected">{{ hideValues ? '••••• €' : formatCurrency(budgetForPeriod.expectedIncome - budgetForPeriod.expectedExpenses, dashboard.currency.value) }}</span>
+              </div>
+              <div class="comparison-row">
+                <span class="comparison-label">Real</span>
+                <span class="comparison-value">{{ hideValues ? '••••• €' : formattedSavings }}</span>
+              </div>
+              <div v-if="(budgetForPeriod.expectedIncome - budgetForPeriod.expectedExpenses) > 0 && !hideValues" class="comparison-diff" :class="{ 'comparison-diff--over': dashboard.monthlySavings.value < (budgetForPeriod.expectedIncome - budgetForPeriod.expectedExpenses) }">
+                {{ dashboard.monthlySavings.value >= (budgetForPeriod.expectedIncome - budgetForPeriod.expectedExpenses) ? '✓' : '' }}
+                {{ formatCurrency(dashboard.monthlySavings.value - (budgetForPeriod.expectedIncome - budgetForPeriod.expectedExpenses), dashboard.currency.value) }}
+                {{ dashboard.monthlySavings.value >= (budgetForPeriod.expectedIncome - budgetForPeriod.expectedExpenses) ? 'acima do esperado' : 'abaixo do esperado' }}
+              </div>
+            </div>
+          </div>
+          <div v-else class="section-empty">
+            <p class="section-empty-text">Ainda não definiste o teu plano mensal.</p>
+            <router-link to="/monthly" class="btn-section-add">Adicionar o seu plano mensal</router-link>
           </div>
         </div>
         </template>
-      </div>
-
-      <div v-if="isSingleMonth" class="dashboard-section-card">
-        <h2 class="section-title">Plano mensal</h2>
-        <div v-if="hasChartData && hasBudgetForPeriod" class="comparison-grid">
-          <div class="comparison-card">
-            <h3 class="comparison-title comparison-title--with-icon">Receitas <svg class="comparison-icon comparison-icon--income" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 11 12 6 7 11"/><line x1="12" x2="12" y1="6" y2="18"/></svg></h3>
-            <div class="comparison-row">
-              <span class="comparison-label">Esperado</span>
-              <span class="comparison-value expected">{{ hideValues ? '••••• €' : formatCurrency(budgetForPeriod.expectedIncome, dashboard.currency.value) }}</span>
-            </div>
-            <div class="comparison-row">
-              <span class="comparison-label">Real</span>
-              <span class="comparison-value">{{ hideValues ? '••••• €' : formattedIncome }}</span>
-            </div>
-            <div v-if="budgetForPeriod.expectedIncome > 0 && !hideValues" class="comparison-diff">
-              {{ dashboard.monthlyIncome.value >= budgetForPeriod.expectedIncome ? '✓' : '' }}
-              {{ formatCurrency(dashboard.monthlyIncome.value - budgetForPeriod.expectedIncome, dashboard.currency.value) }}
-              {{ dashboard.monthlyIncome.value >= budgetForPeriod.expectedIncome ? 'acima' : 'abaixo' }}
-            </div>
-          </div>
-          <div class="comparison-card">
-            <h3 class="comparison-title comparison-title--with-icon">Despesas <svg class="comparison-icon comparison-icon--expense" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="7 13 12 18 17 13"/><line x1="12" x2="12" y1="18" y2="6"/></svg></h3>
-            <div class="comparison-row">
-              <span class="comparison-label">Esperado</span>
-              <span class="comparison-value expected">{{ hideValues ? '••••• €' : formatCurrency(budgetForPeriod.expectedExpenses, dashboard.currency.value) }}</span>
-            </div>
-            <div class="comparison-row">
-              <span class="comparison-label">Real</span>
-              <span class="comparison-value">{{ hideValues ? '••••• €' : formattedExpenses }}</span>
-            </div>
-            <div v-if="budgetForPeriod.expectedExpenses > 0 && !hideValues" class="comparison-diff" :class="{ 'comparison-diff--over': dashboard.monthlyExpenses.value > budgetForPeriod.expectedExpenses }">
-              {{ dashboard.monthlyExpenses.value <= budgetForPeriod.expectedExpenses ? '✓' : '' }}
-              {{ formatCurrency(dashboard.monthlyExpenses.value - budgetForPeriod.expectedExpenses, dashboard.currency.value) }}
-              {{ dashboard.monthlyExpenses.value <= budgetForPeriod.expectedExpenses ? 'abaixo do orçamento' : 'acima do orçamento' }}
-            </div>
-          </div>
-          <div class="comparison-card">
-            <h3 class="comparison-title comparison-title--with-icon">Poupança <svg class="comparison-icon comparison-icon--savings" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 5c-1.5 0-2.8 1.4-3 2-3.5-1.5-11-.3-11 5 0 1.8 0 3 2 4.5V20h4v-2h3v2h4v-4c1-.5 1.7-1 2-2h2v-4h-2c0-1-.5-1.5-1-2"/><path d="M2 9.1C1.8 10 2 11 2 12"/><circle cx="12.5" cy="11.5" r=".5" fill="currentColor"/></svg></h3>
-            <div class="comparison-row">
-              <span class="comparison-label">Esperado</span>
-              <span class="comparison-value expected">{{ hideValues ? '••••• €' : formatCurrency(budgetForPeriod.expectedIncome - budgetForPeriod.expectedExpenses, dashboard.currency.value) }}</span>
-            </div>
-            <div class="comparison-row">
-              <span class="comparison-label">Real</span>
-              <span class="comparison-value">{{ hideValues ? '••••• €' : formattedSavings }}</span>
-            </div>
-            <div v-if="(budgetForPeriod.expectedIncome - budgetForPeriod.expectedExpenses) > 0 && !hideValues" class="comparison-diff" :class="{ 'comparison-diff--over': dashboard.monthlySavings.value < (budgetForPeriod.expectedIncome - budgetForPeriod.expectedExpenses) }">
-              {{ dashboard.monthlySavings.value >= (budgetForPeriod.expectedIncome - budgetForPeriod.expectedExpenses) ? '✓' : '' }}
-              {{ formatCurrency(dashboard.monthlySavings.value - (budgetForPeriod.expectedIncome - budgetForPeriod.expectedExpenses), dashboard.currency.value) }}
-              {{ dashboard.monthlySavings.value >= (budgetForPeriod.expectedIncome - budgetForPeriod.expectedExpenses) ? 'acima do esperado' : 'abaixo do esperado' }}
-            </div>
-          </div>
-        </div>
-        <div v-else class="section-empty">
-          <p class="section-empty-text">Ainda não definiste o teu plano mensal.</p>
-          <router-link to="/monthly" class="btn-section-add">Adicionar o seu plano mensal</router-link>
-        </div>
       </div>
 
 
@@ -1497,6 +1620,7 @@ html.dark .section-title::before {
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: 1.25rem;
   margin-top: 0.75rem;
+  align-items: start;
 }
 
 
@@ -1720,12 +1844,19 @@ html.dark .summary-cards-fallback .card-arrow--rate {
   font-weight: 500;
 }
 
+
 .summary-cards-fallback .card-income .card-value,
 .summary-cards-fallback .card-expense .card-value,
 .summary-cards-fallback .card-savings .card-value,
 .summary-cards-fallback .card-balance .card-value { color: var(--color-text); }
 
 
+
+.plan-section {
+  margin-top: 1.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--color-border);
+}
 
 .comparison-grid {
   display: grid;
@@ -1833,6 +1964,127 @@ html.dark .comparison-diff--over {
   color: #f87171;
 }
 
+/* ═══ MÉDIA DIÁRIA BANNER ═══ */
+.daily-avg-banner {
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  padding: 1rem 1.25rem;
+  margin-top: 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  position: relative;
+  transition: box-shadow 0.2s, transform 0.15s;
+}
+
+.daily-avg-banner:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  transform: translateY(-1px);
+}
+
+.daily-avg-banner-left {
+  display: flex;
+  align-items: center;
+}
+
+.daily-avg-banner-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.daily-avg-banner-icon {
+  color: #6366f1;
+  flex-shrink: 0;
+  vertical-align: -2px;
+  margin-right: 0.375rem;
+}
+
+html.dark .daily-avg-banner-icon {
+  color: #a5b4fc;
+}
+
+.daily-avg-banner-title {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.daily-avg-banner-value-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.daily-avg-banner-value {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.daily-avg-banner-days {
+  font-size: 0.6875rem;
+  color: var(--color-text-muted);
+  font-weight: 500;
+}
+
+.daily-avg-banner-right {
+  display: flex;
+  align-items: flex-start;
+}
+
+.daily-avg-banner-proj-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  text-align: right;
+}
+
+.daily-avg-banner-proj-label {
+  font-size: 0.625rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.daily-avg-banner-proj-value {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.daily-avg-banner-progress {
+  width: 100%;
+  height: 3px;
+  background: var(--color-border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.daily-avg-banner-progress-bar {
+  height: 100%;
+  background: #6366f1;
+  border-radius: 2px;
+  transition: width 0.4s ease;
+}
+
+html.dark .daily-avg-banner-progress-bar {
+  background: #a5b4fc;
+}
+
+@media (max-width: 600px) {
+  .daily-avg-banner {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
 .charts-section-inner {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
@@ -1864,6 +2116,61 @@ html.dark .comparison-diff--over {
   letter-spacing: 0.04em;
   margin: 0 0 1rem 0;
 }
+
+.trend-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.25rem;
+}
+
+.trend-card-top .section-title {
+  margin: 0;
+  border: none;
+  padding: 0;
+}
+
+.trend-card-charts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.25rem;
+}
+
+.trend-loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 280px;
+}
+
+.trend-charts-scroll {
+  position: relative;
+}
+
+.trend-charts-scroll--wide {
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+.trend-charts-scroll--wide::-webkit-scrollbar {
+  height: 6px;
+}
+
+.trend-charts-scroll--wide::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.trend-charts-scroll--wide::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 3px;
+}
+
+.trend-charts-inner {
+  position: relative;
+  height: 280px;
+}
+
 
 /* ═══ STATIC GRID (Contas + Objetivos + Movimentos) ═══ */
 .static-grid {
