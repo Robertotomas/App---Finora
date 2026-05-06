@@ -411,7 +411,6 @@ const recentTransactions = computed(() => {
 
 const expensesForChart = computed<ExpenseByCategory[]>(() => dashboard.expensesForChart?.value ?? [])
 const incomeForChart = computed<IncomeByCategory[]>(() => dashboard.incomeForChart?.value ?? [])
-const trendForChart = computed<MonthlyTrend[]>(() => dashboard.trendForChart?.value ?? [])
 const periodLabel = computed(() => {
   if (dashActivePreset.value === 'all') return 'Desde sempre'
   if (dashActivePreset.value === 'month') return 'Este mês'
@@ -771,7 +770,7 @@ async function fetchTrendChartData() {
     const response = await import('@/api/dashboard').then((m) =>
       m.dashboardApi.get({ trendMonths: trendChartMonths.value })
     )
-    const res = (((response as Record<string, unknown>).data) ?? response) as Record<string, unknown>
+    const res = (((response as unknown as Record<string, unknown>).data) ?? response) as Record<string, unknown>
     const get = (key: string) => res[key] ?? res[key.charAt(0).toUpperCase() + key.slice(1)]
     const arr = get('monthlyTrend')
     if (Array.isArray(arr)) {
