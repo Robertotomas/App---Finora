@@ -1,58 +1,59 @@
 import { ref } from 'vue'
-
-const STORAGE_KEY = 'finora-monthly-budget'
+import { budgetsApi } from '@/api/budgets'
 
 type BudgetEntry = { expectedIncome: number; expectedExpenses: number }
 type BudgetStore = Record<string, BudgetEntry>
-
-function loadFromStorage(): BudgetStore {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return {}
-    return JSON.parse(raw) as BudgetStore
-  } catch {
-    return {}
-  }
-}
-
-function saveToStorage(store: BudgetStore) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(store))
-}
 
 function storageKey(householdId: string, year: number, month: number): string {
   return `${householdId}-${year}-${month}`
 }
 
-/** Remove todos os orçamentos mensais locais deste agregado (ex.: após reset financeiro no servidor). */
-export function clearAllBudgetsForHousehold(householdId: string) {
-  const prefix = `${householdId}-`
-  const store = loadFromStorage()
-  let changed = false
-  for (const k of Object.keys(store)) {
-    if (k.startsWith(prefix)) {
-      delete store[k]
-      changed = true
+const budgetStoreRef = ref<BudgetStore>({})
+let loaded = false
+
+async function ensureLoaded() {
+  if (loaded) return
+  try {
+    const { data } = await budgetsApi.list()
+    const store: BudgetStore = {}
+    for (const b of data) {
+      // We don't have householdId from the API response, but all results belong to the user's household.
+      // We'll use a placeholder that gets resolved at access time.
+      store[`_-${b.year}-${b.month}`] = { expectedIncome: b.expectedIncome, expectedExpenses: b.expectedExpenses }
     }
+    budgetStoreRef.value = store
+    loaded = true
+  } catch {
+    // If API fails, keep empty store
   }
-  if (changed) saveToStorage(store)
+}
+
+/** Remove todos os orçamentos mensais locais deste agregado (ex.: após reset financeiro no servidor). */
+export function clearAllBudgetsForHousehold(_householdId: string) {
+  budgetStoreRef.value = {}
+  loaded = false
 }
 
 export function useMonthlyBudget() {
-  const budgetStore = ref<BudgetStore>(loadFromStorage())
+  // Trigger load on first use
+  ensureLoaded()
 
   function getBudget(householdId: string | undefined, year: number, month: number): BudgetEntry {
     if (!householdId) return { expectedIncome: 0, expectedExpenses: 0 }
+    // Try household-specific key first, then generic key from API
     const key = storageKey(householdId, year, month)
-    return budgetStore.value[key] ?? { expectedIncome: 0, expectedExpenses: 0 }
+    const genericKey = `_-${year}-${month}`
+    return budgetStoreRef.value[key] ?? budgetStoreRef.value[genericKey] ?? { expectedIncome: 0, expectedExpenses: 0 }
   }
 
   function hasBudget(householdId: string | undefined, year: number, month: number): boolean {
     if (!householdId) return false
     const key = storageKey(householdId, year, month)
-    return key in budgetStore.value
+    const genericKey = `_-${year}-${month}`
+    return key in budgetStoreRef.value || genericKey in budgetStoreRef.value
   }
 
-  function setBudget(
+  async function setBudget(
     householdId: string | undefined,
     year: number,
     month: number,
@@ -60,27 +61,46 @@ export function useMonthlyBudget() {
     expectedExpenses: number
   ) {
     if (!householdId) return
-    const key = storageKey(householdId, year, month)
-    const store = { ...budgetStore.value }
-    store[key] = { expectedIncome, expectedExpenses }
-    budgetStore.value = store
-    saveToStorage(store)
+    try {
+      await budgetsApi.upsert({ year, month, expectedIncome, expectedExpenses })
+      const key = storageKey(householdId, year, month)
+      const genericKey = `_-${year}-${month}`
+      const store = { ...budgetStoreRef.value }
+      store[key] = { expectedIncome, expectedExpenses }
+      store[genericKey] = { expectedIncome, expectedExpenses }
+      budgetStoreRef.value = store
+    } catch {
+      // Silently fail — the UI will still show stale data
+    }
   }
 
-  function clearBudget(householdId: string | undefined, year: number, month: number) {
+  async function clearBudget(householdId: string | undefined, year: number, month: number) {
     if (!householdId) return
-    const key = storageKey(householdId, year, month)
-    const store = { ...budgetStore.value }
-    delete store[key]
-    budgetStore.value = store
-    saveToStorage(store)
+    try {
+      await budgetsApi.remove(year, month)
+      const key = storageKey(householdId, year, month)
+      const genericKey = `_-${year}-${month}`
+      const store = { ...budgetStoreRef.value }
+      delete store[key]
+      delete store[genericKey]
+      budgetStoreRef.value = store
+    } catch {
+      // Silently fail
+    }
+  }
+
+  /** Force reload from API */
+  async function reload() {
+    loaded = false
+    await ensureLoaded()
   }
 
   return {
-    budgetStore,
+    budgetStore: budgetStoreRef,
     getBudget,
     hasBudget,
     setBudget,
     clearBudget,
+    reload,
   }
 }

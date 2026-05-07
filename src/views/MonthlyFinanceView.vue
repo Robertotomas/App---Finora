@@ -67,11 +67,11 @@ const showForm = computed(() => !hasBudget.value || isEditing.value)
 
 const remainingMonthsCount = computed(() => 12 - selectedMonth.value)
 
-function submit() {
+async function submit() {
   const income = Number(inputIncome.value) || 0
   const expenses = Number(inputExpenses.value) || 0
 
-  budget.setBudget(
+  await budget.setBudget(
     householdId.value,
     selectedYear.value,
     selectedMonth.value,
@@ -81,7 +81,7 @@ function submit() {
 
   if (applyToRemaining.value) {
     for (let m = selectedMonth.value + 1; m <= 12; m++) {
-      budget.setBudget(householdId.value, selectedYear.value, m, income, expenses)
+      await budget.setBudget(householdId.value, selectedYear.value, m, income, expenses)
     }
     applyToRemaining.value = false
   }
@@ -105,8 +105,8 @@ function cancelDelete() {
   deleteModalOpen.value = false
 }
 
-function deleteBudget() {
-  budget.clearBudget(householdId.value, selectedYear.value, selectedMonth.value)
+async function deleteBudget() {
+  await budget.clearBudget(householdId.value, selectedYear.value, selectedMonth.value)
   inputIncome.value = 0
   inputExpenses.value = 0
   isEditing.value = false
