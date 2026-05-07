@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { RouterLink } from 'vue-router'
@@ -21,6 +21,16 @@ const lastName = ref('')
 const gender = ref<'Male' | 'Female' | ''>('')
 const error = ref('')
 const loading = ref(false)
+
+const passwordRules = computed(() => ({
+  minLength: password.value.length >= 8,
+  hasUpper: /[A-Z]/.test(password.value),
+  hasLower: /[a-z]/.test(password.value),
+  hasNumber: /\d/.test(password.value),
+}))
+const passwordValid = computed(() =>
+  passwordRules.value.minLength && passwordRules.value.hasUpper && passwordRules.value.hasLower && passwordRules.value.hasNumber
+)
 
 onMounted(async () => {
   const t = route.query.invite
@@ -61,12 +71,16 @@ async function handleSubmit() {
     })
     router.push('/dashboard')
   } catch (e: unknown) {
-    const err = e as { response?: { data?: { message?: string; errors?: Record<string, string[]> } } }
-    const data = err.response?.data
-    if (data?.errors) {
-      error.value = Object.values(data.errors).flat().join(' ')
+    const err = e as { rateLimited?: boolean; rateLimitMessage?: string; response?: { data?: { message?: string; errors?: Record<string, string[]> } } }
+    if (err.rateLimited) {
+      error.value = err.rateLimitMessage || 'Demasiados pedidos. Tenta novamente dentro de 1 minuto.'
     } else {
-      error.value = data?.message || 'Erro ao registar. Tenta novamente.'
+      const data = err.response?.data
+      if (data?.errors) {
+        error.value = Object.values(data.errors).flat().join(' ')
+      } else {
+        error.value = data?.message || 'Erro ao registar. Tenta novamente.'
+      }
     }
   } finally {
     loading.value = false
@@ -116,9 +130,15 @@ async function handleSubmit() {
         </div>
         <div class="auth-field">
           <label for="password">Password</label>
-          <input id="password" v-model="password" type="password" required placeholder="Mín. 8 caracteres, maiúscula, minúscula e número" />
+          <input id="password" v-model="password" type="password" required placeholder="Mín. 8 caracteres" />
+          <ul v-if="password.length > 0" class="pw-rules">
+            <li :class="{ ok: passwordRules.minLength }">Mínimo 8 caracteres</li>
+            <li :class="{ ok: passwordRules.hasUpper }">Uma letra maiúscula</li>
+            <li :class="{ ok: passwordRules.hasLower }">Uma letra minúscula</li>
+            <li :class="{ ok: passwordRules.hasNumber }">Um número</li>
+          </ul>
         </div>
-        <button type="submit" class="auth-btn" :disabled="loading">
+        <button type="submit" class="auth-btn" :disabled="loading || !passwordValid">
           {{ loading ? 'A registar...' : 'Registar' }}
         </button>
       </form>
@@ -131,6 +151,25 @@ async function handleSubmit() {
 </template>
 
 <style scoped>
+.pw-rules {
+  list-style: none;
+  padding: 0;
+  margin: 0.5rem 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.75rem;
+  font-size: 0.75rem;
+  color: #ef4444;
+}
+.pw-rules li.ok {
+  color: #22c55e;
+}
+.pw-rules li::before {
+  content: '✕ ';
+}
+.pw-rules li.ok::before {
+  content: '✓ ';
+}
 .auth-invite-banner {
   margin-top: 0.75rem;
   font-size: 0.9rem;

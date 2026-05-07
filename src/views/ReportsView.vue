@@ -94,8 +94,10 @@ async function refreshReportPdf(row: MonthlyReportListItem) {
     if (idx >= 0) items.value[idx] = updated
     closePreview()
   } catch (e: unknown) {
-    const err = e as { response?: { status?: number; data?: { message?: string } } }
-    if (err.response?.status === 403) {
+    const err = e as { rateLimited?: boolean; rateLimitMessage?: string; response?: { status?: number; data?: { message?: string } } }
+    if (err.rateLimited) {
+      error.value = err.rateLimitMessage || 'Demasiados pedidos. Tenta novamente dentro de 1 minuto.'
+    } else if (err.response?.status === 403) {
       error.value = 'Atualizar relatórios está disponível nos planos Pro e Couple.'
     } else {
       error.value = err.response?.data?.message ?? 'Não foi possível atualizar o PDF.'

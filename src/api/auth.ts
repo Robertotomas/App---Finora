@@ -8,6 +8,9 @@ export const authApi = {
   login: (data: LoginRequest) =>
     api.post<AuthResponse>('/api/auth/login', data),
 
+  refresh: (refreshToken: string) =>
+    api.post<AuthResponse>('/api/auth/refresh', { refreshToken }),
+
   me: () => api.get('/api/auth/me'),
 
   getProfile: () => api.get<User>('/api/auth/profile'),

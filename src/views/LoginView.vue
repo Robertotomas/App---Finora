@@ -22,8 +22,12 @@ async function handleSubmit() {
     const redirect = (route.query.redirect as string) || '/dashboard'
     router.push(redirect)
   } catch (e: unknown) {
-    const err = e as { response?: { data?: { message?: string } } }
-    error.value = err.response?.data?.message || 'Email ou password incorretos.'
+    const err = e as { rateLimited?: boolean; rateLimitMessage?: string; response?: { data?: { message?: string } } }
+    if (err.rateLimited) {
+      error.value = err.rateLimitMessage || 'Demasiados pedidos. Tenta novamente dentro de 1 minuto.'
+    } else {
+      error.value = err.response?.data?.message || 'Email ou password incorretos.'
+    }
   } finally {
     loading.value = false
   }
