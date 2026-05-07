@@ -5,6 +5,7 @@ export interface GetTransactionsParams {
   accountId?: string
   from?: string
   to?: string
+  limit?: number
 }
 
 export const transactionsApi = {

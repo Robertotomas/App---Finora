@@ -49,7 +49,7 @@ export const useTransactionsStore = defineStore('transactions', () => {
   const loading = ref(false)
   const error = ref<string | null>(null)
 
-  async function fetchTransactions(params?: { accountId?: string; from?: string; to?: string }) {
+  async function fetchTransactions(params?: { accountId?: string; from?: string; to?: string; limit?: number }) {
     loading.value = true
     error.value = null
     try {

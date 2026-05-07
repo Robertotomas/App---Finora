@@ -363,13 +363,18 @@ onMounted(async () => {
           dashboard.setPeriod(selectedYear.value, selectedMonth.value)
           dashboard.invalidateCache()
           await Promise.all([
-            dashboard.fetch(true),
+            dashboard.fetch(true).then(() => {
+              // Reutilizar dados de tendência do dashboard (evita 2 calls duplicados)
+              const trend = dashboard.monthlyTrend.value
+              if (trend.length > 0) {
+                chartTrendData.value = trend
+                trendChartData.value = trend
+              }
+            }),
             accountsStore.fetchAccounts(),
             loadObjectivesPreview(),
             subscriptionStore.fetchSubscription(),
-            fetchChartTrend(),
-            fetchTrendChartData(),
-            transactionsStore.fetchTransactions(),
+            transactionsStore.fetchTransactions({ limit: 5 }),
           ])
         }
       })(),
@@ -403,11 +408,7 @@ const formattedIncome = computed(() => formatCurrency(dashboard.monthlyIncome.va
 const formattedExpenses = computed(() => formatCurrency(dashboard.monthlyExpenses.value, dashboard.currency.value))
 const formattedSavings = computed(() => formatCurrency(dashboard.monthlySavings.value, dashboard.currency.value))
 
-const recentTransactions = computed(() => {
-  const txs = [...transactionsStore.transactions]
-  txs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-  return txs.slice(0, 5)
-})
+const recentTransactions = computed(() => transactionsStore.transactions.slice(0, 5))
 
 const expensesForChart = computed<ExpenseByCategory[]>(() => dashboard.expensesForChart?.value ?? [])
 const incomeForChart = computed<IncomeByCategory[]>(() => dashboard.incomeForChart?.value ?? [])
