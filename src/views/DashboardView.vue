@@ -581,7 +581,7 @@ async function onSettleConfirmYes() {
 
 function onSettleConfirmNo() {
   closeSettleModal()
-  router.push({ name: 'transactions', query: { tab: 'transactions' } })
+  router.push({ name: 'movimentos', query: { tab: 'movements' } })
 }
 
 function onSettleCancelConfirm() {
@@ -927,14 +927,14 @@ const showContent = computed(() =>
               <span v-if="cardEditMode" class="card-drag-handle" title="Arrastar para reordenar">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="5" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="19" r="1"/></svg>
               </span>
-              <router-link v-else :to="{ name: 'accounts' }" class="static-card-link" title="Ver todas"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></router-link>
+              <router-link v-else :to="{ name: 'contas' }" class="static-card-link" title="Ver todas"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></router-link>
             </div>
           </div>
           <div v-if="accountsToShow.length > 0" class="accounts-list">
             <router-link
               v-for="account in accountsToShow.slice(0, 4)"
               :key="account.id"
-              :to="{ name: 'accounts' }"
+              :to="{ name: 'contas' }"
               class="account-row"
             >
               <div class="account-row-info">
@@ -956,7 +956,7 @@ const showContent = computed(() =>
           <div v-else class="static-card-empty">
             <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="static-card-empty-icon"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
             <p>Veja o saldo das suas contas num só lugar</p>
-            <router-link to="/accounts" class="static-card-action">Adicionar</router-link>
+            <router-link to="/contas" class="static-card-action">Adicionar</router-link>
           </div>
         </div>
 
@@ -973,7 +973,7 @@ const showContent = computed(() =>
               <span v-if="cardEditMode" class="card-drag-handle" title="Arrastar para reordenar">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="5" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="19" r="1"/></svg>
               </span>
-              <router-link v-else :to="{ name: 'objectives' }" class="static-card-link" title="Ver todos"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></router-link>
+              <router-link v-else :to="{ name: 'objetivos' }" class="static-card-link" title="Ver todos"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></router-link>
             </div>
           </div>
           <div
@@ -992,7 +992,7 @@ const showContent = computed(() =>
                   <router-link
                     v-for="goal in objectivesPreview"
                     :key="goal.id"
-                    :to="{ name: 'objectives' }"
+                    :to="{ name: 'objetivos' }"
                     class="objective-row"
                   >
                     <div class="objective-row-top">
@@ -1024,16 +1024,16 @@ const showContent = computed(() =>
                 <p>Defina objetivos de poupança para acompanhar o progresso</p>
                 <router-link
                   v-if="subscriptionStore.canAccessObjectives"
-                  :to="{ name: 'objectives' }"
+                  :to="{ name: 'objetivos' }"
                   class="static-card-action"
                 >Criar objetivo</router-link>
-                <router-link v-else :to="{ name: 'subscription' }" class="static-card-action">Ver planos</router-link>
+                <router-link v-else :to="{ name: 'subscricao' }" class="static-card-action">Ver planos</router-link>
               </div>
             </div>
             <div v-if="!subscriptionStore.canAccessObjectives && objectivesPreview.length > 0" class="dashboard-objectives-lock-overlay">
               <div class="dashboard-objectives-lock-panel">
                 <p class="dashboard-objectives-lock-text">Atualize o plano para visualização completa</p>
-                <router-link :to="{ name: 'subscription' }" class="btn-add-objective dashboard-objectives-lock-cta">Ver planos</router-link>
+                <router-link :to="{ name: 'subscricao' }" class="btn-add-objective dashboard-objectives-lock-cta">Ver planos</router-link>
               </div>
             </div>
           </div>
@@ -1052,14 +1052,14 @@ const showContent = computed(() =>
               <span v-if="cardEditMode" class="card-drag-handle" title="Arrastar para reordenar">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="5" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="19" r="1"/></svg>
               </span>
-              <router-link v-else :to="{ name: 'transactions' }" class="static-card-link" title="Ver todos"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></router-link>
+              <router-link v-else :to="{ name: 'movimentos' }" class="static-card-link" title="Ver todos"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></router-link>
             </div>
           </div>
           <div v-if="recentTransactions.length > 0" class="movements-list">
             <router-link
               v-for="tx in recentTransactions"
               :key="tx.id"
-              :to="{ name: 'transactions' }"
+              :to="{ name: 'movimentos' }"
               class="movement-row"
             >
               <div class="movement-row-left">
@@ -1080,7 +1080,7 @@ const showContent = computed(() =>
           <div v-else class="static-card-empty">
             <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="static-card-empty-icon"><circle cx="12" cy="12" r="10"/><path d="M15 9.354a4 4 0 1 0 0 5.292M9 12h7"/></svg>
             <p>Nenhum movimento registado</p>
-            <router-link to="/transactions" class="static-card-action">Adicionar</router-link>
+            <router-link to="/movimentos" class="static-card-action">Adicionar</router-link>
           </div>
         </div>
         </template>
@@ -1324,7 +1324,7 @@ const showContent = computed(() =>
           </div>
           <div v-else class="section-empty">
             <p class="section-empty-text">Ainda não definiste o teu plano mensal.</p>
-            <router-link to="/monthly" class="btn-section-add">Adicionar o seu plano mensal</router-link>
+            <router-link to="/plano-mensal" class="btn-section-add">Adicionar o seu plano mensal</router-link>
           </div>
         </div>
         </template>

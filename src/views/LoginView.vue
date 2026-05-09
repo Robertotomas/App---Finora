@@ -19,7 +19,7 @@ async function handleSubmit() {
   loading.value = true
   try {
     await authStore.login({ email: email.value, password: password.value })
-    const redirect = (route.query.redirect as string) || '/dashboard'
+    const redirect = (route.query.redirect as string) || '/inicio'
     router.push(redirect)
   } catch (e: unknown) {
     const err = e as { rateLimited?: boolean; rateLimitMessage?: string; response?: { data?: { message?: string } } }
@@ -60,7 +60,7 @@ async function handleSubmit() {
         </button>
       </form>
       <p class="auth-footer">
-        Não tens conta? <RouterLink to="/register">Regista-te</RouterLink>
+        Não tens conta? <RouterLink to="/registar">Regista-te</RouterLink>
       </p>
     </div>
     </div>

@@ -369,7 +369,7 @@ function accountIcon(type: AccountType): string {
             <p class="banner-title">Contas bloqueadas</p>
             <p class="banner-text">Atualiza para Pro ou Couple para desbloquear todas as contas.</p>
           </div>
-          <router-link :to="{ name: 'subscription' }" class="btn-confirm">
+          <router-link :to="{ name: 'subscricao' }" class="btn-confirm">
             Ver planos
           </router-link>
         </div>
@@ -601,7 +601,7 @@ function accountIcon(type: AccountType): string {
         </p>
         <div class="blocked-footer">
           <button type="button" class="btn-cancel" @click="accountLimitModalOpen = false">Agora não</button>
-          <router-link :to="{ name: 'subscription' }" class="btn-confirm" @click="accountLimitModalOpen = false">
+          <router-link :to="{ name: 'subscricao' }" class="btn-confirm" @click="accountLimitModalOpen = false">
             Ver planos
           </router-link>
         </div>

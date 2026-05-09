@@ -399,7 +399,7 @@ onMounted(async () => {
               </button>
               <p v-else class="empty-hint">
                 Atualiza o plano para criar objetivos.
-                <router-link :to="{ name: 'subscription' }" class="link">Ver planos</router-link>
+                <router-link :to="{ name: 'subscricao' }" class="link">Ver planos</router-link>
               </p>
             </div>
 
@@ -528,7 +528,7 @@ onMounted(async () => {
             <p class="lock-text">
               Os teus objetivos mantêm-se guardados. Voltam a aparecer ao atualizares o plano.
             </p>
-            <router-link :to="{ name: 'subscription' }" class="btn-confirm">Ver planos</router-link>
+            <router-link :to="{ name: 'subscricao' }" class="btn-confirm">Ver planos</router-link>
           </div>
         </div>
       </div>

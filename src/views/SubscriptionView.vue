@@ -96,7 +96,7 @@ async function choosePlan(plan: SubscriptionPlan) {
       } catch {
         /* household pode falhar brevemente; o redirect atualiza a vista na mesma */
       }
-      await router.push({ name: 'household-settings' })
+      await router.push({ name: 'agregado' })
     }
   } finally {
     upgrading.value = null

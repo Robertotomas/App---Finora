@@ -25,19 +25,11 @@ function toggleSidebar() {
   localStorage.setItem(SIDEBAR_KEY, String(sidebarCollapsed.value))
 }
 
-function openMoviments() {
-  if (sidebarCollapsed.value) {
-    sidebarCollapsed.value = false
-    localStorage.setItem(SIDEBAR_KEY, 'false')
-  }
-  objectivesOpen.value = false
-  movimentsOpen.value = true
-}
 
 function logout() {
   userMenuOpen.value = false
   authStore.logout()
-  router.replace({ name: 'login' })
+  router.replace({ name: 'entrar' })
 }
 
 function setTheme(dark: boolean) {
@@ -81,17 +73,17 @@ const planManageLabel = computed(() =>
 
 function goToSubscription() {
   userMenuOpen.value = false
-  router.push({ name: 'subscription' })
+  router.push({ name: 'subscricao' })
 }
 
 function goToProfile() {
   userMenuOpen.value = false
-  router.push({ name: 'profile' })
+  router.push({ name: 'perfil' })
 }
 
 function goToHousehold() {
   userMenuOpen.value = false
-  router.push({ name: 'household-settings' })
+  router.push({ name: 'agregado' })
 }
 
 /** Household: plano Couple OU agregado ainda tipo casal (ex.: após mudar para Free/Pro — precisas disto para sair do casal). */
@@ -102,55 +94,41 @@ const showHouseholdInUserMenu = computed(
     householdStore.hasPartnerLeftNotice,
 )
 
-const navItems = [
-  { to: '/dashboard', label: 'Dashboard' },
-  { to: '/monthly', label: 'Plano Mensal' },
-  { to: '/accounts', label: 'Contas' },
-  { to: '/reports', label: 'Relatórios' },
-]
-
-const movimentsOpen = ref(false)
-const isMovimentsActive = computed(() => route.path.startsWith('/transactions'))
-
 const movimentsSubItems = [
-  { to: '/transactions?tab=summary', label: 'Resumo', tabKey: 'summary' },
-  { to: '/transactions?tab=transactions', label: 'Transações', tabKey: 'transactions' },
-  { to: '/transactions?tab=recurring', label: 'Recorrentes', tabKey: 'recurring' },
+  { to: '/movimentos?tab=dashboard', label: 'Dashboard', tabKey: 'dashboard' },
+  { to: '/movimentos?tab=movements', label: 'Movimentos', tabKey: 'movements' },
+  { to: '/movimentos?tab=recurring', label: 'Recorrentes', tabKey: 'recurring' },
 ]
 
-const objectivesOpen = ref(false)
-const isObjectivesActive = computed(() => route.path.startsWith('/objectives'))
+const patrimonioItems = [
+  { to: '/contas', label: 'Contas' },
+]
 
 const objectivesSubItems = [
-  { to: '/objectives?tab=active', label: 'Ativos', tabKey: 'active' },
-  { to: '/objectives?tab=history', label: 'Concluídos', tabKey: 'history' },
+  { to: '/objetivos?tab=active', label: 'Ativos', tabKey: 'active' },
+  { to: '/objetivos?tab=history', label: 'Concluídos', tabKey: 'history' },
 ]
 
-function openObjectives() {
-  if (sidebarCollapsed.value) {
-    sidebarCollapsed.value = false
-    localStorage.setItem(SIDEBAR_KEY, 'false')
-  }
-  movimentsOpen.value = false
-  objectivesOpen.value = true
-}
+const toolsItems = [
+  { to: '/relatorios', label: 'Relatórios' },
+]
 
 function isObjectivesSubActive(tabKey: string) {
-  if (!route.path.startsWith('/objectives')) return false
+  if (!route.path.startsWith('/objetivos')) return false
   const tab = route.query.tab as string | undefined
   if (tabKey === 'active') return !tab || tab === 'active'
   return tab === tabKey
 }
 
 function isMovimentsSubActive(tabKey: string) {
-  if (!route.path.startsWith('/transactions')) return false
+  if (!route.path.startsWith('/movimentos')) return false
   const tab = route.query.tab as string | undefined
-  if (tabKey === 'summary') return !tab || tab === 'summary'
+  if (tabKey === 'dashboard') return !tab || tab === 'dashboard'
   return tab === tabKey
 }
 
 function isActive(path: string) {
-  if (path === '/dashboard') return route.path === '/dashboard'
+  if (path === '/inicio') return route.path === '/inicio'
   return route.path.startsWith(path)
 }
 
@@ -163,7 +141,7 @@ function isActive(path: string) {
       <button v-if="sidebarCollapsed && authStore.isAuthenticated" type="button" class="sidebar-expand-btn" @click="toggleSidebar" title="Expandir">
         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" x2="21" y1="6" y2="6"/><line x1="3" x2="21" y1="12" y2="12"/><line x1="3" x2="21" y1="18" y2="18"/></svg>
       </button>
-      <RouterLink to="/dashboard" class="header-brand" aria-label="FinoraFlow — ir para o painel">
+      <RouterLink to="/inicio" class="header-brand" aria-label="FinoraFlow — ir para o painel">
         <img
           :src="iconFinoraFlow"
           alt="FinoraFlow"
@@ -261,7 +239,7 @@ function isActive(path: string) {
       <aside class="sidebar" :class="{ collapsed: sidebarCollapsed }">
         <div v-if="authStore.isAuthenticated" class="sidebar-plan">
           <RouterLink
-            :to="{ name: 'subscription' }"
+            :to="{ name: 'subscricao' }"
             class="sidebar-plan-link"
             aria-label="Ver planos e subscrição"
           >
@@ -272,110 +250,102 @@ function isActive(path: string) {
           </button>
         </div>
         <nav v-if="authStore.isAuthenticated" class="sidebar-nav">
-          <!-- Main nav panel -->
-          <div class="sidebar-panel" :class="{ 'sidebar-panel--hidden': movimentsOpen || objectivesOpen }">
-            <template v-for="item in navItems" :key="item.to">
-              <RouterLink
-                :to="item.to"
-                class="sidebar-link"
-                :class="{ active: isActive(item.to) }"
-              >
-                <span class="sidebar-icon">
-                  <!-- Dashboard -->
-                  <svg v-if="item.to === '/dashboard'" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
-                  <!-- Plano Mensal -->
-                  <svg v-else-if="item.to === '/monthly'" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/><path d="m9 16 2 2 4-4"/></svg>
-                  <!-- Contas -->
-                  <svg v-else-if="item.to === '/accounts'" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 10h20"/><circle cx="17" cy="15" r="1.5"/></svg>
-                  <!-- Relatórios -->
-                  <svg v-else xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" x2="8" y1="13" y2="13"/><line x1="16" x2="8" y1="17" y2="17"/><line x1="10" x2="8" y1="9" y2="9"/></svg>
-                </span>
-                <span class="sidebar-label">{{ item.label }}</span>
-              </RouterLink>
+          <!-- Top items (Dashboard, Plano Mensal) -->
+          <RouterLink
+            to="/inicio"
+            class="sidebar-link"
+            :class="{ active: isActive('/inicio') }"
+          >
+            <span class="sidebar-icon">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+            </span>
+            <span class="sidebar-label">Início</span>
+          </RouterLink>
 
-              <!-- Movimentos expandable (after Contas) -->
-              <template v-if="item.to === '/accounts'">
-                <button
-                  type="button"
-                  class="sidebar-link sidebar-link-expandable"
-                  :class="{ active: isMovimentsActive }"
-                  @click="openMoviments"
-                >
-                  <span class="sidebar-icon">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/><polyline points="21 3 21 9 15 9"/></svg>
-                  </span>
-                  <span class="sidebar-label">Movimentos</span>
-                  <svg class="sidebar-expand-arrow" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-                </button>
-
-                <!-- Objetivos expandable (after Movimentos) -->
-                <button
-                  type="button"
-                  class="sidebar-link sidebar-link-expandable"
-                  :class="{ active: isObjectivesActive }"
-                  @click="openObjectives"
-                >
-                  <span class="sidebar-icon">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/><line x1="22" x2="12" y1="2" y2="12"/></svg>
-                  </span>
-                  <span class="sidebar-label">Objetivos</span>
-                  <svg class="sidebar-expand-arrow" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-                </button>
-              </template>
-            </template>
+          <!-- Section: Planeamento -->
+          <div class="sidebar-section">
+            <span class="sidebar-section-title">Planeamento</span>
+            <RouterLink
+              to="/plano-mensal"
+              class="sidebar-link"
+              :class="{ active: isActive('/monthly') }"
+            >
+              <span class="sidebar-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/><path d="m9 16 2 2 4-4"/></svg>
+              </span>
+              <span class="sidebar-label">Plano Mensal</span>
+            </RouterLink>
           </div>
 
-          <!-- Movimentos sub-panel (slides in) -->
-          <div class="sidebar-panel sidebar-panel-sub" :class="{ 'sidebar-panel-sub--visible': movimentsOpen }">
-            <button type="button" class="sidebar-back-btn" @click="movimentsOpen = false">
-              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-              <span>Movimentos</span>
-            </button>
-            <div class="sidebar-sub-items">
-              <RouterLink
-                v-for="sub in movimentsSubItems"
-                :key="sub.tabKey"
-                :to="sub.to"
-                class="sidebar-link sidebar-sub-item"
-                :class="{ active: isMovimentsSubActive(sub.tabKey) }"
-              >
-                <span v-if="sub.tabKey === 'summary'" class="sidebar-icon">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="8" x2="21" y1="6" y2="6"/><line x1="8" x2="21" y1="12" y2="12"/><line x1="8" x2="21" y1="18" y2="18"/><line x1="3" x2="3.01" y1="6" y2="6"/><line x1="3" x2="3.01" y1="12" y2="12"/><line x1="3" x2="3.01" y1="18" y2="18"/></svg>
-                </span>
-                <span v-if="sub.tabKey === 'transactions'" class="sidebar-icon">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="7 7 17 7"/><polyline points="4 12 20 12"/><polyline points="7 17 17 17"/><polyline points="3 7 5 5 3 3"/><polyline points="21 17 19 19 21 21"/></svg>
-                </span>
-                <span v-if="sub.tabKey === 'recurring'" class="sidebar-icon">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                </span>
-                <span class="sidebar-label">{{ sub.label }}</span>
-              </RouterLink>
-            </div>
+          <!-- Section: Movimentos -->
+          <div class="sidebar-section">
+            <span class="sidebar-section-title">Atividade</span>
+            <RouterLink
+              v-for="sub in movimentsSubItems"
+              :key="sub.tabKey"
+              :to="sub.to"
+              class="sidebar-link"
+              :class="{ active: isMovimentsSubActive(sub.tabKey) }"
+            >
+              <span class="sidebar-icon">
+                <svg v-if="sub.tabKey === 'dashboard'" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
+                <svg v-else-if="sub.tabKey === 'movements'" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="7" x2="7" y1="18" y2="6"/><polyline points="3 10 7 6 11 10"/><line x1="17" x2="17" y1="6" y2="18"/><polyline points="13 14 17 18 21 14"/></svg>
+                <svg v-else xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              </span>
+              <span class="sidebar-label">{{ sub.label }}</span>
+            </RouterLink>
           </div>
 
-          <!-- Objetivos sub-panel (slides in) -->
-          <div class="sidebar-panel sidebar-panel-sub" :class="{ 'sidebar-panel-sub--visible': objectivesOpen }">
-            <button type="button" class="sidebar-back-btn" @click="objectivesOpen = false">
-              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-              <span>Objetivos</span>
-            </button>
-            <div class="sidebar-sub-items">
-              <RouterLink
-                v-for="sub in objectivesSubItems"
-                :key="sub.tabKey"
-                :to="sub.to"
-                class="sidebar-link sidebar-sub-item"
-                :class="{ active: isObjectivesSubActive(sub.tabKey) }"
-              >
-                <span v-if="sub.tabKey === 'active'" class="sidebar-icon">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/><line x1="22" x2="12" y1="2" y2="12"/></svg>
-                </span>
-                <span v-if="sub.tabKey === 'history'" class="sidebar-icon">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                </span>
-                <span class="sidebar-label">{{ sub.label }}</span>
-              </RouterLink>
-            </div>
+          <!-- Section: Património -->
+          <div class="sidebar-section">
+            <span class="sidebar-section-title">Património</span>
+            <RouterLink
+              v-for="item in patrimonioItems"
+              :key="item.to"
+              :to="item.to"
+              class="sidebar-link"
+              :class="{ active: isActive(item.to) }"
+            >
+              <span class="sidebar-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 10h20"/><circle cx="17" cy="15" r="1.5"/></svg>
+              </span>
+              <span class="sidebar-label">{{ item.label }}</span>
+            </RouterLink>
+          </div>
+
+          <!-- Section: Objetivos -->
+          <div class="sidebar-section">
+            <span class="sidebar-section-title">Objetivos</span>
+            <RouterLink
+              v-for="sub in objectivesSubItems"
+              :key="sub.tabKey"
+              :to="sub.to"
+              class="sidebar-link"
+              :class="{ active: isObjectivesSubActive(sub.tabKey) }"
+            >
+              <span class="sidebar-icon">
+                <svg v-if="sub.tabKey === 'active'" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/><line x1="22" x2="12" y1="2" y2="12"/></svg>
+                <svg v-else xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+              </span>
+              <span class="sidebar-label">{{ sub.label }}</span>
+            </RouterLink>
+          </div>
+
+          <!-- Section: Ferramentas -->
+          <div class="sidebar-section">
+            <span class="sidebar-section-title">Ferramentas</span>
+            <RouterLink
+              v-for="item in toolsItems"
+              :key="item.to"
+              :to="item.to"
+              class="sidebar-link"
+              :class="{ active: isActive(item.to) }"
+            >
+              <span class="sidebar-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" x2="8" y1="13" y2="13"/><line x1="16" x2="8" y1="17" y2="17"/><line x1="10" x2="8" y1="9" y2="9"/></svg>
+              </span>
+              <span class="sidebar-label">{{ item.label }}</span>
+            </RouterLink>
           </div>
         </nav>
         <div v-if="authStore.isAuthenticated" class="sidebar-footer">
@@ -385,8 +355,8 @@ function isActive(path: string) {
           </button>
         </div>
         <div v-else class="sidebar-guest">
-          <RouterLink to="/login" class="sidebar-link">Entrar</RouterLink>
-          <RouterLink to="/register" class="sidebar-link btn-register">Registar</RouterLink>
+          <RouterLink to="/entrar" class="sidebar-link">Entrar</RouterLink>
+          <RouterLink to="/registar" class="sidebar-link btn-register">Registar</RouterLink>
         </div>
       </aside>
 
@@ -481,7 +451,7 @@ html.dark .sidebar {
   border-radius: 10px;
   color: rgba(255, 255, 255, 0.75);
   text-decoration: none;
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
   font-weight: 500;
   transition: background 0.15s ease, color 0.15s ease;
   letter-spacing: 0.01em;
@@ -505,97 +475,37 @@ html.dark .sidebar-link.active {
   color: #ffffff;
 }
 
-.sidebar-link-expandable {
-  border: none;
-  cursor: pointer;
-  font-family: inherit;
-  width: 100%;
-  text-align: left;
-  background: transparent;
-}
-
-.sidebar-expand-arrow {
-  margin-left: auto;
-  opacity: 0.4;
-  flex-shrink: 0;
-}
-
-/* Sliding panels */
-.sidebar-panel {
+.sidebar-section {
   display: flex;
   flex-direction: column;
   gap: 0.125rem;
-  transition: transform 0.25s ease, opacity 0.25s ease;
+  margin-top: 0.75rem;
 }
 
-.sidebar-panel--hidden {
-  transform: translateX(-100%);
-  opacity: 0;
-  pointer-events: none;
-  position: absolute;
-  inset: 0;
-}
-
-.sidebar-panel-sub {
-  position: absolute;
-  inset: 0;
-  transform: translateX(100%);
-  opacity: 0;
-  pointer-events: none;
-  padding: 0;
-}
-
-.sidebar-panel-sub--visible {
-  transform: translateX(0);
-  opacity: 1;
-  pointer-events: auto;
-  position: relative;
-}
-
-.sidebar-back-btn {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.6rem 0.875rem;
-  margin-bottom: 0.5rem;
-  border: none;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 0;
-  background: transparent;
-  color: rgba(255, 255, 255, 0.7);
-  font-size: 0.8125rem;
+.sidebar-section-title {
+  display: block;
+  padding: 0.25rem 0.875rem 0.375rem;
+  font-size: 0.6875rem;
   font-weight: 600;
-  font-family: inherit;
-  cursor: pointer;
-  width: 100%;
-  text-align: left;
-  padding-bottom: 0.75rem;
-  transition: color 0.15s ease;
-}
-
-.sidebar-back-btn:hover {
-  color: #ffffff;
-}
-
-.sidebar-sub-items {
-  display: flex;
-  flex-direction: column;
-  gap: 0.125rem;
-}
-
-.sidebar-sub-item {
-  padding: 0.7rem 1rem;
-  font-size: 0.9375rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.4);
+  user-select: none;
 }
 
 .sidebar-icon {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 26px;
+  height: 26px;
   flex-shrink: 0;
-  font-size: 1.125rem;
+  font-size: 1rem;
+}
+
+.sidebar-icon svg {
+  width: 17px;
+  height: 17px;
 }
 
 .sidebar-nav-icon {
@@ -1004,7 +914,7 @@ html.dark .sidebar-expand-btn:hover {
   display: none;
 }
 
-.sidebar.collapsed .sidebar-expand-arrow {
+.sidebar.collapsed .sidebar-section-title {
   display: none;
 }
 
@@ -1044,19 +954,8 @@ html.dark .sidebar-expand-btn:hover {
   justify-content: center;
 }
 
-.sidebar.collapsed .sidebar-back-btn {
-  justify-content: center;
-  font-size: 0;
-  padding: 0.6rem;
-}
-
-.sidebar.collapsed .sidebar-back-btn svg {
-  font-size: initial;
-}
-
-.sidebar.collapsed .sidebar-sub-item {
-  justify-content: center;
-  padding: 0.6rem;
+.sidebar.collapsed .sidebar-section {
+  margin-top: 0.25rem;
 }
 
 /* ─── Mobile: sidebar collapses ─── */
@@ -1094,6 +993,15 @@ html.dark .sidebar-expand-btn:hover {
     display: inline;
   }
 
+  .sidebar-section {
+    flex-direction: row;
+    margin-top: 0;
+  }
+
+  .sidebar-section-title {
+    display: none;
+  }
+
   .sidebar-nav {
     flex-direction: row;
     padding: 0.5rem 0.75rem;
@@ -1102,6 +1010,7 @@ html.dark .sidebar-expand-btn:hover {
     flex: unset;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
+    flex-wrap: nowrap;
   }
 
   .sidebar-nav::-webkit-scrollbar {
@@ -1183,7 +1092,7 @@ html.dark .sidebar-expand-btn:hover {
 
   .sidebar-link {
     padding: 0.5rem 1.125rem;
-    font-size: 0.875rem;
+    font-size: 0.8125rem;
   }
 }
 </style>

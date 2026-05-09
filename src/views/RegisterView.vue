@@ -69,7 +69,7 @@ async function handleSubmit() {
       ...(gender.value === 'Female' && { gender: 1 }),
       ...(inviteToken.value && { inviteToken: inviteToken.value }),
     })
-    router.push('/dashboard')
+    router.push('/inicio')
   } catch (e: unknown) {
     const err = e as { rateLimited?: boolean; rateLimitMessage?: string; response?: { data?: { message?: string; errors?: Record<string, string[]> } } }
     if (err.rateLimited) {
@@ -143,7 +143,7 @@ async function handleSubmit() {
         </button>
       </form>
       <p class="auth-footer">
-        Já tens conta? <RouterLink to="/login">Entrar</RouterLink>
+        Já tens conta? <RouterLink to="/entrar">Entrar</RouterLink>
       </p>
     </div>
     </div>

@@ -10,9 +10,9 @@ const authStore = useAuthStore()
     <h1>Bem-vindo ao FinoraFlow</h1>
     <p>Gerir as tuas finanças de forma simples e eficaz.</p>
     <div class="actions">
-      <RouterLink v-if="!authStore.isAuthenticated" to="/login" class="btn btn-secondary">Entrar</RouterLink>
-      <RouterLink v-if="!authStore.isAuthenticated" to="/register" class="btn btn-primary">Registar</RouterLink>
-      <RouterLink v-else to="/dashboard" class="btn btn-primary">Dashboard</RouterLink>
+      <RouterLink v-if="!authStore.isAuthenticated" to="/entrar" class="btn btn-secondary">Entrar</RouterLink>
+      <RouterLink v-if="!authStore.isAuthenticated" to="/registar" class="btn btn-primary">Registar</RouterLink>
+      <RouterLink v-else to="/inicio" class="btn btn-primary">Início</RouterLink>
     </div>
   </div>
 </template>

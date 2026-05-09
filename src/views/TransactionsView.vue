@@ -36,13 +36,13 @@ const router = useRouter()
 const routeRef = useRoute()
 
 const tabFromQuery = routeRef.query.tab as string | undefined
-const initialTab = tabFromQuery === 'recurring' ? 'recurring' : tabFromQuery === 'transactions' ? 'transactions' : 'summary'
-const activeTab = ref<'summary' | 'transactions' | 'recurring'>(initialTab)
+const initialTab = tabFromQuery === 'recurring' ? 'recurring' : tabFromQuery === 'movements' ? 'movements' : 'dashboard'
+const activeTab = ref<'dashboard' | 'movements' | 'recurring'>(initialTab)
 
 watch(() => routeRef.query.tab, (tab) => {
   if (tab === 'recurring') activeTab.value = 'recurring'
-  else if (tab === 'transactions') activeTab.value = 'transactions'
-  else activeTab.value = 'summary'
+  else if (tab === 'movements') activeTab.value = 'movements'
+  else activeTab.value = 'dashboard'
 })
 
 const typeSelectionModalOpen = ref(false)
@@ -751,11 +751,11 @@ const categoryColors: Record<number, string> = {
 
 watch([summaryDateFrom, summaryDateTo, summaryFilterAccount], () => {
   summaryPage.value = 1
-  if (activeTab.value === 'summary') fetchSummaryTransactions()
+  if (activeTab.value === 'dashboard') fetchSummaryTransactions()
 })
 
 watch(activeTab, (tab) => {
-  if (tab === 'summary') fetchSummaryTransactions()
+  if (tab === 'dashboard') fetchSummaryTransactions()
 })
 
 const accountsForRecurringCreate = computed(() =>
@@ -955,7 +955,7 @@ onMounted(async () => {
         subscriptionStore.fetchSubscription(),
         loadMembers(),
       ])
-      if (activeTab.value === 'summary') await fetchSummaryTransactions()
+      if (activeTab.value === 'dashboard') await fetchSummaryTransactions()
     } else {
       await subscriptionStore.fetchSubscription()
     }
@@ -1018,9 +1018,9 @@ function dismissLimitModal() {
   closeEditModal()
   closeRecurringCreateModal()
   closeRecurringEditModal()
-  activeTab.value = 'transactions'
+  activeTab.value = 'movements'
   if (router.currentRoute.value.name !== 'transactions') {
-    void router.push({ name: 'transactions' })
+    void router.push({ name: 'movimentos' })
   }
 }
 
@@ -1399,13 +1399,13 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
 <template>
   <div class="transactions-view">
     <div class="page-header">
-      <h1>{{ activeTab === 'recurring' ? 'Transações Recorrentes' : activeTab === 'summary' ? 'Resumo de Movimentos' : 'Transações' }}</h1>
-      <p class="subtitle">{{ activeTab === 'recurring' ? 'Gerir transações automáticas' : activeTab === 'summary' ? 'Visão geral das receitas e despesas' : 'Gerir receitas e despesas' }}</p>
+      <h1>{{ activeTab === 'recurring' ? 'Transações Recorrentes' : activeTab === 'dashboard' ? 'Dashboard' : 'Movimentos' }}</h1>
+      <p class="subtitle">{{ activeTab === 'recurring' ? 'Gerir transações automáticas' : activeTab === 'dashboard' ? 'Visão geral das receitas e despesas' : 'Gerir receitas e despesas' }}</p>
     </div>
 
     <div v-if="!householdStore.household && !householdStore.loading" class="empty-state">
       <p>Configura primeiro o teu household.</p>
-      <router-link to="/dashboard" class="link">Ir para o painel</router-link>
+      <router-link to="/inicio" class="link">Ir para o painel</router-link>
     </div>
 
     <div v-else-if="householdStore.loading && !householdStore.household" class="loading-state">
@@ -1418,7 +1418,7 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
     </div>
 
     <div v-else class="content">
-      <div v-if="activeTab === 'transactions' && transactionsStore.error" class="global-error">
+      <div v-if="activeTab === 'movements' && transactionsStore.error" class="global-error">
         {{ transactionsStore.error }}
       </div>
       <div v-if="activeTab === 'recurring' && recurringStore.error" class="global-error">
@@ -1426,7 +1426,7 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
       </div>
 
       <!-- ═══ SUMMARY TAB ═══ -->
-      <div v-show="activeTab === 'summary'" class="tab-content">
+      <div v-show="activeTab === 'dashboard'" class="tab-content">
         <!-- Filters -->
         <div class="summary-filters">
           <div ref="datePickerRef" class="date-range-picker">
@@ -1702,9 +1702,9 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
       </div>
 
       <!-- ═══ TRANSACTIONS TAB ═══ -->
-      <div v-show="activeTab === 'transactions'" class="tab-content">
+      <div v-show="activeTab === 'movements'" class="tab-content">
       <div v-if="needsPrimarySelection" class="primary-inline-hint">
-        <router-link :to="{ name: 'accounts' }" class="primary-inline-link">Escolhe a conta principal em Contas</router-link>
+        <router-link :to="{ name: 'contas' }" class="primary-inline-link">Escolhe a conta principal em Contas</router-link>
         <span> para poderes adicionar ou editar transações no plano Free com várias contas.</span>
       </div>
       <div class="toolbar">
@@ -1918,7 +1918,7 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
 
       <div v-show="activeTab === 'recurring'" class="tab-content">
         <div v-if="needsPrimarySelection" class="primary-inline-hint">
-          <router-link :to="{ name: 'accounts' }" class="primary-inline-link">Escolhe a conta principal em Contas</router-link>
+          <router-link :to="{ name: 'contas' }" class="primary-inline-link">Escolhe a conta principal em Contas</router-link>
           <span> para gerires recorrentes no plano Free com várias contas.</span>
         </div>
         <p class="recurring-hint">Receitas e despesas que se repetem mensalmente. São contabilizadas a partir do mês atual.</p>
@@ -2136,7 +2136,7 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
           <button type="button" class="btn-secondary" @click="dismissLimitModal">Agora não</button>
           <router-link
             v-if="limitModalKind === 'primary'"
-            :to="{ name: 'accounts' }"
+            :to="{ name: 'contas' }"
             class="locked-modal-cta"
             @click="dismissLimitModal"
           >
@@ -2144,7 +2144,7 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
           </router-link>
           <router-link
             v-else
-            :to="{ name: 'subscription' }"
+            :to="{ name: 'subscricao' }"
             class="locked-modal-cta"
             @click="dismissLimitModal"
           >

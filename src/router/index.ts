@@ -5,14 +5,14 @@ const router = createRouter({
   history: createWebHistory(),
   routes: [
     {
-      path: '/login',
-      name: 'login',
+      path: '/entrar',
+      name: 'entrar',
       component: () => import('@/views/LoginView.vue'),
       meta: { requiresAuth: false, guestOnly: true },
     },
     {
-      path: '/register',
-      name: 'register',
+      path: '/registar',
+      name: 'registar',
       component: () => import('@/views/RegisterView.vue'),
       meta: { requiresAuth: false, guestOnly: true },
     },
@@ -21,56 +21,56 @@ const router = createRouter({
       component: () => import('@/layouts/AppLayout.vue'),
       children: [
         {
-          path: 'dashboard',
-          name: 'dashboard',
+          path: 'inicio',
+          name: 'inicio',
           component: () => import('@/views/DashboardView.vue'),
           meta: { requiresAuth: true },
         },
         {
-          path: 'monthly',
-          name: 'monthly-finance',
+          path: 'plano-mensal',
+          name: 'plano-mensal',
           component: () => import('@/views/MonthlyFinanceView.vue'),
           meta: { requiresAuth: true },
         },
         {
-          path: 'household',
-          name: 'household-settings',
+          path: 'agregado',
+          name: 'agregado',
           component: () => import('@/views/HouseholdSettingsView.vue'),
           meta: { requiresAuth: true },
         },
         {
-          path: 'accounts',
-          name: 'accounts',
+          path: 'contas',
+          name: 'contas',
           component: () => import('@/views/AccountsView.vue'),
           meta: { requiresAuth: true },
         },
         {
-          path: 'transactions',
-          name: 'transactions',
+          path: 'movimentos',
+          name: 'movimentos',
           component: () => import('@/views/TransactionsView.vue'),
           meta: { requiresAuth: true },
         },
         {
-          path: 'objectives',
-          name: 'objectives',
+          path: 'objetivos',
+          name: 'objetivos',
           component: () => import('@/views/ObjectivesView.vue'),
           meta: { requiresAuth: true },
         },
         {
-          path: 'reports',
-          name: 'reports',
+          path: 'relatorios',
+          name: 'relatorios',
           component: () => import('@/views/ReportsView.vue'),
           meta: { requiresAuth: true },
         },
         {
-          path: 'subscription',
-          name: 'subscription',
+          path: 'subscricao',
+          name: 'subscricao',
           component: () => import('@/views/SubscriptionView.vue'),
           meta: { requiresAuth: true },
         },
         {
-          path: 'profile',
-          name: 'profile',
+          path: 'perfil',
+          name: 'perfil',
           component: () => import('@/views/ProfileView.vue'),
           meta: { requiresAuth: true },
         },
@@ -87,17 +87,17 @@ router.beforeEach(async (to, _from, next) => {
 
   // Landing "/" não deve existir: encaminha sempre para o destino correto.
   if (to.path === '/') {
-    if (isAuthenticated) next({ name: 'dashboard' })
-    else next({ name: 'login' })
+    if (isAuthenticated) next({ name: 'inicio' })
+    else next({ name: 'entrar' })
     return
   }
 
   if (to.meta.requiresAuth && !isAuthenticated) {
-    next({ name: 'login', query: { redirect: to.fullPath } })
+    next({ name: 'entrar', query: { redirect: to.fullPath } })
     return
   }
   if (to.meta.guestOnly && isAuthenticated) {
-    next({ name: 'dashboard' })
+    next({ name: 'inicio' })
     return
   }
 

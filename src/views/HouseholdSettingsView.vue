@@ -76,7 +76,7 @@ async function handleLeave() {
     await householdStore.leaveCoupleHousehold()
     closeLeaveModal()
     await subscriptionStore.fetchSubscription()
-    await router.push({ name: 'subscription' })
+    await router.push({ name: 'subscricao' })
   } catch {
     leaveError.value = householdStore.error ?? 'Não foi possível sair.'
   } finally {

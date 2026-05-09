@@ -156,7 +156,7 @@ onUnmounted(() => {
     <!-- No household -->
     <div v-if="!householdStore.household && !householdStore.loading" class="empty-state">
       <p>Configura primeiro o teu household.</p>
-      <router-link to="/dashboard" class="link">Ir para o painel</router-link>
+      <router-link to="/inicio" class="link">Ir para o painel</router-link>
     </div>
 
     <!-- Loading household -->
@@ -266,7 +266,7 @@ onUnmounted(() => {
             <p class="reports-lock-text">
               Sobe de plano para listar e descarregar relatórios mensais automáticos com gráficos e totais.
             </p>
-            <router-link :to="{ name: 'subscription' }" class="btn-confirm">Ver planos</router-link>
+            <router-link :to="{ name: 'subscricao' }" class="btn-confirm">Ver planos</router-link>
           </div>
         </div>
       </div>
