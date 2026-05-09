@@ -10,14 +10,23 @@ import {
   Tooltip,
   Filler,
 } from 'chart.js'
-import type { MonthlyTrend } from '@/types/dashboard'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Filler)
 
+export interface DailyBalancePoint {
+  date: string
+  balance: number
+}
+
 const props = defineProps<{
-  trendData: MonthlyTrend[]
-  currentBalance: number
+  points: DailyBalancePoint[]
   currency: string
+  hideValues?: boolean
+  period?: string
+}>()
+
+const emit = defineEmits<{
+  hover: [point: { date: string; balance: number } | null]
 }>()
 
 const isDark = ref(document.documentElement.classList.contains('dark'))
@@ -34,37 +43,20 @@ onBeforeUnmount(() => {
   observer?.disconnect()
 })
 
-/** Build cumulative balance series working backwards from currentBalance */
-const balanceSeries = computed(() => {
-  const trend = props.trendData
-  if (trend.length === 0) {
-    return { labels: [] as string[], values: [] as number[] }
-  }
+const MONTH_NAMES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 
-  // trend is chronological: oldest first
-  const values: number[] = new Array(trend.length)
-  values[trend.length - 1] = props.currentBalance
-
-  for (let i = trend.length - 2; i >= 0; i--) {
-    values[i] = values[i + 1] - trend[i + 1].savings
-  }
-
-  const labels = trend.map((t) => t.label)
-  return { labels, values }
-})
-
-const chartKey = computed(() => `${isDark.value}-${balanceSeries.value.values.length}`)
+const chartKey = computed(() => `${isDark.value}-${props.points.length}-${props.period}`)
 
 const chartData = computed(() => {
-  const { labels, values } = balanceSeries.value
+  const pts = props.points
   const dark = isDark.value
 
   return {
-    labels,
+    labels: pts.map((p) => p.date),
     datasets: [
       {
         label: 'Saldo',
-        data: values,
+        data: pts.map((p) => p.balance),
         borderColor: dark ? '#4ade80' : '#166534',
         borderWidth: 2.5,
         backgroundColor: (ctx: { chart: { ctx: CanvasRenderingContext2D; chartArea?: { top: number; bottom: number } } }) => {
@@ -95,6 +87,7 @@ const chartData = computed(() => {
 const chartOptions = computed(() => {
   const dark = isDark.value
   const cur = props.currency || 'EUR'
+  const pts = props.points
 
   return {
     responsive: true,
@@ -102,6 +95,15 @@ const chartOptions = computed(() => {
     interaction: {
       mode: 'index' as const,
       intersect: false,
+    },
+    onHover: (_event: unknown, elements: { index: number }[]) => {
+      if (elements.length > 0) {
+        const idx = elements[0].index
+        const pt = pts[idx]
+        if (pt) {
+          emit('hover', { date: pt.date, balance: pt.balance })
+        }
+      }
     },
     plugins: {
       legend: { display: false },
@@ -117,7 +119,15 @@ const chartOptions = computed(() => {
         bodyFont: { size: 14, weight: 'bold' as const },
         displayColors: false,
         callbacks: {
+          title: (items: { dataIndex: number }[]) => {
+            if (items.length === 0) return ''
+            const dateStr = pts[items[0].dataIndex]?.date
+            if (!dateStr) return ''
+            const d = new Date(dateStr + 'T00:00:00')
+            return d.toLocaleDateString('pt-PT', { day: 'numeric', month: 'long', year: 'numeric' })
+          },
           label: (ctx: { raw: unknown }) => {
+            if (props.hideValues) return '••••••'
             const v = Number(ctx.raw)
             return new Intl.NumberFormat('pt-PT', {
               style: 'currency',
@@ -136,6 +146,28 @@ const chartOptions = computed(() => {
           color: dark ? '#64748b' : '#94a3b8',
           font: { size: 12 },
           padding: 8,
+          maxRotation: 0,
+          autoSkip: false,
+          callback: function (_value: unknown, index: number) {
+            const dateStr = pts[index]?.date
+            if (!dateStr) return null
+            const prevDateStr = index > 0 ? pts[index - 1]?.date : null
+
+            if (props.period === '5A') {
+              const y = dateStr.substring(0, 4)
+              const prevY = prevDateStr?.substring(0, 4)
+              if (!prevY || y !== prevY) return y
+              return null
+            }
+
+            const ym = dateStr.substring(0, 7)
+            const prevYm = prevDateStr?.substring(0, 7)
+            if (!prevYm || ym !== prevYm) {
+              const m = Number(dateStr.substring(5, 7))
+              return MONTH_NAMES[m - 1]
+            }
+            return null
+          },
         },
       },
       y: {
@@ -145,10 +177,14 @@ const chartOptions = computed(() => {
     },
   }
 })
+
+function onMouseLeave() {
+  emit('hover', null)
+}
 </script>
 
 <template>
-  <div class="net-worth-chart">
+  <div class="net-worth-chart" @mouseleave="onMouseLeave">
     <Line :key="chartKey" :data="chartData" :options="chartOptions" />
   </div>
 </template>

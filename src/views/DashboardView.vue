@@ -2,6 +2,8 @@
 import { onMounted, onUnmounted, computed, ref, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import type { ExpenseByCategory, IncomeByCategory, MonthlyTrend } from '@/types/dashboard'
+import { dashboardApi } from '@/api/dashboard'
+import type { DailyBalancePoint } from '@/api/dashboard'
 import type { SavingsObjectiveActive, SavingsObjectiveHistory } from '@/types/objective'
 import { objectivesApi } from '@/api/objectives'
 import { useHouseholdStore } from '@/stores/household'
@@ -364,10 +366,8 @@ onMounted(async () => {
           dashboard.invalidateCache()
           await Promise.all([
             dashboard.fetch(true).then(() => {
-              // Reutilizar dados de tendência do dashboard (evita 2 calls duplicados)
               const trend = dashboard.monthlyTrend.value
               if (trend.length > 0) {
-                chartTrendData.value = trend
                 trendChartData.value = trend
               }
             }),
@@ -375,6 +375,7 @@ onMounted(async () => {
             loadObjectivesPreview(),
             subscriptionStore.fetchSubscription(),
             transactionsStore.fetchTransactions({ limit: 5 }),
+            fetchDailyBalance(),
           ])
         }
       })(),
@@ -435,9 +436,6 @@ const accountsToShow = computed(() => accountsStore.accounts)
 
 const currentTotalBalance = computed(() =>
   accountsStore.accounts.reduce((sum, a) => sum + a.balance, 0)
-)
-const formattedCurrentBalance = computed(() =>
-  formatCurrency(currentTotalBalance.value, dashboard.currency.value)
 )
 
 const hasChartData = computed(
@@ -712,35 +710,30 @@ type ChartPeriod = 'YTD' | '3M' | '6M' | '1A' | '5A'
 const chartPeriod = ref<ChartPeriod>('6M')
 const chartPeriods: ChartPeriod[] = ['YTD', '3M', '6M', '1A', '5A']
 
-const chartTrendMonths = computed(() => {
-  if (chartPeriod.value === 'YTD') {
-    // January = month 1, so current month number = months since start of year (including current)
-    return new Date().getMonth() + 1
-  }
-  const map: Record<ChartPeriod, number> = { YTD: 0, '3M': 3, '6M': 6, '1A': 12, '5A': 60 }
-  return map[chartPeriod.value]
-})
-
-const chartTrendData = ref<MonthlyTrend[]>([])
+const dailyBalancePoints = ref<DailyBalancePoint[]>([])
 const chartLoading = ref(false)
 
-async function fetchChartTrend() {
+const chartDays = computed(() => {
+  if (chartPeriod.value === 'YTD') {
+    const now = new Date()
+    const start = new Date(now.getFullYear(), 0, 1)
+    return Math.ceil((now.getTime() - start.getTime()) / 86400000)
+  }
+  const map: Record<string, number> = { '3M': 90, '6M': 180, '1A': 365, '5A': 1825 }
+  return map[chartPeriod.value] ?? 180
+})
+
+async function fetchDailyBalance() {
   chartLoading.value = true
   try {
-    const response = await import('@/api/dashboard').then((m) =>
-      m.dashboardApi.get({ trendMonths: chartTrendMonths.value })
-    )
+    const response = await dashboardApi.getDailyBalance(chartDays.value)
     const res = (response.data ?? response) as unknown as Record<string, unknown>
     const get = (key: string) => res[key] ?? res[key.charAt(0).toUpperCase() + key.slice(1)]
-    const arr = get('monthlyTrend')
-    if (Array.isArray(arr)) {
-      chartTrendData.value = arr.map((x: Record<string, unknown>) => ({
-        year: Number(x.year ?? x.Year) || 0,
-        month: Number(x.month ?? x.Month) || 0,
-        label: String(x.label ?? x.Label ?? ''),
-        income: Number(x.income ?? x.Income) || 0,
-        expenses: Number(x.expenses ?? x.Expenses) || 0,
-        savings: Number(x.savings ?? x.Savings) || 0,
+    const pts = get('points')
+    if (Array.isArray(pts)) {
+      dailyBalancePoints.value = pts.map((x: Record<string, unknown>) => ({
+        date: String(x.date ?? x.Date ?? ''),
+        balance: Number(x.balance ?? x.Balance) || 0,
       }))
     }
   } catch {
@@ -750,7 +743,29 @@ async function fetchChartTrend() {
   }
 }
 
-watch(chartPeriod, () => fetchChartTrend())
+watch(chartPeriod, () => fetchDailyBalance())
+
+const chartHoverPoint = ref<{ date: string; balance: number } | null>(null)
+
+function onChartHover(point: { date: string; balance: number } | null) {
+  chartHoverPoint.value = point
+}
+
+const heroDisplayBalance = computed(() => {
+  if (chartHoverPoint.value) return chartHoverPoint.value.balance
+  return currentTotalBalance.value
+})
+
+const heroDisplayDate = computed(() => {
+  if (chartHoverPoint.value) {
+    const today = new Date()
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+    if (chartHoverPoint.value.date === todayStr) return 'Hoje'
+    const d = new Date(chartHoverPoint.value.date + 'T00:00:00')
+    return d.toLocaleDateString('pt-PT', { day: 'numeric', month: 'long', year: 'numeric' })
+  }
+  return 'Hoje'
+})
 
 /* ── Seletor de período para gráficos de tendência (line + bar) ── */
 type TrendChartPeriod = 'YTD' | '3M' | '6M' | '1A' | '5A'
@@ -835,8 +850,8 @@ const showContent = computed(() =>
                 <svg v-else xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/></svg>
               </button>
             </span>
-            <p class="patrimonio-value">{{ hideValues ? '••••••' : formattedCurrentBalance }}</p>
-            <span class="patrimonio-date">{{ todayLabel }}</span>
+            <p class="patrimonio-value">{{ hideValues ? '••••••' : formatCurrency(heroDisplayBalance, dashboard.currency.value) }}</p>
+            <span class="patrimonio-date">{{ heroDisplayDate }}</span>
             <span v-if="totalAllocatedToObjectives > 0" class="patrimonio-reserved">
               {{ hideValues ? '•••••' : formatCurrency(totalAllocatedToObjectives, dashboard.currency.value) }} reservado para objetivos
               <button type="button" class="settle-btn" @click="openSettleModal" title="Liquidar objetivos concluídos">
@@ -874,10 +889,12 @@ const showContent = computed(() =>
               <div class="spinner"></div>
             </div>
             <NetWorthChart
-              v-else-if="chartTrendData.length > 0"
-              :trend-data="chartTrendData"
-              :current-balance="currentTotalBalance"
+              v-else-if="dailyBalancePoints.length > 0"
+              :points="dailyBalancePoints"
               :currency="dashboard.currency.value"
+              :hide-values="hideValues"
+              :period="chartPeriod"
+              @hover="onChartHover"
             />
             <div v-else class="patrimonio-chart-empty">
               <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="patrimonio-chart-empty-icon"><line x1="3" x2="3" y1="3" y2="21"/><line x1="3" x2="21" y1="21" y2="21"/><line x1="7" x2="7" y1="17" y2="13"/><line x1="12" x2="12" y1="17" y2="8"/><line x1="17" x2="17" y1="17" y2="11"/></svg>
