@@ -162,6 +162,14 @@ export const useAccountsStore = defineStore('accounts', () => {
     }
   }
 
+  function adjustBalance(accountId: string, delta: number) {
+    const idx = accounts.value.findIndex((a) => a.id === accountId)
+    if (idx >= 0) {
+      accounts.value = [...accounts.value]
+      accounts.value[idx] = { ...accounts.value[idx], balance: accounts.value[idx].balance + delta }
+    }
+  }
+
   function clearError() {
     error.value = null
   }
@@ -179,6 +187,7 @@ export const useAccountsStore = defineStore('accounts', () => {
     archiveAccount,
     reactivateAccount,
     deleteAccountWithTransfer,
+    adjustBalance,
     clearError
   }
 })

@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { transactionsApi } from '@/api/transactions'
+import type { GetTransactionsPagedParams } from '@/api/transactions'
 import type {
   Transaction,
   CreateTransactionRequest,
@@ -46,6 +47,9 @@ function mapTransaction(d: { id: string; accountId: string; householdId: string;
 
 export const useTransactionsStore = defineStore('transactions', () => {
   const transactions = ref<Transaction[]>([])
+  const totalCount = ref(0)
+  const currentPage = ref(1)
+  const totalPages = ref(1)
   const loading = ref(false)
   const error = ref<string | null>(null)
 
@@ -55,6 +59,31 @@ export const useTransactionsStore = defineStore('transactions', () => {
     try {
       const { data } = await transactionsApi.getAll(params)
       transactions.value = data.map(mapTransaction)
+      return transactions.value
+    } catch (e: unknown) {
+      if (!isHandledPlanRestrictionError(e)) {
+        error.value = extractError(e)
+      } else {
+        error.value = null
+      }
+      throw e
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function fetchTransactionsPaged(params?: GetTransactionsPagedParams) {
+    loading.value = true
+    error.value = null
+    try {
+      const { data } = await transactionsApi.getPaged(params)
+      const res = data as unknown as Record<string, unknown>
+      const get = (key: string) => res[key] ?? res[key.charAt(0).toUpperCase() + key.slice(1)]
+      const items = get('items')
+      transactions.value = Array.isArray(items) ? items.map(mapTransaction) : []
+      totalCount.value = Number(get('totalCount')) || 0
+      currentPage.value = Number(get('page')) || 1
+      totalPages.value = Number(get('totalPages')) || 1
       return transactions.value
     } catch (e: unknown) {
       if (!isHandledPlanRestrictionError(e)) {
@@ -138,9 +167,13 @@ export const useTransactionsStore = defineStore('transactions', () => {
 
   return {
     transactions,
+    totalCount,
+    currentPage,
+    totalPages,
     loading,
     error,
     fetchTransactions,
+    fetchTransactionsPaged,
     createTransaction,
     updateTransaction,
     deleteTransaction,

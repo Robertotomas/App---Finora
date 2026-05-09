@@ -8,6 +8,7 @@ import { useHouseholdStore } from '@/stores/household'
 import { useAuthStore } from '@/stores/auth'
 import { useSubscriptionStore } from '@/stores/subscription'
 import { householdApi } from '@/api/household'
+import { transactionsApi } from '@/api/transactions'
 import TransactionFormModal from '@/components/TransactionFormModal.vue'
 import RecurringFormModal from '@/components/RecurringFormModal.vue'
 import TransactionTypeSelectionModal from '@/components/TransactionTypeSelectionModal.vue'
@@ -63,6 +64,13 @@ const recurringToRemove = ref<RecurringTransaction | null>(null)
 
 const members = ref<HouseholdMember[]>([])
 const membersLoading = ref(false)
+const membersLoaded = ref(false)
+
+const membersMap = computed(() => {
+  const map = new Map<string, HouseholdMember>()
+  for (const m of members.value) map.set(m.id, m)
+  return map
+})
 
 const filterAccountId = ref<string>('')
 const _txInitToday = new Date()
@@ -130,7 +138,7 @@ const defaultDateForNewTransaction = computed(() => {
 })
 
 const page = ref(1)
-const pageSize = 20
+const pageSize = 10
 
 const actionLoading = ref(false)
 
@@ -511,11 +519,11 @@ async function fetchSummaryTransactions() {
     if (summaryDateFrom.value) params.from = summaryDateFrom.value
     if (summaryDateTo.value) params.to = summaryDateTo.value
     if (summaryFilterAccount.value) params.accountId = summaryFilterAccount.value
-    const [result] = await Promise.all([
-      transactionsStore.fetchTransactions(params),
-      recurringStore.fetchRecurring()
+    const [txResponse] = await Promise.all([
+      transactionsApi.getAll(params),
+      recurringStore.recurring.length === 0 ? recurringStore.fetchRecurring() : Promise.resolve(recurringStore.recurring),
     ])
-    const regular: Transaction[] = result ?? []
+    const regular: Transaction[] = (txResponse.data ?? []) as Transaction[]
 
     // Expand recurring transactions into virtual entries for each month in range
     // Use YYYY-MM string comparison to avoid timezone issues
@@ -570,6 +578,35 @@ const summaryFiltered = computed(() => {
   }
   list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
   return list
+})
+
+const summaryPage = ref(1)
+const summaryTotalPages = computed(() => Math.max(1, Math.ceil(summaryFiltered.value.length / pageSize)))
+const summaryPaginated = computed(() => {
+  const start = (summaryPage.value - 1) * pageSize
+  return summaryFiltered.value.slice(start, start + pageSize)
+})
+const canPrevSummaryPage = computed(() => summaryPage.value > 1)
+const canNextSummaryPage = computed(() => summaryPage.value < summaryTotalPages.value)
+function prevSummaryPage() { if (canPrevSummaryPage.value) summaryPage.value-- }
+function nextSummaryPage() { if (canNextSummaryPage.value) summaryPage.value++ }
+function goToSummaryPage(p: number) { summaryPage.value = p }
+const visibleSummaryPages = computed(() => {
+  const total = summaryTotalPages.value
+  const current = summaryPage.value
+  const pages: (number | '...')[] = []
+  if (total <= 7) {
+    for (let i = 1; i <= total; i++) pages.push(i)
+  } else {
+    pages.push(1)
+    if (current > 3) pages.push('...')
+    const start = Math.max(2, current - 1)
+    const end = Math.min(total - 1, current + 1)
+    for (let i = start; i <= end; i++) pages.push(i)
+    if (current < total - 2) pages.push('...')
+    pages.push(total)
+  }
+  return pages
 })
 
 const summaryTotalIncome = computed(() => summaryFiltered.value.filter(t => t.type === TransactionType.Income).reduce((s, t) => s + t.amount, 0))
@@ -713,6 +750,7 @@ const categoryColors: Record<number, string> = {
 }
 
 watch([summaryDateFrom, summaryDateTo, summaryFilterAccount], () => {
+  summaryPage.value = 1
   if (activeTab.value === 'summary') fetchSummaryTransactions()
 })
 
@@ -745,11 +783,7 @@ const filteredTransactions = computed(() => {
   return list
 })
 
-const paginatedTransactions = computed(() => {
-  const list = filteredTransactions.value
-  const start = (page.value - 1) * pageSize
-  return list.slice(start, start + pageSize)
-})
+const paginatedTransactions = computed(() => filteredTransactions.value)
 
 const currentYear = now.getFullYear()
 const currentMonth = now.getMonth() + 1
@@ -825,23 +859,57 @@ const filteredRecurring = computed(() => {
   return list
 })
 
-const totalPages = computed(() =>
-  Math.max(1, Math.ceil(filteredTransactions.value.length / pageSize))
-)
+const recPage = ref(1)
+const recTotalPages = computed(() => Math.max(1, Math.ceil(filteredRecurring.value.length / pageSize)))
+const paginatedRecurring = computed(() => {
+  const start = (recPage.value - 1) * pageSize
+  return filteredRecurring.value.slice(start, start + pageSize)
+})
+const canPrevRecPage = computed(() => recPage.value > 1)
+const canNextRecPage = computed(() => recPage.value < recTotalPages.value)
+function prevRecPage() { if (canPrevRecPage.value) recPage.value-- }
+function nextRecPage() { if (canNextRecPage.value) recPage.value++ }
+function goToRecPage(p: number) { recPage.value = p }
+const visibleRecPages = computed(() => {
+  const total = recTotalPages.value
+  const current = recPage.value
+  const pages: (number | '...')[] = []
+  if (total <= 7) {
+    for (let i = 1; i <= total; i++) pages.push(i)
+  } else {
+    pages.push(1)
+    if (current > 3) pages.push('...')
+    const start = Math.max(2, current - 1)
+    const end = Math.min(total - 1, current + 1)
+    for (let i = start; i <= end; i++) pages.push(i)
+    if (current < total - 2) pages.push('...')
+    pages.push(total)
+  }
+  return pages
+})
+
+const totalPages = computed(() => transactionsStore.totalPages)
 
 const canPrevPage = computed(() => page.value > 1)
 const canNextPage = computed(() => page.value < totalPages.value)
 
 function prevPage() {
-  if (canPrevPage.value) page.value--
+  if (canPrevPage.value) {
+    page.value--
+    fetchWithFilters(false)
+  }
 }
 
 function nextPage() {
-  if (canNextPage.value) page.value++
+  if (canNextPage.value) {
+    page.value++
+    fetchWithFilters(false)
+  }
 }
 
 function goToPage(p: number) {
   page.value = p
+  fetchWithFilters(false)
 }
 
 const visiblePages = computed(() => {
@@ -863,10 +931,12 @@ const visiblePages = computed(() => {
 })
 
 async function loadMembers() {
+  if (membersLoaded.value) return
   membersLoading.value = true
   try {
     const { data } = await householdApi.getMembers()
     members.value = data
+    membersLoaded.value = true
   } catch {
     members.value = []
   } finally {
@@ -878,27 +948,34 @@ onMounted(async () => {
   try {
     await householdStore.fetchHousehold()
     if (householdStore.household) {
-      await accountsStore.fetchAccounts()
-      await loadMembers()
-      await fetchWithFilters()
-      await recurringStore.fetchRecurring()
+      await Promise.all([
+        accountsStore.fetchAccounts(),
+        fetchWithFilters(),
+        recurringStore.fetchRecurring(),
+        subscriptionStore.fetchSubscription(),
+        loadMembers(),
+      ])
       if (activeTab.value === 'summary') await fetchSummaryTransactions()
+    } else {
+      await subscriptionStore.fetchSubscription()
     }
-    await subscriptionStore.fetchSubscription()
   } catch {
     // Handled in stores
   }
 })
 
-async function fetchWithFilters() {
-  const params: { accountId?: string; from?: string; to?: string } = {}
+async function fetchWithFilters(resetPage = true) {
+  if (resetPage) page.value = 1
+  const params: { accountId?: string; from?: string; to?: string; page?: number; pageSize?: number } = {
+    page: page.value,
+    pageSize,
+  }
   if (filterAccountId.value) params.accountId = filterAccountId.value
   if (filterFrom.value) params.from = filterFrom.value
   if (filterTo.value) params.to = filterTo.value
 
   try {
-    await transactionsStore.fetchTransactions(params)
-    page.value = 1
+    await transactionsStore.fetchTransactionsPaged(params)
   } catch {
     // Handled in store
   }
@@ -906,10 +983,6 @@ async function fetchWithFilters() {
 
 watch([filterAccountId, filterFrom, filterTo], () => {
   fetchWithFilters()
-})
-
-watch([filterType, filterCategory], () => {
-  page.value = 1
 })
 
 function openCreateModal() {
@@ -927,6 +1000,7 @@ function handleTypeSelection(type: 'income-expense' | 'transfer') {
   typeSelectionModalOpen.value = false
   isTransferMode.value = type === 'transfer'
   transactionsStore.clearError()
+  loadMembers()
   createModalOpen.value = true
 }
 
@@ -967,6 +1041,7 @@ function openEditModal(tx: Transaction) {
     return
   }
   transactionsStore.clearError()
+  loadMembers()
   transactionToEdit.value = tx
   isTransferMode.value = tx.type === TransactionType.Transfer
   editModalOpen.value = true
@@ -992,7 +1067,15 @@ async function handleCreate(payload: CreateTransactionRequest) {
   actionLoading.value = true
   try {
     await transactionsStore.createTransaction(payload)
-    await accountsStore.fetchAccounts()
+    // Update account balances locally instead of re-fetching
+    if (payload.type === TransactionType.Transfer && payload.destinationAccountId) {
+      accountsStore.adjustBalance(payload.accountId, -payload.amount)
+      accountsStore.adjustBalance(payload.destinationAccountId, payload.amount)
+    } else {
+      const delta = payload.type === TransactionType.Income ? payload.amount : -payload.amount
+      accountsStore.adjustBalance(payload.accountId, delta)
+    }
+    await fetchWithFilters(false)
     closeCreateModal()
   } catch (e: unknown) {
     const err = e as { response?: { status?: number; data?: { code?: string; message?: string } } }
@@ -1027,9 +1110,25 @@ async function handleCreate(payload: CreateTransactionRequest) {
 async function handleEdit(payload: CreateTransactionRequest) {
   if (!transactionToEdit.value) return
   actionLoading.value = true
+  const old = transactionToEdit.value
   try {
-    await transactionsStore.updateTransaction(transactionToEdit.value.id, payload)
-    await accountsStore.fetchAccounts()
+    await transactionsStore.updateTransaction(old.id, payload)
+    // Revert old balance effects locally
+    if (old.type === TransactionType.Transfer && old.destinationAccountId) {
+      accountsStore.adjustBalance(old.accountId, old.amount)
+      accountsStore.adjustBalance(old.destinationAccountId, -old.amount)
+    } else {
+      const revertDelta = old.type === TransactionType.Income ? -old.amount : old.amount
+      accountsStore.adjustBalance(old.accountId, revertDelta)
+    }
+    // Apply new balance effects locally
+    if (payload.type === TransactionType.Transfer && payload.destinationAccountId) {
+      accountsStore.adjustBalance(payload.accountId, -payload.amount)
+      accountsStore.adjustBalance(payload.destinationAccountId, payload.amount)
+    } else {
+      const applyDelta = payload.type === TransactionType.Income ? payload.amount : -payload.amount
+      accountsStore.adjustBalance(payload.accountId, applyDelta)
+    }
     closeEditModal()
   } catch (e: unknown) {
     const err = e as { response?: { status?: number; data?: { code?: string; message?: string } } }
@@ -1057,9 +1156,18 @@ async function handleEdit(payload: CreateTransactionRequest) {
 async function handleDelete() {
   if (!transactionToDelete.value) return
   actionLoading.value = true
+  const tx = transactionToDelete.value
   try {
-    await transactionsStore.deleteTransaction(transactionToDelete.value.id)
-    await accountsStore.fetchAccounts()
+    await transactionsStore.deleteTransaction(tx.id)
+    // Revert balance effects locally
+    if (tx.type === TransactionType.Transfer && tx.destinationAccountId) {
+      accountsStore.adjustBalance(tx.accountId, tx.amount)
+      accountsStore.adjustBalance(tx.destinationAccountId, -tx.amount)
+    } else {
+      const revertDelta = tx.type === TransactionType.Income ? -tx.amount : tx.amount
+      accountsStore.adjustBalance(tx.accountId, revertDelta)
+    }
+    await fetchWithFilters(false)
     closeDeleteModal()
   } catch {
     // Error shown in store
@@ -1088,14 +1196,15 @@ function formatDate(dateStr: string): string {
 
 function getResponsibleDisplay(tx: Transaction): string {
   if (tx.splits.length === 0) return '-'
+  const map = membersMap.value
   if (tx.splits.length === 1 && tx.splits[0].percentage === 100) {
-    const m = members.value.find((x) => x.id === tx.splits[0].userId)
+    const m = map.get(tx.splits[0].userId)
     if (m) return m.id === authStore.user?.id ? 'Tu' : `${m.firstName} ${m.lastName}`
     return 'Tu'
   }
   return tx.splits
     .map((s) => {
-      const m = members.value.find((x) => x.id === s.userId)
+      const m = map.get(s.userId)
       const name = m ? (m.id === authStore.user?.id ? 'Tu' : m.firstName) : '?'
       return `${name} ${s.percentage}%`
     })
@@ -1556,7 +1665,7 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
               </tr>
             </thead>
             <tbody>
-              <tr v-for="tx in summaryFiltered" :key="tx.id">
+              <tr v-for="tx in summaryPaginated" :key="tx.id">
                 <td class="summary-td-date">{{ new Date(tx.date).toLocaleDateString('pt-PT', { day: '2-digit', month: 'short' }) }}</td>
                 <td class="summary-td-desc">{{ tx.description || TRANSACTION_CATEGORY_LABELS[tx.category] || '—' }}</td>
                 <td>
@@ -1573,6 +1682,18 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
               </tr>
             </tbody>
           </table>
+          <div v-if="summaryTotalPages > 1" class="pagination">
+            <button type="button" class="pg-arrow" :disabled="!canPrevSummaryPage" @click="prevSummaryPage" aria-label="Anterior">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+            </button>
+            <template v-for="(p, i) in visibleSummaryPages" :key="i">
+              <span v-if="p === '...'" class="pg-dots">...</span>
+              <button v-else type="button" class="pg-num" :class="{ active: p === summaryPage }" @click="goToSummaryPage(p)">{{ p }}</button>
+            </template>
+            <button type="button" class="pg-arrow" :disabled="!canNextSummaryPage" @click="nextSummaryPage" aria-label="Seguinte">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+            </button>
+          </div>
         </div>
         <div v-else-if="!summaryLoading" class="section-empty">
           <p>Nenhum movimento encontrado para o período selecionado.</p>
@@ -1874,7 +1995,7 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
             </thead>
             <tbody>
               <tr
-                v-for="r in filteredRecurring"
+                v-for="r in paginatedRecurring"
                 :key="r.id"
                 class="table-row"
               >
@@ -1911,6 +2032,18 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
               </tr>
             </tbody>
           </table>
+          <div v-if="recTotalPages > 1" class="pagination">
+            <button type="button" class="pg-arrow" :disabled="!canPrevRecPage" @click="prevRecPage" aria-label="Anterior">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+            </button>
+            <template v-for="(p, i) in visibleRecPages" :key="i">
+              <span v-if="p === '...'" class="pg-dots">...</span>
+              <button v-else type="button" class="pg-num" :class="{ active: p === recPage }" @click="goToRecPage(p)">{{ p }}</button>
+            </template>
+            <button type="button" class="pg-arrow" :disabled="!canNextRecPage" @click="nextRecPage" aria-label="Seguinte">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -2571,14 +2704,13 @@ html.dark .amount-transfer {
 }
 
 .pg-num.active {
-  background: #166534;
-  color: #fff;
-  font-weight: 700;
+  background: #e5e7eb;
+  color: #111827;
 }
 
 html.dark .pg-num.active {
-  background: #4ade80;
-  color: #0a0a0a;
+  background: #374151;
+  color: #f3f4f6;
 }
 
 .pg-dots {

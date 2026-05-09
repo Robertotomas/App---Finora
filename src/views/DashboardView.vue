@@ -700,10 +700,6 @@ loadCardOrder()
 
 const hideValues = ref(false)
 
-const todayLabel = computed(() => {
-  const d = new Date()
-  return d.toLocaleDateString('pt-PT', { day: 'numeric', month: 'long', year: 'numeric' })
-})
 
 /* ── Net worth chart period filter ── */
 type ChartPeriod = 'YTD' | '3M' | '6M' | '1A' | '5A'
