@@ -1283,7 +1283,7 @@ const showContent = computed(() =>
                 <span class="comparison-label">Real</span>
                 <span class="comparison-value">{{ hideValues ? '••••• €' : formattedIncome }}</span>
               </div>
-              <div v-if="budgetForPeriod.expectedIncome > 0 && !hideValues" class="comparison-diff">
+              <div v-if="budgetForPeriod.expectedIncome > 0 && !hideValues" class="comparison-diff" :class="dashboard.monthlyIncome.value >= budgetForPeriod.expectedIncome ? 'comparison-diff--good' : 'comparison-diff--over'">
                 {{ dashboard.monthlyIncome.value >= budgetForPeriod.expectedIncome ? '✓' : '' }}
                 {{ formatCurrency(dashboard.monthlyIncome.value - budgetForPeriod.expectedIncome, dashboard.currency.value) }}
                 {{ dashboard.monthlyIncome.value >= budgetForPeriod.expectedIncome ? 'acima' : 'abaixo' }}
@@ -1299,7 +1299,7 @@ const showContent = computed(() =>
                 <span class="comparison-label">Real</span>
                 <span class="comparison-value">{{ hideValues ? '••••• €' : formattedExpenses }}</span>
               </div>
-              <div v-if="budgetForPeriod.expectedExpenses > 0 && !hideValues" class="comparison-diff" :class="{ 'comparison-diff--over': dashboard.monthlyExpenses.value > budgetForPeriod.expectedExpenses }">
+              <div v-if="budgetForPeriod.expectedExpenses > 0 && !hideValues" class="comparison-diff" :class="dashboard.monthlyExpenses.value <= budgetForPeriod.expectedExpenses ? 'comparison-diff--good' : 'comparison-diff--over'">
                 {{ dashboard.monthlyExpenses.value <= budgetForPeriod.expectedExpenses ? '✓' : '' }}
                 {{ formatCurrency(dashboard.monthlyExpenses.value - budgetForPeriod.expectedExpenses, dashboard.currency.value) }}
                 {{ dashboard.monthlyExpenses.value <= budgetForPeriod.expectedExpenses ? 'abaixo do orçamento' : 'acima do orçamento' }}
@@ -1315,7 +1315,7 @@ const showContent = computed(() =>
                 <span class="comparison-label">Real</span>
                 <span class="comparison-value">{{ hideValues ? '••••• €' : formattedSavings }}</span>
               </div>
-              <div v-if="(budgetForPeriod.expectedIncome - budgetForPeriod.expectedExpenses) > 0 && !hideValues" class="comparison-diff" :class="{ 'comparison-diff--over': dashboard.monthlySavings.value < (budgetForPeriod.expectedIncome - budgetForPeriod.expectedExpenses) }">
+              <div v-if="(budgetForPeriod.expectedIncome - budgetForPeriod.expectedExpenses) > 0 && !hideValues" class="comparison-diff" :class="dashboard.monthlySavings.value >= (budgetForPeriod.expectedIncome - budgetForPeriod.expectedExpenses) ? 'comparison-diff--good' : 'comparison-diff--over'">
                 {{ dashboard.monthlySavings.value >= (budgetForPeriod.expectedIncome - budgetForPeriod.expectedExpenses) ? '✓' : '' }}
                 {{ formatCurrency(dashboard.monthlySavings.value - (budgetForPeriod.expectedIncome - budgetForPeriod.expectedExpenses), dashboard.currency.value) }}
                 {{ dashboard.monthlySavings.value >= (budgetForPeriod.expectedIncome - budgetForPeriod.expectedExpenses) ? 'acima do esperado' : 'abaixo do esperado' }}
@@ -1967,6 +1967,14 @@ html.dark .comparison-icon--savings {
   margin-top: 0.5rem;
   padding-top: 0.5rem;
   border-top: 1px dashed var(--color-border);
+}
+
+.comparison-diff--good {
+  color: #16a34a;
+}
+
+html.dark .comparison-diff--good {
+  color: #4ade80;
 }
 
 .comparison-diff--over {

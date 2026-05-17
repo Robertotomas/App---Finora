@@ -84,9 +84,12 @@ async function downloadReport(row: MonthlyReportListItem) {
   }
 }
 
+const generatingOverlay = ref(false)
+
 async function refreshReportPdf(row: MonthlyReportListItem) {
   if (reportsLocked.value || refreshingId.value) return
   refreshingId.value = row.id
+  generatingOverlay.value = true
   error.value = null
   try {
     const updated = await reportsApi.refresh(row.id)
@@ -104,6 +107,7 @@ async function refreshReportPdf(row: MonthlyReportListItem) {
     }
   } finally {
     refreshingId.value = null
+    generatingOverlay.value = false
   }
 }
 
@@ -271,6 +275,17 @@ onUnmounted(() => {
         </div>
       </div>
     </template>
+
+    <!-- Generating overlay -->
+    <Teleport to="body">
+      <div v-if="generatingOverlay" class="generating-overlay">
+        <div class="generating-panel">
+          <div class="spinner"></div>
+          <p class="generating-title">A gerar relatório…</p>
+          <p class="generating-hint">Isto pode demorar alguns segundos. Não feches nem mudes de página.</p>
+        </div>
+      </div>
+    </Teleport>
 
     <!-- PDF Preview modal -->
     <Teleport to="body">
@@ -756,6 +771,46 @@ html.dark .pdf-preview-body {
   height: 100%;
   min-height: 280px;
   color: var(--color-text-muted);
+}
+
+/* ── Generating overlay ── */
+.generating-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+}
+
+.generating-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  max-width: 340px;
+  padding: 2.5rem 2rem;
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
+  text-align: center;
+}
+
+.generating-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.generating-hint {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+  line-height: 1.5;
 }
 
 /* ── Responsive ── */
