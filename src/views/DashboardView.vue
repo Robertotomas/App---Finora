@@ -432,7 +432,9 @@ const isSingleMonth = computed(() => {
 })
 
 /* Contas e património: sempre dados atuais (não afetados pelo filtro) */
-const accountsToShow = computed(() => accountsStore.accounts)
+const accountsToShow = computed(() =>
+  [...accountsStore.accounts].sort((a, b) => b.balance - a.balance)
+)
 
 const currentTotalBalance = computed(() =>
   accountsStore.accounts.reduce((sum, a) => sum + a.balance, 0)

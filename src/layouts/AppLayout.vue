@@ -367,7 +367,8 @@ function isActive(path: string) {
 .app-layout {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
   background: var(--color-bg);
 }
 
@@ -845,6 +846,11 @@ html.dark .theme-btn.active {
   flex: 1;
   min-width: 0;
   overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.main-content::-webkit-scrollbar {
+  display: none;
 }
 
 /* ─── Sidebar collapse toggle ─── */
