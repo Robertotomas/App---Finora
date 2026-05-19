@@ -18,7 +18,7 @@ const router = useRouter()
 const householdStore = useHouseholdStore()
 const subscriptionStore = useSubscriptionStore()
 
-const loading = ref(false)
+const loading = ref(true)
 const saving = ref(false)
 const error = ref<string | null>(null)
 

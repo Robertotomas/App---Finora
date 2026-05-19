@@ -35,7 +35,7 @@ function mapAccount(a: Account): Account {
 
 export const useAccountsStore = defineStore('accounts', () => {
   const accounts = ref<Account[]>([])
-  const loading = ref(false)
+  const loading = ref(true)
   const error = ref<string | null>(null)
 
   const activeAccounts = computed(() => accounts.value.filter((a) => !a.isArchived))

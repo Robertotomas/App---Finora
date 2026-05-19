@@ -50,7 +50,7 @@ export const useTransactionsStore = defineStore('transactions', () => {
   const totalCount = ref(0)
   const currentPage = ref(1)
   const totalPages = ref(1)
-  const loading = ref(false)
+  const loading = ref(true)
   const error = ref<string | null>(null)
 
   async function fetchTransactions(params?: { accountId?: string; from?: string; to?: string; limit?: number }) {

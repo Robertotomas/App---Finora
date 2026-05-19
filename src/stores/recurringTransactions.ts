@@ -64,7 +64,7 @@ function mapRecurring(d: {
 
 export const useRecurringTransactionsStore = defineStore('recurringTransactions', () => {
   const recurring = ref<RecurringTransaction[]>([])
-  const loading = ref(false)
+  const loading = ref(true)
   const error = ref<string | null>(null)
 
   async function fetchRecurring() {
