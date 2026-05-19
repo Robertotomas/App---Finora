@@ -381,7 +381,7 @@ function isActive(path: string) {
 .sidebar {
   width: 240px;
   min-width: 240px;
-  background: linear-gradient(180deg, #14532d 0%, #166534 40%, #15803d 100%);
+  background: #166534;
   color: var(--color-sidebar-text);
   display: flex;
   flex-direction: column;
