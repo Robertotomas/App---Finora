@@ -612,7 +612,7 @@ html.dark .sidebar-nav-icon-reports {
   text-decoration: none;
   cursor: pointer;
   background: transparent;
-  margin-left: 1rem;
+  margin-left: 0.375rem;
 }
 
 .header-brand:hover {
@@ -623,9 +623,9 @@ html.dark .sidebar-nav-icon-reports {
   display: block;
   width: auto;
   height: auto;
-  /* Logo completo (ícone + FinoraFlow) — PNG verde, mesmo ficheiro claro/escuro */
-  max-height: 30px;
-  max-width: min(158px, 54vw);
+  /* Logo completo (ícone + FinoraFlow) */
+  max-height: 44px;
+  max-width: min(210px, 54vw);
   object-fit: contain;
   object-position: left center;
   background: transparent;
@@ -1059,8 +1059,8 @@ html.dark .sidebar-expand-btn:hover {
   }
 
   .header-brand-img {
-    max-height: 26px;
-    max-width: min(130px, 40vw);
+    max-height: 38px;
+    max-width: min(175px, 40vw);
   }
 
   .header-search {
