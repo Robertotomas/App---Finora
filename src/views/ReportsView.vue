@@ -195,7 +195,7 @@ onUnmounted(() => {
           <div v-else-if="!reportsLocked && !loading && items.length === 0" class="empty-card">
             <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="empty-icon"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><polyline points="14 2 14 8 20 8"/><line x1="16" x2="8" y1="13" y2="13"/><line x1="16" x2="8" y1="17" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
             <p class="empty-text">Ainda não há relatórios</p>
-            <p class="empty-hint">Os relatórios são gerados automaticamente quando a API está ativa, com base no teu fuso horário no perfil.</p>
+            <p class="empty-hint">Os relatórios são gerados automaticamente ao fim de cada mês.</p>
           </div>
 
           <!-- Locked placeholder -->
@@ -219,7 +219,7 @@ onUnmounted(() => {
           </template>
 
           <!-- Reports list -->
-          <template v-else-if="!reportsLocked">
+          <template v-else-if="!reportsLocked && items.length > 0">
             <div class="section-label">
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><polyline points="14 2 14 8 20 8"/></svg>
               Relatórios Mensais
