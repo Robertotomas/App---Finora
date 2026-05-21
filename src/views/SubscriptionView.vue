@@ -7,11 +7,13 @@ import { coupleInvitationsApi } from '@/api/coupleInvitations'
 import { useAuthStore } from '@/stores/auth'
 import { userFromProfileResponse } from '@/types/auth'
 import { useHouseholdStore } from '@/stores/household'
+import { useNotificationStore } from '@/stores/notifications'
 
 const router = useRouter()
 const subscriptionStore = useSubscriptionStore()
 const authStore = useAuthStore()
 const householdStore = useHouseholdStore()
+const notificationStore = useNotificationStore()
 const upgrading = ref<SubscriptionPlan | null>(null)
 
 // Couple flow: pedir email antes de confirmar o upgrade
@@ -152,7 +154,7 @@ async function submitPartnerOtp() {
     partnerOtp.value = ''
     authStore.setAuth(data.accessToken, userFromProfileResponse(data.user))
     partnerOtpSuccess.value = 'Conta associada ao agregado do convite.'
-    await Promise.all([subscriptionStore.fetchSubscription(), householdStore.fetchHousehold()])
+    await Promise.all([subscriptionStore.fetchSubscription(), householdStore.fetchHousehold(), notificationStore.fetchUnreadCount()])
   } catch (e: unknown) {
     const err = e as { response?: { data?: { message?: string } } }
     partnerOtpError.value = err.response?.data?.message ?? 'Código inválido ou expirado.'

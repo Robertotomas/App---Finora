@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { transactionsApi } from '@/api/transactions'
+import { useNotificationStore } from '@/stores/notifications'
 import type { GetTransactionsPagedParams } from '@/api/transactions'
 import type {
   Transaction,
@@ -104,6 +105,7 @@ export const useTransactionsStore = defineStore('transactions', () => {
       const { data } = await transactionsApi.create(request)
       const tx = mapTransaction(data)
       transactions.value = [tx, ...transactions.value]
+      useNotificationStore().fetchUnreadCount()
       return tx
     } catch (e: unknown) {
       if (!isHandledPlanRestrictionError(e)) {
@@ -130,6 +132,7 @@ export const useTransactionsStore = defineStore('transactions', () => {
       } else {
         transactions.value = [tx, ...transactions.value]
       }
+      useNotificationStore().fetchUnreadCount()
       return tx
     } catch (e: unknown) {
       if (!isHandledPlanRestrictionError(e)) {
@@ -149,6 +152,7 @@ export const useTransactionsStore = defineStore('transactions', () => {
     try {
       await transactionsApi.delete(id)
       transactions.value = transactions.value.filter((t) => t.id !== id)
+      useNotificationStore().fetchUnreadCount()
     } catch (e: unknown) {
       if (!isHandledPlanRestrictionError(e)) {
         error.value = extractError(e)

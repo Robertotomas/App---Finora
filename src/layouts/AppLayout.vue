@@ -8,11 +8,14 @@ import { useSubscriptionStore } from '@/stores/subscription'
 import iconMale from '@/assets/images/icon-male.png'
 import iconFinoraFlow from '@/assets/images/finoraflow-icon.png'
 import PartnerLeftModal from '@/components/PartnerLeftModal.vue'
+import NotificationBell from '@/components/NotificationBell.vue'
+import { useNotificationStore } from '@/stores/notifications'
 
 const authStore = useAuthStore()
 const themeStore = useThemeStore()
 const householdStore = useHouseholdStore()
 const subscriptionStore = useSubscriptionStore()
+const notificationStore = useNotificationStore()
 const route = useRoute()
 const router = useRouter()
 const userMenuOpen = ref(false)
@@ -73,7 +76,15 @@ onMounted(async () => {
     }
   }
   document.addEventListener('click', handleClickOutside)
-  onUnmounted(() => document.removeEventListener('click', handleClickOutside))
+
+  if (authStore.isAuthenticated) {
+    notificationStore.startPolling()
+  }
+
+  onUnmounted(() => {
+    document.removeEventListener('click', handleClickOutside)
+    notificationStore.stopPolling()
+  })
 })
 
 const planLabel = computed(() => {
@@ -196,6 +207,9 @@ function isActive(path: string) {
               </div>
             </Transition>
           </div>
+
+          <!-- Notification bell -->
+          <NotificationBell v-if="authStore.isAuthenticated" />
 
         <div class="header-search">
           <input type="text" placeholder="Pesquisar..." class="search-input" />

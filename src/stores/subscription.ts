@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { subscriptionApi } from '@/api/subscription'
 import type { SubscriptionLimits, SubscriptionMe, SubscriptionPlan } from '@/types/subscription'
+import { useNotificationStore } from '@/stores/notifications'
 
 export const useSubscriptionStore = defineStore('subscription', () => {
   const subscription = ref<SubscriptionMe | null>(null)
@@ -30,6 +31,7 @@ export const useSubscriptionStore = defineStore('subscription', () => {
     try {
       const { data } = await subscriptionApi.upgrade(plan)
       subscription.value = data
+      useNotificationStore().fetchUnreadCount()
       return data
     } catch (e: unknown) {
       const err = e as { response?: { data?: { message?: string } } }
