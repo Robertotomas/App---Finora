@@ -18,6 +18,7 @@ const router = useRouter()
 const householdStore = useHouseholdStore()
 const subscriptionStore = useSubscriptionStore()
 
+const pageReady = ref(false)
 const loading = ref(true)
 const saving = ref(false)
 const error = ref<string | null>(null)
@@ -286,22 +287,25 @@ onMounted(async () => {
   } catch {
     // handled below
   }
-  if (householdStore.household) {
+  pageReady.value = true
+  if (householdStore.household && !objectivesLocked.value) {
     await loadOverview()
+  } else {
+    loading.value = false
   }
 })
 </script>
 
 <template>
   <div class="objectives-page">
-    <!-- Loading -->
-    <div v-if="!householdStore.household && householdStore.loading" class="loading-state">
+    <!-- Loading until household + subscription resolved -->
+    <div v-if="!pageReady" class="loading-state">
       <div class="spinner"></div>
       <p>A carregar...</p>
     </div>
 
     <!-- No household -->
-    <div v-else-if="!householdStore.household && !householdStore.loading" class="empty-state">
+    <div v-else-if="!householdStore.household" class="empty-state">
       <p>Configura primeiro o teu household.</p>
       <router-link to="/household" class="link">Ir para Household</router-link>
     </div>
@@ -379,13 +383,13 @@ onMounted(async () => {
             </div>
 
             <!-- Loading -->
-            <div v-if="loading" class="loading-state">
+            <div v-if="loading && !objectivesLocked" class="loading-state">
               <div class="spinner"></div>
               <p>A carregar objetivos...</p>
             </div>
 
             <!-- Empty -->
-            <div v-else-if="activeObjectives.length === 0 && !formOpen" class="empty-card">
+            <div v-else-if="activeObjectives.length === 0 && !formOpen && !loading" class="empty-card">
               <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="empty-icon"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/><line x1="22" x2="12" y1="2" y2="12"/></svg>
               <p class="empty-text">Ainda não tens objetivos ativos</p>
               <p class="empty-hint">Cria um objetivo de poupança para começar a acompanhar o progresso.</p>
@@ -475,12 +479,12 @@ onMounted(async () => {
 
           <!-- ═══ HISTORY TAB ═══ -->
           <section v-else>
-            <div v-if="loading" class="loading-state">
+            <div v-if="loading && !objectivesLocked" class="loading-state">
               <div class="spinner"></div>
               <p>A carregar objetivos concluídos...</p>
             </div>
 
-            <div v-else-if="historyObjectives.length === 0" class="empty-card">
+            <div v-else-if="historyObjectives.length === 0 && !loading" class="empty-card">
               <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="empty-icon"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
               <p class="empty-text">Sem objetivos finalizados</p>
               <p class="empty-hint">Quando finalizares um objetivo ativo, ele aparece aqui.</p>
