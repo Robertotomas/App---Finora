@@ -16,6 +16,16 @@ const subscriptionStore = useSubscriptionStore()
 const route = useRoute()
 const router = useRouter()
 const userMenuOpen = ref(false)
+const quickActionOpen = ref(false)
+
+function toggleQuickAction() {
+  quickActionOpen.value = !quickActionOpen.value
+}
+
+function quickAction(path: string) {
+  quickActionOpen.value = false
+  router.push(path)
+}
 
 const SIDEBAR_KEY = 'finora-sidebar-collapsed'
 const sidebarCollapsed = ref(localStorage.getItem(SIDEBAR_KEY) === 'true')
@@ -57,6 +67,9 @@ onMounted(async () => {
     const target = e.target as Element
     if (userMenuOpen.value && !target.closest('.user-menu')) {
       userMenuOpen.value = false
+    }
+    if (quickActionOpen.value && !target.closest('.quick-action-menu')) {
+      quickActionOpen.value = false
     }
   }
   document.addEventListener('click', handleClickOutside)
@@ -151,9 +164,41 @@ function isActive(path: string) {
         />
       </RouterLink>
       <div class="header-actions">
+          <!-- Quick action + button -->
+          <div v-if="authStore.isAuthenticated" class="quick-action-menu">
+            <button type="button" class="quick-action-btn" title="Ação rápida" @click.stop="toggleQuickAction">
+              <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="5" y2="19"/><line x1="5" x2="19" y1="12" y2="12"/></svg>
+            </button>
+            <Transition name="dropdown">
+              <div v-show="quickActionOpen" class="quick-action-dropdown">
+                <button type="button" class="quick-action-item" @click="quickAction('/movimentos?tab=movements&action=new')">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="7" x2="7" y1="18" y2="6"/><polyline points="3 10 7 6 11 10"/><line x1="17" x2="17" y1="6" y2="18"/><polyline points="13 14 17 18 21 14"/></svg>
+                  Movimento
+                </button>
+                <button type="button" class="quick-action-item" @click="quickAction('/movimentos?tab=recurring&action=new')">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                  Recorrente
+                </button>
+                <button type="button" class="quick-action-item" @click="quickAction('/contas?action=new')">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 10h20"/><circle cx="17" cy="15" r="1.5"/></svg>
+                  Conta
+                </button>
+                <button type="button" class="quick-action-item" @click="quickAction('/objetivos?tab=active&action=new')">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/><line x1="22" x2="12" y1="2" y2="12"/></svg>
+                  Objetivo
+                </button>
+                <button type="button" class="quick-action-item" @click="quickAction('/plano-mensal')">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/><path d="m9 16 2 2 4-4"/></svg>
+                  Plano Mensal
+                </button>
+              </div>
+            </Transition>
+          </div>
+
         <div class="header-search">
           <input type="text" placeholder="Pesquisar..." class="search-input" />
         </div>
+
           <div class="user-menu">
             <button
               type="button"
@@ -698,6 +743,69 @@ html.dark .header-brand-img {
 
 .header-actions .search-input {
   width: 100%;
+}
+
+/* ── Quick action button ── */
+.quick-action-menu {
+  position: relative;
+}
+
+.quick-action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 28px;
+  padding: 0 8px;
+  border: none;
+  border-radius: 6px;
+  background: #166534;
+  color: #fff;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.15s;
+}
+
+.quick-action-btn:hover {
+  background: #15803d;
+  transform: scale(1.05);
+}
+
+.quick-action-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 200px;
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  padding: 0.5rem;
+  z-index: 200;
+}
+
+.quick-action-item {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--color-text);
+  background: none;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.12s;
+}
+
+.quick-action-item:hover {
+  background: var(--color-table-row-hover);
+}
+
+.quick-action-item svg {
+  color: var(--color-text-muted);
+  flex-shrink: 0;
 }
 
 .user-menu {

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useAccountsStore } from '@/stores/accounts'
 import { useHouseholdStore } from '@/stores/household'
 import { useSubscriptionStore } from '@/stores/subscription'
@@ -12,6 +13,8 @@ import ArchiveAccountModal from '@/components/ArchiveAccountModal.vue'
 import type { Account, CreateAccountRequest } from '@/types/account'
 import { ACCOUNT_TYPE_LABELS, AccountType } from '@/types/account'
 
+const route = useRoute()
+const router = useRouter()
 const accountsStore = useAccountsStore()
 const subscriptionStore = useSubscriptionStore()
 
@@ -100,6 +103,17 @@ onMounted(async () => {
     await subscriptionStore.fetchSubscription()
   } catch {
     // Handled in stores
+  }
+  if (route.query.action === 'new') {
+    openCreateModal()
+    router.replace({ query: { ...route.query, action: undefined } })
+  }
+})
+
+watch(() => route.query.action, (action) => {
+  if (action === 'new') {
+    openCreateModal()
+    router.replace({ query: { ...route.query, action: undefined } })
   }
 })
 

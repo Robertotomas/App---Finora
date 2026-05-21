@@ -290,8 +290,19 @@ onMounted(async () => {
   pageReady.value = true
   if (householdStore.household && !objectivesLocked.value) {
     await loadOverview()
+    if (route.query.action === 'new') {
+      openCreateForm()
+      router.replace({ query: { ...route.query, action: undefined } })
+    }
   } else {
     loading.value = false
+  }
+})
+
+watch(() => route.query.action, (action) => {
+  if (action === 'new' && !objectivesLocked.value) {
+    openCreateForm()
+    router.replace({ query: { ...route.query, action: undefined } })
   }
 })
 </script>

@@ -45,6 +45,14 @@ watch(() => routeRef.query.tab, (tab) => {
   else activeTab.value = 'dashboard'
 })
 
+watch(() => routeRef.query.action, (action) => {
+  if (action === 'new') {
+    if (activeTab.value === 'recurring') openRecurringCreateModal()
+    else openCreateModal()
+    router.replace({ query: { ...routeRef.query, action: undefined } })
+  }
+})
+
 const typeSelectionModalOpen = ref(false)
 const isTransferMode = ref(false)
 const recTypeSelectionModalOpen = ref(false)
@@ -961,6 +969,11 @@ onMounted(async () => {
     }
   } catch {
     // Handled in stores
+  }
+  if (routeRef.query.action === 'new') {
+    if (activeTab.value === 'recurring') openRecurringCreateModal()
+    else openCreateModal()
+    router.replace({ query: { ...routeRef.query, action: undefined } })
   }
 })
 
