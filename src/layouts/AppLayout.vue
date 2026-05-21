@@ -114,7 +114,9 @@ const movimentsSubItems = [
 ]
 
 const patrimonioItems = [
-  { to: '/contas', label: 'Contas' },
+  { to: '/contas', label: 'Contas', icon: 'wallet', comingSoon: false },
+  { to: '', label: 'Investimentos', icon: 'trending', comingSoon: true },
+  { to: '', label: 'Bens e Valores', icon: 'gem', comingSoon: true },
 ]
 
 const objectivesSubItems = [
@@ -344,18 +346,27 @@ function isActive(path: string) {
           <!-- Section: Património -->
           <div class="sidebar-section">
             <span class="sidebar-section-title">Património</span>
-            <RouterLink
-              v-for="item in patrimonioItems"
-              :key="item.to"
-              :to="item.to"
-              class="sidebar-link"
-              :class="{ active: isActive(item.to) }"
-            >
-              <span class="sidebar-icon">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 10h20"/><circle cx="17" cy="15" r="1.5"/></svg>
+            <template v-for="item in patrimonioItems" :key="item.label">
+              <RouterLink
+                v-if="!item.comingSoon"
+                :to="item.to"
+                class="sidebar-link"
+                :class="{ active: isActive(item.to) }"
+              >
+                <span class="sidebar-icon">
+                  <svg v-if="item.icon === 'wallet'" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 10h20"/><circle cx="17" cy="15" r="1.5"/></svg>
+                </span>
+                <span class="sidebar-label">{{ item.label }}</span>
+              </RouterLink>
+              <span v-else class="sidebar-link sidebar-link--disabled">
+                <span class="sidebar-icon">
+                  <svg v-if="item.icon === 'trending'" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+                  <svg v-else-if="item.icon === 'gem'" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12l4 6-10 13L2 9z"/><path d="M2 9h20"/><path d="m10 3 2 6"/><path d="m14 3-2 6"/><path d="m6.5 9 5.5 13"/><path d="m17.5 9-5.5 13"/></svg>
+                </span>
+                <span class="sidebar-label">{{ item.label }}</span>
+                <span class="coming-soon-badge">Em breve</span>
               </span>
-              <span class="sidebar-label">{{ item.label }}</span>
-            </RouterLink>
+            </template>
           </div>
 
           <!-- Section: Objetivos -->
@@ -513,6 +524,30 @@ html.dark .sidebar {
 html.dark .sidebar-link.active {
   background: rgba(255, 255, 255, 0.1);
   color: #ffffff;
+}
+
+.sidebar-link--disabled {
+  opacity: 0.5;
+  cursor: default;
+  pointer-events: none;
+}
+
+.sidebar-link--disabled .sidebar-label {
+  white-space: nowrap;
+}
+
+.coming-soon-badge {
+  margin-left: auto;
+  font-size: 0.5rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  background: rgba(255, 255, 255, 0.15);
+  color: rgba(255, 255, 255, 0.7);
+  padding: 1px 4px;
+  border-radius: 3px;
+  line-height: 1.3;
+  flex-shrink: 0;
 }
 
 .sidebar-section {
