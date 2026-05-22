@@ -26,6 +26,7 @@ export interface AuthResponse {
 export interface LoginRequest {
   email: string
   password: string
+  timeZoneId?: string
 }
 
 export interface RegisterRequest {
@@ -35,6 +36,7 @@ export interface RegisterRequest {
   lastName: string
   gender?: Gender
   inviteToken?: string
+  timeZoneId?: string
 }
 
 export interface UpdateProfileRequest {

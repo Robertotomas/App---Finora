@@ -18,7 +18,6 @@ const email = ref('')
 const password = ref('')
 const firstName = ref('')
 const lastName = ref('')
-const gender = ref<'Male' | 'Female' | ''>('')
 const error = ref('')
 const loading = ref(false)
 
@@ -65,9 +64,8 @@ async function handleSubmit() {
       password: password.value,
       firstName: firstName.value,
       lastName: lastName.value,
-      ...(gender.value === 'Male' && { gender: 0 }),
-      ...(gender.value === 'Female' && { gender: 1 }),
       ...(inviteToken.value && { inviteToken: inviteToken.value }),
+      timeZoneId: Intl.DateTimeFormat().resolvedOptions().timeZone,
     })
     router.push('/inicio')
   } catch (e: unknown) {
@@ -115,14 +113,6 @@ async function handleSubmit() {
         <div class="auth-field">
           <label for="lastName">Apelido</label>
           <input id="lastName" v-model="lastName" type="text" required placeholder="Silva" />
-        </div>
-        <div class="auth-field">
-          <label for="gender">Género</label>
-          <select id="gender" v-model="gender">
-            <option value="">—</option>
-            <option value="Male">Masculino</option>
-            <option value="Female">Feminino</option>
-          </select>
         </div>
         <div class="auth-field">
           <label for="email">Email</label>

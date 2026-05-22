@@ -20,26 +20,67 @@ const coupleProfileHint = computed(() => {
 const firstName = ref('')
 const lastName = ref('')
 const email = ref('')
-const gender = ref<'Male' | 'Female' | ''>('')
 const timeZoneId = ref('')
+
+const browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+
+const timezoneOptions = [
+  { value: '', label: '— Nenhum (UTC)' },
+  { value: '__auto__', label: `Detetar automaticamente (${browserTimezone})` },
+  { value: 'Europe/Lisbon', label: 'Europe/Lisbon' },
+  { value: 'Europe/London', label: 'Europe/London' },
+  { value: 'Europe/Madrid', label: 'Europe/Madrid' },
+  { value: 'Europe/Paris', label: 'Europe/Paris' },
+  { value: 'Europe/Berlin', label: 'Europe/Berlin' },
+  { value: 'Europe/Rome', label: 'Europe/Rome' },
+  { value: 'Europe/Amsterdam', label: 'Europe/Amsterdam' },
+  { value: 'Europe/Brussels', label: 'Europe/Brussels' },
+  { value: 'Europe/Zurich', label: 'Europe/Zurich' },
+  { value: 'Europe/Warsaw', label: 'Europe/Warsaw' },
+  { value: 'Europe/Athens', label: 'Europe/Athens' },
+  { value: 'Europe/Helsinki', label: 'Europe/Helsinki' },
+  { value: 'Europe/Moscow', label: 'Europe/Moscow' },
+  { value: 'Atlantic/Azores', label: 'Atlantic/Azores' },
+  { value: 'America/New_York', label: 'America/New_York' },
+  { value: 'America/Chicago', label: 'America/Chicago' },
+  { value: 'America/Denver', label: 'America/Denver' },
+  { value: 'America/Los_Angeles', label: 'America/Los_Angeles' },
+  { value: 'America/Sao_Paulo', label: 'America/Sao_Paulo' },
+  { value: 'America/Argentina/Buenos_Aires', label: 'America/Argentina/Buenos_Aires' },
+  { value: 'America/Mexico_City', label: 'America/Mexico_City' },
+  { value: 'America/Toronto', label: 'America/Toronto' },
+  { value: 'Asia/Tokyo', label: 'Asia/Tokyo' },
+  { value: 'Asia/Shanghai', label: 'Asia/Shanghai' },
+  { value: 'Asia/Kolkata', label: 'Asia/Kolkata' },
+  { value: 'Asia/Dubai', label: 'Asia/Dubai' },
+  { value: 'Asia/Singapore', label: 'Asia/Singapore' },
+  { value: 'Australia/Sydney', label: 'Australia/Sydney' },
+  { value: 'Pacific/Auckland', label: 'Pacific/Auckland' },
+  { value: 'Africa/Johannesburg', label: 'Africa/Johannesburg' },
+]
+
+// Ensure user's current tz is in the list (if not already)
+const ensuredOptions = computed(() => {
+  const current = timeZoneId.value
+  if (!current || current === '__auto__' || timezoneOptions.some(o => o.value === current)) {
+    return timezoneOptions
+  }
+  // Insert after "__auto__" option
+  const copy = [...timezoneOptions]
+  copy.splice(2, 0, { value: current, label: current })
+  return copy
+})
 
 const loading = ref(false)
 const saving = ref(false)
 const error = ref('')
 const success = ref(false)
 
-function genderToSelect(g: User['gender']): 'Male' | 'Female' | '' {
-  if (g === 0 || g === 'Male') return 'Male'
-  if (g === 1 || g === 'Female') return 'Female'
-  return ''
-}
-
 function fillFromUser(u: User | null) {
   if (!u) return
   firstName.value = u.firstName
   lastName.value = u.lastName
   email.value = u.email
-  gender.value = genderToSelect(u.gender)
   timeZoneId.value = u.timeZoneId ?? ''
 }
 
@@ -72,8 +113,8 @@ async function handleSubmit() {
     const { data } = await authApi.updateProfile({
       firstName: firstName.value.trim(),
       lastName: lastName.value.trim(),
-      gender: gender.value === 'Male' ? 0 : gender.value === 'Female' ? 1 : null,
-      timeZoneId: timeZoneId.value.trim() || null,
+      gender: null,
+      timeZoneId: timeZoneId.value === '__auto__' ? browserTimezone : (timeZoneId.value.trim() || null),
     })
     authStore.applyUserFromProfileResponse(data)
     fillFromUser(authStore.user)
@@ -120,32 +161,17 @@ async function handleSubmit() {
           <input v-model="lastName" class="field-input" type="text" maxlength="100" required autocomplete="family-name" />
         </label>
 
-        <label class="field">
-          <span class="field-label">Género</span>
-          <select v-model="gender" class="field-input">
-            <option value="">—</option>
-            <option value="Male">Masculino</option>
-            <option value="Female">Feminino</option>
-          </select>
-        </label>
-
-        <label class="field field-readonly">
+<label class="field field-readonly">
           <span class="field-label">Email</span>
           <input :value="email" class="field-input" type="email" disabled readonly />
           <span class="field-hint">O email não pode ser alterado aqui.</span>
         </label>
 
         <label class="field">
-          <span class="field-label">Fuso horário (IANA)</span>
-          <input
-            v-model="timeZoneId"
-            class="field-input"
-            type="text"
-            maxlength="100"
-            placeholder="Europe/Lisbon"
-            autocomplete="off"
-          />
-          <span class="field-hint">Usado para gerar o relatório mensal no dia 1 (mês anterior). Vazio = UTC.</span>
+          <span class="field-label">Fuso horário</span>
+          <select v-model="timeZoneId" class="field-input">
+            <option v-for="tz in ensuredOptions" :key="tz.value" :value="tz.value">{{ tz.label }}</option>
+          </select>
         </label>
 
         <div class="form-actions">

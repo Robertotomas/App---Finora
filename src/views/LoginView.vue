@@ -18,7 +18,8 @@ async function handleSubmit() {
   error.value = ''
   loading.value = true
   try {
-    await authStore.login({ email: email.value, password: password.value })
+    const timeZoneId = Intl.DateTimeFormat().resolvedOptions().timeZone
+    await authStore.login({ email: email.value, password: password.value, timeZoneId })
     const redirect = (route.query.redirect as string) || '/inicio'
     router.push(redirect)
   } catch (e: unknown) {
