@@ -1112,7 +1112,7 @@ const showContent = computed(() =>
               </div>
             </div>
           </div>
-          <div v-if="trendChartData.length > 1" class="chart-card">
+          <div class="chart-card">
             <h3 class="chart-title">Receitas vs Despesas</h3>
             <div class="trend-charts-scroll" :class="{ 'trend-charts-scroll--wide': trendChartData.length > 8 }">
               <div class="trend-charts-inner" :style="trendChartData.length > 8 ? { minWidth: (trendChartData.length * 80) + 'px' } : {}">

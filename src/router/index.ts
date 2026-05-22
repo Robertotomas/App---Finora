@@ -17,6 +17,12 @@ const router = createRouter({
       meta: { requiresAuth: false, guestOnly: true },
     },
     {
+      path: '/subscricao',
+      name: 'subscricao',
+      component: () => import('@/views/SubscriptionView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
       path: '/',
       component: () => import('@/layouts/AppLayout.vue'),
       children: [
@@ -60,12 +66,6 @@ const router = createRouter({
           path: 'relatorios',
           name: 'relatorios',
           component: () => import('@/views/ReportsView.vue'),
-          meta: { requiresAuth: true },
-        },
-        {
-          path: 'subscricao',
-          name: 'subscricao',
-          component: () => import('@/views/SubscriptionView.vue'),
           meta: { requiresAuth: true },
         },
         {
