@@ -255,7 +255,7 @@ onMounted(async () => {
         v-for="card in planCards"
         :key="card.plan"
         class="plan-card"
-        :class="{ 'plan-card--highlight': card.highlight }"
+        :class="{ 'plan-card--highlight': currentPlan === card.plan }"
       >
         <div class="plan-body">
           <h2 class="plan-name">{{ card.title }}</h2>

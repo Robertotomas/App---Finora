@@ -539,9 +539,9 @@ watch(() => route.query.action, (action) => {
         <!-- Lock overlay -->
         <div v-if="objectivesLocked" class="lock-overlay" aria-hidden="true">
           <div class="lock-panel">
-            <p class="lock-title">Atualiza o plano para aceder aos objetivos</p>
+            <p class="lock-title">Objetivos nos planos Pro e Couple</p>
             <p class="lock-text">
-              Os teus objetivos mantêm-se guardados. Voltam a aparecer ao atualizares o plano.
+              Atualiza o plano para teres acesso aos objetivos de poupança e acompanhar o teu progresso.
             </p>
             <router-link :to="{ name: 'subscricao' }" class="btn-confirm">Ver planos</router-link>
           </div>

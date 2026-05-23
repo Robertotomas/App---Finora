@@ -896,7 +896,7 @@ const showContent = computed(() =>
             />
             <div v-else class="patrimonio-chart-empty">
               <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="patrimonio-chart-empty-icon"><line x1="3" x2="3" y1="3" y2="21"/><line x1="3" x2="21" y1="21" y2="21"/><line x1="7" x2="7" y1="17" y2="13"/><line x1="12" x2="12" y1="17" y2="8"/><line x1="17" x2="17" y1="17" y2="11"/></svg>
-              <p>Sem dados de evolução disponíveis</p>
+              <p>Sem dados de evolução disponíveis para mostrar</p>
             </div>
           </div>
         </div>
@@ -957,7 +957,7 @@ const showContent = computed(() =>
           </div>
           <div v-else class="static-card-empty">
             <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="static-card-empty-icon"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 10h20"/><circle cx="17" cy="15" r="1.5"/></svg>
-            <p>Veja o saldo das suas contas num só lugar</p>
+            <p>Vê o saldo das tuas contas num só lugar</p>
             <router-link to="/contas?action=new" class="static-card-action">Adicionar</router-link>
           </div>
         </div>
@@ -1023,10 +1023,10 @@ const showContent = computed(() =>
               </div>
               <div v-else-if="objectivesLoaded" class="static-card-empty">
                 <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="static-card-empty-icon"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/><line x1="22" x2="12" y1="2" y2="12"/></svg>
-                <p>Defina objetivos de poupança para acompanhar o progresso</p>
+                <p>Define objetivos de poupança para acompanhar o teu progresso</p>
                 <router-link
                   v-if="subscriptionStore.canAccessObjectives"
-                  :to="{ name: 'objetivos' }"
+                  :to="{ name: 'objetivos', query: { action: 'new' } }"
                   class="static-card-action"
                 >Criar objetivo</router-link>
                 <router-link v-else :to="{ name: 'subscricao' }" class="static-card-action">Ver planos</router-link>
@@ -1325,7 +1325,7 @@ const showContent = computed(() =>
             </div>
           </div>
           <div v-else class="section-empty">
-            <p class="section-empty-text">Ainda não definiste o teu plano mensal.</p>
+            <p class="section-empty-text">Ainda não definiste o teu plano mensal</p>
             <router-link to="/plano-mensal" class="btn-section-add">Adicionar plano mensal</router-link>
           </div>
         </div>
@@ -1365,7 +1365,7 @@ const showContent = computed(() =>
 
           <div v-else class="settle-list">
             <div v-if="objectivesHistory.length === 0" class="settle-empty">
-              <p>Nenhum objetivo concluído por liquidar.</p>
+              <p>Nenhum objetivo concluído por liquidar</p>
             </div>
             <div v-for="h in objectivesHistory" :key="h.id" class="settle-item">
               <div class="settle-item-info">
