@@ -1413,7 +1413,7 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
   <div class="transactions-view">
     <div class="page-header">
       <h1>{{ activeTab === 'recurring' ? 'Transações Recorrentes' : activeTab === 'dashboard' ? 'Dashboard' : 'Movimentos' }}</h1>
-      <p class="subtitle">{{ activeTab === 'recurring' ? 'Gerir transações automáticas' : activeTab === 'dashboard' ? 'Visão geral das receitas e despesas' : 'Gerir receitas e despesas' }}</p>
+      <p class="subtitle">{{ activeTab === 'recurring' ? 'Receitas e despesas que se repetem mensalmente e/ou anualmente. São contabilizadas a partir do mês e/ou ano atual.' : activeTab === 'dashboard' ? 'Visão geral das receitas e despesas' : 'Gerir receitas e despesas' }}</p>
     </div>
 
     <div v-if="!householdStore.household && !householdStore.loading" class="empty-state">
@@ -1934,7 +1934,6 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
           <router-link :to="{ name: 'contas' }" class="primary-inline-link">Escolhe a conta principal em Contas</router-link>
           <span> para gerires recorrentes no plano Free com várias contas.</span>
         </div>
-        <p class="recurring-hint">Receitas e despesas que se repetem mensalmente. São contabilizadas a partir do mês atual.</p>
         <div class="toolbar">
           <div class="filters">
             <div ref="recTypeDropRef" class="custom-dropdown">

@@ -111,7 +111,7 @@ html.dark .select-period-naked:focus {
 .app-layout main.main-content .page-header .greeting,
 .app-layout main.main-content .page-header .email {
   color: var(--color-text-muted);
-  font-size: 0.9375rem;
+  font-size: 0.8125rem;
   margin: 0;
   line-height: 1.5;
   max-width: 42rem;
