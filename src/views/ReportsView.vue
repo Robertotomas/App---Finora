@@ -176,7 +176,7 @@ onUnmounted(() => {
       <div class="page-header">
         <div class="page-header-text">
           <h1 class="page-title">Relatórios</h1>
-          <p class="page-subtitle">PDFs mensais com resumo de receitas, despesas e gráficos</p>
+          <p class="page-subtitle">Relatórios mensais com resumo de receitas, despesas e gráficos</p>
         </div>
       </div>
 
@@ -285,9 +285,9 @@ onUnmounted(() => {
         <!-- Lock overlay -->
         <div v-if="reportsLocked" class="reports-lock-overlay" aria-hidden="true">
           <div class="reports-lock-panel">
-            <p class="reports-lock-title">Relatórios PDF nos planos Pro e Couple</p>
+            <p class="reports-lock-title">Relatórios nos planos Pro e Couple</p>
             <p class="reports-lock-text">
-              Sobe de plano para listar e descarregar relatórios mensais automáticos com gráficos e totais.
+              Atualiza o plano para teres acesso aos relatórios mensais automáticos com resumos e gráficos.
             </p>
             <router-link :to="{ name: 'subscricao' }" class="btn-confirm">Ver planos</router-link>
           </div>

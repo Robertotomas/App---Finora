@@ -96,11 +96,12 @@ function isPrimaryBadge(account: Account): boolean {
 
 onMounted(async () => {
   try {
-    await householdStore.fetchHousehold()
-    if (householdStore.household) {
-      await accountsStore.fetchAccounts()
-    }
-    await subscriptionStore.fetchSubscription()
+    await Promise.all([
+      householdStore.fetchHousehold().then(() => {
+        if (householdStore.household) return accountsStore.fetchAccounts()
+      }),
+      subscriptionStore.fetchSubscription(),
+    ])
   } catch {
     // Handled in stores
   }

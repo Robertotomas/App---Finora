@@ -956,9 +956,9 @@ const showContent = computed(() =>
             </router-link>
           </div>
           <div v-else class="static-card-empty">
-            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="static-card-empty-icon"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
+            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="static-card-empty-icon"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 10h20"/><circle cx="17" cy="15" r="1.5"/></svg>
             <p>Veja o saldo das suas contas num só lugar</p>
-            <router-link to="/contas" class="static-card-action">Adicionar</router-link>
+            <router-link to="/contas?action=new" class="static-card-action">Adicionar</router-link>
           </div>
         </div>
 
@@ -1022,7 +1022,7 @@ const showContent = computed(() =>
                 </div>
               </div>
               <div v-else-if="objectivesLoaded" class="static-card-empty">
-                <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="static-card-empty-icon"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+                <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="static-card-empty-icon"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/><line x1="22" x2="12" y1="2" y2="12"/></svg>
                 <p>Defina objetivos de poupança para acompanhar o progresso</p>
                 <router-link
                   v-if="subscriptionStore.canAccessObjectives"
@@ -1080,9 +1080,9 @@ const showContent = computed(() =>
             </router-link>
           </div>
           <div v-else class="static-card-empty">
-            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="static-card-empty-icon"><circle cx="12" cy="12" r="10"/><path d="M15 9.354a4 4 0 1 0 0 5.292M9 12h7"/></svg>
+            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="static-card-empty-icon"><line x1="7" x2="7" y1="18" y2="6"/><polyline points="3 10 7 6 11 10"/><line x1="17" x2="17" y1="6" y2="18"/><polyline points="13 14 17 18 21 14"/></svg>
             <p>Nenhum movimento registado</p>
-            <router-link to="/movimentos" class="static-card-action">Adicionar</router-link>
+            <router-link to="/movimentos?tab=movements&action=new" class="static-card-action">Adicionar</router-link>
           </div>
         </div>
         </template>
@@ -1326,7 +1326,7 @@ const showContent = computed(() =>
           </div>
           <div v-else class="section-empty">
             <p class="section-empty-text">Ainda não definiste o teu plano mensal.</p>
-            <router-link to="/plano-mensal" class="btn-section-add">Adicionar o seu plano mensal</router-link>
+            <router-link to="/plano-mensal" class="btn-section-add">Adicionar plano mensal</router-link>
           </div>
         </div>
         </template>
