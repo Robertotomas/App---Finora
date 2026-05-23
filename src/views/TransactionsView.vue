@@ -2353,17 +2353,12 @@ html.dark .tab.active {
 }
 
 .custom-dropdown-btn:hover {
-  border-color: #166534;
+  border-color: var(--color-text-muted);
 }
 
 .custom-dropdown-btn.active {
-  border-color: #166534;
-  color: #166534;
-}
-
-html.dark .custom-dropdown-btn.active {
-  border-color: #4ade80;
-  color: #4ade80;
+  border-color: var(--color-text-muted);
+  color: var(--color-text);
 }
 
 .custom-dropdown-chevron {
