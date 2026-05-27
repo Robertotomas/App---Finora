@@ -89,27 +89,18 @@ const filterTo = ref(_txInitTodayStr)
 const filterType = ref<'' | 'income' | 'expense' | 'transfer'>('')
 const filterCategory = ref<string>('')
 
-const typeDropOpen = ref(false)
 const catDropOpen = ref(false)
 const accDropOpen = ref(false)
-const typeDropRef = ref<HTMLElement | null>(null)
 const catDropRef = ref<HTMLElement | null>(null)
 const accDropRef = ref<HTMLElement | null>(null)
 
-function toggleTypeDrop() { typeDropOpen.value = !typeDropOpen.value; catDropOpen.value = false; accDropOpen.value = false }
-function toggleCatDrop() { catDropOpen.value = !catDropOpen.value; typeDropOpen.value = false; accDropOpen.value = false }
-function toggleAccDrop() { accDropOpen.value = !accDropOpen.value; typeDropOpen.value = false; catDropOpen.value = false }
+function toggleCatDrop() { catDropOpen.value = !catDropOpen.value; accDropOpen.value = false }
+function toggleAccDrop() { accDropOpen.value = !accDropOpen.value; catDropOpen.value = false }
 
-function pickType(val: '' | 'income' | 'expense' | 'transfer') { filterType.value = val; typeDropOpen.value = false }
+function pickType(val: '' | 'income' | 'expense' | 'transfer') { filterType.value = val }
 function pickCategory(val: string) { filterCategory.value = val; catDropOpen.value = false }
 function pickAccount(val: string) { filterAccountId.value = val; accDropOpen.value = false }
 
-const typeLabel = computed(() => {
-  if (filterType.value === 'income') return 'Receita'
-  if (filterType.value === 'expense') return 'Despesa'
-  if (filterType.value === 'transfer') return 'Transferência'
-  return 'Todos os tipos'
-})
 const categoryLabel = computed(() => {
   if (filterCategory.value) return TRANSACTION_CATEGORY_LABELS[Number(filterCategory.value) as TransactionCategory] || 'Categoria'
   return 'Todas as categorias'
@@ -498,13 +489,11 @@ function onTxDatePickerOutsideClick(e: MouseEvent) {
 
 function onDropdownOutsideClick(e: MouseEvent) {
   const t = e.target as Node
-  if (typeDropOpen.value && typeDropRef.value && !typeDropRef.value.contains(t)) typeDropOpen.value = false
   if (catDropOpen.value && catDropRef.value && !catDropRef.value.contains(t)) catDropOpen.value = false
   if (accDropOpen.value && accDropRef.value && !accDropRef.value.contains(t)) accDropOpen.value = false
   if (sumTypeDropOpen.value && sumTypeDropRef.value && !sumTypeDropRef.value.contains(t)) sumTypeDropOpen.value = false
   if (sumCatDropOpen.value && sumCatDropRef.value && !sumCatDropRef.value.contains(t)) sumCatDropOpen.value = false
   if (sumAccDropOpen.value && sumAccDropRef.value && !sumAccDropRef.value.contains(t)) sumAccDropOpen.value = false
-  if (recTypeDropOpen.value && recTypeDropRef.value && !recTypeDropRef.value.contains(t)) recTypeDropOpen.value = false
   if (recCatDropOpen.value && recCatDropRef.value && !recCatDropRef.value.contains(t)) recCatDropOpen.value = false
   if (recAccDropOpen.value && recAccDropRef.value && !recAccDropRef.value.contains(t)) recAccDropOpen.value = false
 }
@@ -512,11 +501,13 @@ function onDropdownOutsideClick(e: MouseEvent) {
 onMounted(() => {
   document.addEventListener('click', onDatePickerOutsideClick, true)
   document.addEventListener('click', onTxDatePickerOutsideClick, true)
+  document.addEventListener('click', onRecDatePickerOutsideClick, true)
   document.addEventListener('click', onDropdownOutsideClick, true)
 })
 onUnmounted(() => {
   document.removeEventListener('click', onDatePickerOutsideClick, true)
   document.removeEventListener('click', onTxDatePickerOutsideClick, true)
+  document.removeEventListener('click', onRecDatePickerOutsideClick, true)
   document.removeEventListener('click', onDropdownOutsideClick, true)
 })
 
@@ -793,43 +784,92 @@ const filteredTransactions = computed(() => {
 
 const paginatedTransactions = computed(() => filteredTransactions.value)
 
+const recurringInRange = computed(() => {
+  const fromYM = filterFrom.value ? filterFrom.value.slice(0, 7) : null
+  const toYM = filterTo.value ? filterTo.value.slice(0, 7) : null
+  const entries: { type: number; amount: number }[] = []
+  for (const r of recurringStore.recurring) {
+    let y = r.startYear
+    let m = r.startMonth
+    const endY = r.endYear ?? new Date().getFullYear()
+    const endM = r.endMonth ?? new Date().getMonth() + 1
+    while (y < endY || (y === endY && m <= endM)) {
+      const ym = `${y}-${String(m).padStart(2, '0')}`
+      const inRange = (!fromYM || ym >= fromYM) && (!toYM || ym <= toYM)
+      if (inRange) {
+        const amt = r.frequency === RecurringFrequency.Annual
+          ? Math.round((r.amount / 12) * 100) / 100
+          : r.amount
+        entries.push({ type: r.type, amount: amt })
+      }
+      m++
+      if (m > 12) { m = 1; y++ }
+    }
+  }
+  return entries
+})
+
+const allTransactionsFiltered = computed(() => {
+  let list = transactionsStore.transactions
+  if (filterCategory.value) {
+    const catVal = Number(filterCategory.value)
+    list = list.filter(tx => tx.category === catVal)
+  }
+  return list
+})
+
+const txTotalIncome = computed(() => {
+  const fromTx = allTransactionsFiltered.value
+    .filter(tx => tx.type === TransactionType.Income)
+    .reduce((sum, tx) => sum + tx.amount, 0)
+  const fromRec = recurringInRange.value
+    .filter(e => e.type === TransactionType.Income)
+    .reduce((sum, e) => sum + e.amount, 0)
+  return fromTx + fromRec
+})
+const txTotalExpenses = computed(() => {
+  const fromTx = allTransactionsFiltered.value
+    .filter(tx => tx.type === TransactionType.Expense)
+    .reduce((sum, tx) => sum + tx.amount, 0)
+  const fromRec = recurringInRange.value
+    .filter(e => e.type === TransactionType.Expense)
+    .reduce((sum, e) => sum + e.amount, 0)
+  return fromTx + fromRec
+})
+const txBalance = computed(() => txTotalIncome.value - txTotalExpenses.value)
+
 const currentYear = now.getFullYear()
 const currentMonth = now.getMonth() + 1
-const activeRecurring = computed(() =>
-  recurringStore.recurring.filter((r) => {
-    if (!r.endMonth || !r.endYear) return true
-    if (r.endYear > currentYear) return true
-    if (r.endYear === currentYear && r.endMonth > currentMonth) return true
-    return false
+const activeRecurring = computed(() => {
+  const fromYM = recFilterFrom.value ? recFilterFrom.value.slice(0, 7) : null
+  const toYM = recFilterTo.value ? recFilterTo.value.slice(0, 7) : null
+  return recurringStore.recurring.filter((r) => {
+    const startYM = `${r.startYear}-${String(r.startMonth).padStart(2, '0')}`
+    if (toYM && startYM > toYM) return false
+    if (r.endYear && r.endMonth) {
+      const endYM = `${r.endYear}-${String(r.endMonth).padStart(2, '0')}`
+      if (fromYM && endYM < fromYM) return false
+    }
+    return true
   })
-)
+})
 
 // Recurring tab filters
 const recFilterType = ref<'' | 'income' | 'expense' | 'transfer'>('')
 const recFilterCategory = ref<string>('')
 const recFilterAccount = ref<string>('')
 
-const recTypeDropOpen = ref(false)
 const recCatDropOpen = ref(false)
 const recAccDropOpen = ref(false)
-const recTypeDropRef = ref<HTMLElement | null>(null)
 const recCatDropRef = ref<HTMLElement | null>(null)
 const recAccDropRef = ref<HTMLElement | null>(null)
 
-function toggleRecTypeDrop() { recTypeDropOpen.value = !recTypeDropOpen.value; recCatDropOpen.value = false; recAccDropOpen.value = false }
-function toggleRecCatDrop() { recCatDropOpen.value = !recCatDropOpen.value; recTypeDropOpen.value = false; recAccDropOpen.value = false }
-function toggleRecAccDrop() { recAccDropOpen.value = !recAccDropOpen.value; recTypeDropOpen.value = false; recCatDropOpen.value = false }
+function toggleRecCatDrop() { recCatDropOpen.value = !recCatDropOpen.value; recAccDropOpen.value = false; recDatePickerOpen.value = false }
+function toggleRecAccDrop() { recAccDropOpen.value = !recAccDropOpen.value; recCatDropOpen.value = false; recDatePickerOpen.value = false }
 
-function pickRecType(val: '' | 'income' | 'expense' | 'transfer') { recFilterType.value = val; recTypeDropOpen.value = false }
 function pickRecCategory(val: string) { recFilterCategory.value = val; recCatDropOpen.value = false }
 function pickRecAccount(val: string) { recFilterAccount.value = val; recAccDropOpen.value = false }
 
-const recTypeLabel = computed(() => {
-  if (recFilterType.value === 'income') return 'Receita'
-  if (recFilterType.value === 'expense') return 'Despesa'
-  if (recFilterType.value === 'transfer') return 'Transferência'
-  return 'Todos os tipos'
-})
 const recCategoryLabel = computed(() => {
   if (recFilterCategory.value) return TRANSACTION_CATEGORY_LABELS[Number(recFilterCategory.value) as TransactionCategory] || 'Categoria'
   return 'Todas as categorias'
@@ -850,6 +890,183 @@ const recAvailableCategories = computed(() => {
 })
 
 watch(recFilterType, () => { recFilterCategory.value = '' })
+
+const recAllFiltered = computed(() => {
+  let list = activeRecurring.value
+  if (recFilterCategory.value) {
+    const catVal = Number(recFilterCategory.value)
+    list = list.filter(r => r.category === catVal)
+  }
+  if (recFilterAccount.value) {
+    list = list.filter(r => r.accountId === recFilterAccount.value || r.destinationAccountId === recFilterAccount.value)
+  }
+  return list
+})
+
+const recExpandedTotals = computed(() => {
+  const fromYM = recFilterFrom.value ? recFilterFrom.value.slice(0, 7) : null
+  const toYM = recFilterTo.value ? recFilterTo.value.slice(0, 7) : null
+  let income = 0
+  let expenses = 0
+  for (const r of recAllFiltered.value) {
+    let y = r.startYear
+    let m = r.startMonth
+    const endY = r.endYear ?? new Date().getFullYear()
+    const endM = r.endMonth ?? new Date().getMonth() + 1
+    while (y < endY || (y === endY && m <= endM)) {
+      const ym = `${y}-${String(m).padStart(2, '0')}`
+      const inRange = (!fromYM || ym >= fromYM) && (!toYM || ym <= toYM)
+      if (inRange) {
+        const amt = r.frequency === RecurringFrequency.Annual
+          ? Math.round((r.amount / 12) * 100) / 100
+          : r.amount
+        if (r.type === TransactionType.Income) income += amt
+        else if (r.type === TransactionType.Expense) expenses += amt
+      }
+      m++
+      if (m > 12) { m = 1; y++ }
+    }
+  }
+  return { income, expenses }
+})
+
+const recTxInRange = computed(() => {
+  return transactionsStore.transactions.filter(tx => {
+    if (recFilterFrom.value && tx.date < recFilterFrom.value) return false
+    if (recFilterTo.value && tx.date > recFilterTo.value) return false
+    return true
+  })
+})
+
+const recTotalIncome = computed(() => {
+  const fromTx = recTxInRange.value
+    .filter(tx => tx.type === TransactionType.Income)
+    .reduce((sum, tx) => sum + tx.amount, 0)
+  return fromTx + recExpandedTotals.value.income
+})
+const recTotalExpenses = computed(() => {
+  const fromTx = recTxInRange.value
+    .filter(tx => tx.type === TransactionType.Expense)
+    .reduce((sum, tx) => sum + tx.amount, 0)
+  return fromTx + recExpandedTotals.value.expenses
+})
+const recBalance = computed(() => recTotalIncome.value - recTotalExpenses.value)
+
+function pickRecTypeToggle(val: '' | 'income' | 'expense' | 'transfer') { recFilterType.value = val }
+
+const recDatePickerRef = ref<HTMLElement | null>(null)
+const recDatePickerOpen = ref(false)
+const _recInitToday = new Date()
+const _recInitMonthStart = `${_recInitToday.getFullYear()}-${String(_recInitToday.getMonth() + 1).padStart(2, '0')}-01`
+const _recInitLast = new Date(_recInitToday.getFullYear(), _recInitToday.getMonth() + 1, 0)
+const _recInitMonthEnd = `${_recInitToday.getFullYear()}-${String(_recInitToday.getMonth() + 1).padStart(2, '0')}-${String(_recInitLast.getDate()).padStart(2, '0')}`
+const recFilterFrom = ref(_recInitMonthStart)
+const recFilterTo = ref(_recInitMonthEnd)
+const recActivePreset = ref<string>('month')
+
+const recPickerLeftYear = ref(_recInitToday.getFullYear())
+const recPickerLeftMonth = ref(_recInitToday.getMonth())
+const recPickerRightYear = computed(() => recPickerLeftMonth.value === 11 ? recPickerLeftYear.value + 1 : recPickerLeftYear.value)
+const recPickerRightMonth = computed(() => recPickerLeftMonth.value === 11 ? 0 : recPickerLeftMonth.value + 1)
+const recPickerSelectStep = ref<'from' | 'to'>('from')
+
+const recLeftDays = computed(() => calendarDays(recPickerLeftYear.value, recPickerLeftMonth.value))
+const recRightDays = computed(() => calendarDays(recPickerRightYear.value, recPickerRightMonth.value))
+
+function recInitPickerFromValues() {
+  if (recFilterFrom.value) {
+    const d = new Date(recFilterFrom.value + 'T00:00:00')
+    recPickerLeftYear.value = d.getFullYear()
+    recPickerLeftMonth.value = d.getMonth()
+  }
+}
+
+function recPickerPrevMonth() {
+  if (recPickerLeftMonth.value === 0) { recPickerLeftMonth.value = 11; recPickerLeftYear.value-- }
+  else recPickerLeftMonth.value--
+}
+
+function recPickerNextMonth() {
+  if (recPickerLeftMonth.value === 11) { recPickerLeftMonth.value = 0; recPickerLeftYear.value++ }
+  else recPickerLeftMonth.value++
+}
+
+function recIsInRange(y: number, m: number, d: number): boolean {
+  if (!recFilterFrom.value || !recFilterTo.value) return false
+  const ds = toDateStr(y, m, d)
+  return ds >= recFilterFrom.value && ds <= recFilterTo.value
+}
+function recIsStart(y: number, m: number, d: number): boolean { return toDateStr(y, m, d) === recFilterFrom.value }
+function recIsEnd(y: number, m: number, d: number): boolean { return toDateStr(y, m, d) === recFilterTo.value }
+
+function recPickDay(y: number, m: number, d: number) {
+  const ds = toDateStr(y, m, d)
+  recActivePreset.value = ''
+  if (recPickerSelectStep.value === 'from') {
+    recFilterFrom.value = ds
+    recFilterTo.value = ''
+    recPickerSelectStep.value = 'to'
+  } else {
+    if (ds < recFilterFrom.value) {
+      recFilterFrom.value = ds
+      recFilterTo.value = ''
+      recPickerSelectStep.value = 'to'
+    } else {
+      recFilterTo.value = ds
+      recPickerSelectStep.value = 'from'
+      recDatePickerOpen.value = false
+    }
+  }
+}
+
+function recApplyPreset(preset: string) {
+  const today = new Date()
+  const toStr = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  recActivePreset.value = preset
+  recFilterTo.value = toStr(today)
+
+  if (preset === 'month') {
+    recFilterFrom.value = toStr(new Date(today.getFullYear(), today.getMonth(), 1))
+  } else if (preset === '30d') {
+    const d = new Date(); d.setDate(d.getDate() - 30)
+    recFilterFrom.value = toStr(d)
+  } else if (preset === '3m') {
+    const d = new Date(); d.setMonth(d.getMonth() - 3)
+    recFilterFrom.value = toStr(d)
+  } else if (preset === 'year') {
+    recFilterFrom.value = toStr(new Date(today.getFullYear(), 0, 1))
+  }
+
+  recInitPickerFromValues()
+  recPickerSelectStep.value = 'from'
+  recDatePickerOpen.value = false
+}
+
+function toggleRecDatePicker() {
+  recDatePickerOpen.value = !recDatePickerOpen.value
+  if (recDatePickerOpen.value) {
+    recInitPickerFromValues()
+    if (!recFilterTo.value) recPickerSelectStep.value = 'to'
+    else recPickerSelectStep.value = 'from'
+  }
+}
+
+const recDatePickerLabel = computed(() => {
+  if (recActivePreset.value && presetLabels[recActivePreset.value]) return presetLabels[recActivePreset.value]
+  if (!recFilterFrom.value && !recFilterTo.value) return 'Selecionar período'
+  const fmt = (s: string) => {
+    const d = new Date(s + 'T00:00:00')
+    return d.toLocaleDateString('pt-PT', { day: '2-digit', month: 'short', year: 'numeric' })
+  }
+  if (recFilterFrom.value && recFilterTo.value) return `${fmt(recFilterFrom.value)} – ${fmt(recFilterTo.value)}`
+  if (recFilterFrom.value) return `${fmt(recFilterFrom.value)} – ...`
+  return 'Selecionar período'
+})
+
+function onRecDatePickerOutsideClick(e: MouseEvent) {
+  if (!recDatePickerOpen.value || !recDatePickerRef.value) return
+  if (!recDatePickerRef.value.contains(e.target as Node)) recDatePickerOpen.value = false
+}
 
 const filteredRecurring = computed(() => {
   let list = activeRecurring.value
@@ -1413,7 +1630,7 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
   <div class="transactions-view">
     <div class="page-header">
       <h1>{{ activeTab === 'recurring' ? 'Transações Recorrentes' : activeTab === 'dashboard' ? 'Dashboard' : 'Movimentos' }}</h1>
-      <p class="subtitle">{{ activeTab === 'recurring' ? 'Receitas e despesas que se repetem mensalmente e/ou anualmente. São contabilizadas a partir do mês e/ou ano atual.' : activeTab === 'dashboard' ? 'Visão geral das receitas e despesas' : 'Gerir receitas e despesas' }}</p>
+      <p class="subtitle">{{ activeTab === 'recurring' ? 'Receitas e despesas que se repetem mensalmente e/ou anualmente.' : activeTab === 'dashboard' ? 'Visão geral das receitas e despesas' : 'Gerir receitas e despesas' }}</p>
     </div>
 
     <div v-if="!householdStore.household && !householdStore.loading" class="empty-state">
@@ -1720,129 +1937,132 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
         <router-link :to="{ name: 'contas' }" class="primary-inline-link">Escolhe a conta principal em Contas</router-link>
         <span> para poderes adicionar ou editar transações no plano Free com várias contas.</span>
       </div>
-      <div class="toolbar">
-        <div class="filters">
-          <div ref="txDatePickerRef" class="date-range-picker">
-            <button type="button" class="date-range-btn" @click.stop="toggleTxDatePicker">
-              <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
-              <span>{{ txDatePickerLabel }}</span>
-              <svg class="date-range-chevron" :class="{ open: txDatePickerOpen }" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
-            </button>
-            <Transition name="panel">
-              <div v-show="txDatePickerOpen" class="date-range-panel" @click.stop>
-                <div class="dr-presets">
-                  <button type="button" class="dr-preset-btn" :class="{ active: txActivePreset === 'month' }" @click="txApplyPreset('month')">Este mês</button>
-                  <button type="button" class="dr-preset-btn" :class="{ active: txActivePreset === '30d' }" @click="txApplyPreset('30d')">30 dias</button>
-                  <button type="button" class="dr-preset-btn" :class="{ active: txActivePreset === '3m' }" @click="txApplyPreset('3m')">3 meses</button>
-                  <button type="button" class="dr-preset-btn" :class="{ active: txActivePreset === 'year' }" @click="txApplyPreset('year')">Este ano</button>
-                </div>
-                <div class="date-range-calendars">
-                  <div class="dr-calendar">
-                    <div class="dr-cal-header">
-                      <button type="button" class="dr-cal-nav" @click="txPickerPrevMonth">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
-                      </button>
-                      <span class="dr-cal-title">{{ PICKER_MONTH_NAMES[txPickerLeftMonth] }} {{ txPickerLeftYear }}</span>
-                      <span style="width:28px"></span>
-                    </div>
-                    <div class="dr-cal-weekdays">
-                      <span v-for="wd in PICKER_WEEKDAYS" :key="wd">{{ wd }}</span>
-                    </div>
-                    <div class="dr-cal-grid">
-                      <button
-                        v-for="(d, i) in txLeftDays"
-                        :key="'tl'+i"
-                        type="button"
-                        class="dr-day"
-                        :class="{
-                          empty: d === null,
-                          'in-range': d !== null && txIsInRange(txPickerLeftYear, txPickerLeftMonth, d),
-                          'is-start': d !== null && txIsStart(txPickerLeftYear, txPickerLeftMonth, d),
-                          'is-end': d !== null && txIsEnd(txPickerLeftYear, txPickerLeftMonth, d),
-                        }"
-                        :disabled="d === null"
-                        @click="d !== null && txPickDay(txPickerLeftYear, txPickerLeftMonth, d)"
-                      >
-                        {{ d ?? '' }}
-                      </button>
-                    </div>
-                  </div>
-                  <div class="dr-calendar">
-                    <div class="dr-cal-header">
-                      <span style="width:28px"></span>
-                      <span class="dr-cal-title">{{ PICKER_MONTH_NAMES[txPickerRightMonth] }} {{ txPickerRightYear }}</span>
-                      <button type="button" class="dr-cal-nav" @click="txPickerNextMonth">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
-                      </button>
-                    </div>
-                    <div class="dr-cal-weekdays">
-                      <span v-for="wd in PICKER_WEEKDAYS" :key="wd">{{ wd }}</span>
-                    </div>
-                    <div class="dr-cal-grid">
-                      <button
-                        v-for="(d, i) in txRightDays"
-                        :key="'tr'+i"
-                        type="button"
-                        class="dr-day"
-                        :class="{
-                          empty: d === null,
-                          'in-range': d !== null && txIsInRange(txPickerRightYear, txPickerRightMonth, d),
-                          'is-start': d !== null && txIsStart(txPickerRightYear, txPickerRightMonth, d),
-                          'is-end': d !== null && txIsEnd(txPickerRightYear, txPickerRightMonth, d),
-                        }"
-                        :disabled="d === null"
-                        @click="d !== null && txPickDay(txPickerRightYear, txPickerRightMonth, d)"
-                      >
-                        {{ d ?? '' }}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </Transition>
-          </div>
-          <div ref="typeDropRef" class="custom-dropdown">
-            <button type="button" class="custom-dropdown-btn" :class="{ active: filterType !== '' }" @click.stop="toggleTypeDrop">
-              <span>{{ typeLabel }}</span>
-              <svg class="custom-dropdown-chevron" :class="{ open: typeDropOpen }" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
-            </button>
-            <Transition name="panel">
-              <div v-show="typeDropOpen" class="custom-dropdown-panel" @click.stop>
-                <button type="button" class="custom-dropdown-item" :class="{ selected: filterType === '' }" @click="pickType('')">Todos os tipos</button>
-                <button type="button" class="custom-dropdown-item" :class="{ selected: filterType === 'income' }" @click="pickType('income')">Receita</button>
-                <button type="button" class="custom-dropdown-item" :class="{ selected: filterType === 'expense' }" @click="pickType('expense')">Despesa</button>
-                <button type="button" class="custom-dropdown-item" :class="{ selected: filterType === 'transfer' }" @click="pickType('transfer')">Transferência</button>
-              </div>
-            </Transition>
-          </div>
-          <div ref="catDropRef" class="custom-dropdown">
-            <button type="button" class="custom-dropdown-btn" :class="{ active: filterCategory !== '' }" @click.stop="toggleCatDrop">
-              <span>{{ categoryLabel }}</span>
-              <svg class="custom-dropdown-chevron" :class="{ open: catDropOpen }" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
-            </button>
-            <Transition name="panel">
-              <div v-show="catDropOpen" class="custom-dropdown-panel" @click.stop>
-                <button type="button" class="custom-dropdown-item" :class="{ selected: filterCategory === '' }" @click="pickCategory('')">Todas as categorias</button>
-                <button v-for="(label, key) in availableCategories" :key="key" type="button" class="custom-dropdown-item" :class="{ selected: filterCategory === String(key) }" @click="pickCategory(String(key))">{{ label }}</button>
-              </div>
-            </Transition>
-          </div>
-          <div ref="accDropRef" class="custom-dropdown">
-            <button type="button" class="custom-dropdown-btn" :class="{ active: filterAccountId !== '' }" @click.stop="toggleAccDrop">
-              <span>{{ accountLabel }}</span>
-              <svg class="custom-dropdown-chevron" :class="{ open: accDropOpen }" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
-            </button>
-            <Transition name="panel">
-              <div v-show="accDropOpen" class="custom-dropdown-panel" @click.stop>
-                <button type="button" class="custom-dropdown-item" :class="{ selected: filterAccountId === '' }" @click="pickAccount('')">Todas as contas</button>
-                <button v-for="a in accountsStore.accounts" :key="a.id" type="button" class="custom-dropdown-item" :class="{ selected: filterAccountId === a.id }" @click="pickAccount(a.id)">{{ a.name }}</button>
-              </div>
-            </Transition>
+      <div class="toolbar" style="align-items:flex-start">
+        <div class="tx-totals">
+          <span class="tx-totals-balance">{{ formatCurrencySummary(txBalance) }}</span>
+          <div class="tx-totals-detail">
+            <span class="tx-totals-income">Receitas <strong>{{ formatCurrencySummary(txTotalIncome) }}</strong></span>
+            <span class="tx-totals-sep">&middot;</span>
+            <span class="tx-totals-expense">Despesas <strong>{{ formatCurrencySummary(txTotalExpenses) }}</strong></span>
           </div>
         </div>
         <button type="button" class="btn-add" @click="openCreateModal">
-          + Nova transação
+          + Adicionar
         </button>
+      </div>
+
+      <div class="tx-filters-row">
+        <div class="filters">
+        <div ref="txDatePickerRef" class="date-range-picker">
+          <button type="button" class="date-range-btn" @click.stop="toggleTxDatePicker">
+            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
+            <span>{{ txDatePickerLabel }}</span>
+            <svg class="date-range-chevron" :class="{ open: txDatePickerOpen }" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+          </button>
+          <Transition name="panel">
+            <div v-show="txDatePickerOpen" class="date-range-panel" @click.stop>
+              <div class="dr-presets">
+                <button type="button" class="dr-preset-btn" :class="{ active: txActivePreset === 'month' }" @click="txApplyPreset('month')">Este mês</button>
+                <button type="button" class="dr-preset-btn" :class="{ active: txActivePreset === '30d' }" @click="txApplyPreset('30d')">30 dias</button>
+                <button type="button" class="dr-preset-btn" :class="{ active: txActivePreset === '3m' }" @click="txApplyPreset('3m')">3 meses</button>
+                <button type="button" class="dr-preset-btn" :class="{ active: txActivePreset === 'year' }" @click="txApplyPreset('year')">Este ano</button>
+              </div>
+              <div class="date-range-calendars">
+                <div class="dr-calendar">
+                  <div class="dr-cal-header">
+                    <button type="button" class="dr-cal-nav" @click="txPickerPrevMonth">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                    </button>
+                    <span class="dr-cal-title">{{ PICKER_MONTH_NAMES[txPickerLeftMonth] }} {{ txPickerLeftYear }}</span>
+                    <span style="width:28px"></span>
+                  </div>
+                  <div class="dr-cal-weekdays">
+                    <span v-for="wd in PICKER_WEEKDAYS" :key="wd">{{ wd }}</span>
+                  </div>
+                  <div class="dr-cal-grid">
+                    <button
+                      v-for="(d, i) in txLeftDays"
+                      :key="'tl'+i"
+                      type="button"
+                      class="dr-day"
+                      :class="{
+                        empty: d === null,
+                        'in-range': d !== null && txIsInRange(txPickerLeftYear, txPickerLeftMonth, d),
+                        'is-start': d !== null && txIsStart(txPickerLeftYear, txPickerLeftMonth, d),
+                        'is-end': d !== null && txIsEnd(txPickerLeftYear, txPickerLeftMonth, d),
+                      }"
+                      :disabled="d === null"
+                      @click="d !== null && txPickDay(txPickerLeftYear, txPickerLeftMonth, d)"
+                    >
+                      {{ d ?? '' }}
+                    </button>
+                  </div>
+                </div>
+                <div class="dr-calendar">
+                  <div class="dr-cal-header">
+                    <span style="width:28px"></span>
+                    <span class="dr-cal-title">{{ PICKER_MONTH_NAMES[txPickerRightMonth] }} {{ txPickerRightYear }}</span>
+                    <button type="button" class="dr-cal-nav" @click="txPickerNextMonth">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                    </button>
+                  </div>
+                  <div class="dr-cal-weekdays">
+                    <span v-for="wd in PICKER_WEEKDAYS" :key="wd">{{ wd }}</span>
+                  </div>
+                  <div class="dr-cal-grid">
+                    <button
+                      v-for="(d, i) in txRightDays"
+                      :key="'tr'+i"
+                      type="button"
+                      class="dr-day"
+                      :class="{
+                        empty: d === null,
+                        'in-range': d !== null && txIsInRange(txPickerRightYear, txPickerRightMonth, d),
+                        'is-start': d !== null && txIsStart(txPickerRightYear, txPickerRightMonth, d),
+                        'is-end': d !== null && txIsEnd(txPickerRightYear, txPickerRightMonth, d),
+                      }"
+                      :disabled="d === null"
+                      @click="d !== null && txPickDay(txPickerRightYear, txPickerRightMonth, d)"
+                    >
+                      {{ d ?? '' }}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </Transition>
+        </div>
+        <div ref="catDropRef" class="custom-dropdown">
+          <button type="button" class="custom-dropdown-btn" :class="{ active: filterCategory !== '' }" @click.stop="toggleCatDrop">
+            <span>{{ categoryLabel }}</span>
+            <svg class="custom-dropdown-chevron" :class="{ open: catDropOpen }" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+          </button>
+          <Transition name="panel">
+            <div v-show="catDropOpen" class="custom-dropdown-panel" @click.stop>
+              <button type="button" class="custom-dropdown-item" :class="{ selected: filterCategory === '' }" @click="pickCategory('')">Todas as categorias</button>
+              <button v-for="(label, key) in availableCategories" :key="key" type="button" class="custom-dropdown-item" :class="{ selected: filterCategory === String(key) }" @click="pickCategory(String(key))">{{ label }}</button>
+            </div>
+          </Transition>
+        </div>
+        <div ref="accDropRef" class="custom-dropdown">
+          <button type="button" class="custom-dropdown-btn" :class="{ active: filterAccountId !== '' }" @click.stop="toggleAccDrop">
+            <span>{{ accountLabel }}</span>
+            <svg class="custom-dropdown-chevron" :class="{ open: accDropOpen }" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+          </button>
+          <Transition name="panel">
+            <div v-show="accDropOpen" class="custom-dropdown-panel" @click.stop>
+              <button type="button" class="custom-dropdown-item" :class="{ selected: filterAccountId === '' }" @click="pickAccount('')">Todas as contas</button>
+              <button v-for="a in accountsStore.accounts" :key="a.id" type="button" class="custom-dropdown-item" :class="{ selected: filterAccountId === a.id }" @click="pickAccount(a.id)">{{ a.name }}</button>
+            </div>
+          </Transition>
+        </div>
+        </div>
+        <div class="type-toggle-bar">
+          <button type="button" class="type-toggle-btn" :class="{ active: filterType === '' }" @click="pickType('')">Todos</button>
+          <button type="button" class="type-toggle-btn" :class="{ active: filterType === 'income', 'type-income': filterType === 'income' }" @click="pickType('income')">Receitas</button>
+          <button type="button" class="type-toggle-btn" :class="{ active: filterType === 'expense', 'type-expense': filterType === 'expense' }" @click="pickType('expense')">Despesas</button>
+          <button type="button" class="type-toggle-btn" :class="{ active: filterType === 'transfer', 'type-transfer': filterType === 'transfer' }" @click="pickType('transfer')">Transferências</button>
+        </div>
       </div>
 
       <div v-if="transactionsStore.loading && transactionsStore.transactions.length === 0" class="loading-state">
@@ -1934,19 +2154,98 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
           <router-link :to="{ name: 'contas' }" class="primary-inline-link">Escolhe a conta principal em Contas</router-link>
           <span> para gerires recorrentes no plano Free com várias contas.</span>
         </div>
-        <div class="toolbar">
+        <div class="toolbar" style="align-items:flex-start">
+          <div class="tx-totals">
+            <span class="tx-totals-balance">{{ formatCurrencySummary(recBalance) }}</span>
+            <div class="tx-totals-detail">
+              <span class="tx-totals-income">Receitas <strong>{{ formatCurrencySummary(recTotalIncome) }}</strong></span>
+              <span class="tx-totals-sep">&middot;</span>
+              <span class="tx-totals-expense">Despesas <strong>{{ formatCurrencySummary(recTotalExpenses) }}</strong></span>
+            </div>
+          </div>
+          <button type="button" class="btn-add" @click="openRecurringCreateModal">
+            + Adicionar
+          </button>
+        </div>
+
+        <div class="tx-filters-row">
           <div class="filters">
-            <div ref="recTypeDropRef" class="custom-dropdown">
-              <button type="button" class="custom-dropdown-btn" :class="{ active: recFilterType !== '' }" @click.stop="toggleRecTypeDrop">
-                <span>{{ recTypeLabel }}</span>
-                <svg class="custom-dropdown-chevron" :class="{ open: recTypeDropOpen }" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+            <div ref="recDatePickerRef" class="date-range-picker">
+              <button type="button" class="date-range-btn" @click.stop="toggleRecDatePicker">
+                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
+                <span>{{ recDatePickerLabel }}</span>
+                <svg class="date-range-chevron" :class="{ open: recDatePickerOpen }" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
               </button>
               <Transition name="panel">
-                <div v-show="recTypeDropOpen" class="custom-dropdown-panel" @click.stop>
-                  <button type="button" class="custom-dropdown-item" :class="{ selected: recFilterType === '' }" @click="pickRecType('')">Todos os tipos</button>
-                  <button type="button" class="custom-dropdown-item" :class="{ selected: recFilterType === 'income' }" @click="pickRecType('income')">Receita</button>
-                  <button type="button" class="custom-dropdown-item" :class="{ selected: recFilterType === 'expense' }" @click="pickRecType('expense')">Despesa</button>
-                  <button type="button" class="custom-dropdown-item" :class="{ selected: recFilterType === 'transfer' }" @click="pickRecType('transfer')">Transferência</button>
+                <div v-show="recDatePickerOpen" class="date-range-panel" @click.stop>
+                  <div class="dr-presets">
+                    <button type="button" class="dr-preset-btn" :class="{ active: recActivePreset === 'month' }" @click="recApplyPreset('month')">Este mês</button>
+                    <button type="button" class="dr-preset-btn" :class="{ active: recActivePreset === '30d' }" @click="recApplyPreset('30d')">30 dias</button>
+                    <button type="button" class="dr-preset-btn" :class="{ active: recActivePreset === '3m' }" @click="recApplyPreset('3m')">3 meses</button>
+                    <button type="button" class="dr-preset-btn" :class="{ active: recActivePreset === 'year' }" @click="recApplyPreset('year')">Este ano</button>
+                  </div>
+                  <div class="date-range-calendars">
+                    <div class="dr-calendar">
+                      <div class="dr-cal-header">
+                        <button type="button" class="dr-cal-nav" @click="recPickerPrevMonth">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                        </button>
+                        <span class="dr-cal-title">{{ PICKER_MONTH_NAMES[recPickerLeftMonth] }} {{ recPickerLeftYear }}</span>
+                        <span style="width:28px"></span>
+                      </div>
+                      <div class="dr-cal-weekdays">
+                        <span v-for="wd in PICKER_WEEKDAYS" :key="wd">{{ wd }}</span>
+                      </div>
+                      <div class="dr-cal-grid">
+                        <button
+                          v-for="(d, i) in recLeftDays"
+                          :key="'rl'+i"
+                          type="button"
+                          class="dr-day"
+                          :class="{
+                            empty: d === null,
+                            'in-range': d !== null && recIsInRange(recPickerLeftYear, recPickerLeftMonth, d),
+                            'is-start': d !== null && recIsStart(recPickerLeftYear, recPickerLeftMonth, d),
+                            'is-end': d !== null && recIsEnd(recPickerLeftYear, recPickerLeftMonth, d),
+                          }"
+                          :disabled="d === null"
+                          @click="d !== null && recPickDay(recPickerLeftYear, recPickerLeftMonth, d)"
+                        >
+                          {{ d ?? '' }}
+                        </button>
+                      </div>
+                    </div>
+                    <div class="dr-calendar">
+                      <div class="dr-cal-header">
+                        <span style="width:28px"></span>
+                        <span class="dr-cal-title">{{ PICKER_MONTH_NAMES[recPickerRightMonth] }} {{ recPickerRightYear }}</span>
+                        <button type="button" class="dr-cal-nav" @click="recPickerNextMonth">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                        </button>
+                      </div>
+                      <div class="dr-cal-weekdays">
+                        <span v-for="wd in PICKER_WEEKDAYS" :key="wd">{{ wd }}</span>
+                      </div>
+                      <div class="dr-cal-grid">
+                        <button
+                          v-for="(d, i) in recRightDays"
+                          :key="'rr'+i"
+                          type="button"
+                          class="dr-day"
+                          :class="{
+                            empty: d === null,
+                            'in-range': d !== null && recIsInRange(recPickerRightYear, recPickerRightMonth, d),
+                            'is-start': d !== null && recIsStart(recPickerRightYear, recPickerRightMonth, d),
+                            'is-end': d !== null && recIsEnd(recPickerRightYear, recPickerRightMonth, d),
+                          }"
+                          :disabled="d === null"
+                          @click="d !== null && recPickDay(recPickerRightYear, recPickerRightMonth, d)"
+                        >
+                          {{ d ?? '' }}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </Transition>
             </div>
@@ -1975,9 +2274,12 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
               </Transition>
             </div>
           </div>
-          <button type="button" class="btn-add" @click="openRecurringCreateModal">
-            + Nova transação recorrente
-          </button>
+          <div class="type-toggle-bar">
+            <button type="button" class="type-toggle-btn" :class="{ active: recFilterType === '' }" @click="pickRecTypeToggle('')">Todos</button>
+            <button type="button" class="type-toggle-btn" :class="{ active: recFilterType === 'income', 'type-income': recFilterType === 'income' }" @click="pickRecTypeToggle('income')">Receitas</button>
+            <button type="button" class="type-toggle-btn" :class="{ active: recFilterType === 'expense', 'type-expense': recFilterType === 'expense' }" @click="pickRecTypeToggle('expense')">Despesas</button>
+            <button type="button" class="type-toggle-btn" :class="{ active: recFilterType === 'transfer', 'type-transfer': recFilterType === 'transfer' }" @click="pickRecTypeToggle('transfer')">Transferências</button>
+          </div>
         </div>
         <div v-if="recurringStore.loading && activeRecurring.length === 0" class="loading-state">
           <div class="spinner"></div>
@@ -2422,7 +2724,96 @@ html.dark .custom-dropdown-item.selected {
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  margin-bottom: 1.5rem;
+  margin-top: -0.5rem;
+  margin-bottom: 2rem;
+}
+
+.tx-filters-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 2.5rem;
+  margin-bottom: 2rem;
+}
+
+.tx-totals {
+}
+
+.tx-totals-balance {
+  display: block;
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--color-text);
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+
+.tx-totals-detail {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+}
+
+.tx-totals-income,
+.tx-totals-expense {
+  color: var(--color-text-muted);
+}
+
+.tx-totals-sep {
+  color: var(--color-text-muted);
+}
+
+.type-toggle-bar {
+  display: inline-flex;
+  background: var(--color-table-row-hover);
+  border-radius: 10px;
+  padding: 3px;
+  gap: 2px;
+  box-shadow: var(--app-shadow-card, 0 1px 3px rgba(0, 0, 0, 0.06));
+}
+
+.type-toggle-btn {
+  padding: 0.375rem 1rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  font-family: inherit;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.type-toggle-btn.active {
+  background: var(--color-bg-card);
+  color: var(--color-text);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.type-toggle-btn.active.type-income {
+  color: var(--color-type-income-text);
+}
+
+.type-toggle-btn.active.type-expense {
+  color: var(--color-type-expense-text);
+}
+
+.type-toggle-btn.active.type-transfer {
+  color: #2563eb;
+}
+
+html.dark .type-toggle-btn.active.type-transfer {
+  color: #60a5fa;
+}
+
+.type-toggle-btn:not(.active):hover {
+  color: var(--color-text);
 }
 
 .filters {
