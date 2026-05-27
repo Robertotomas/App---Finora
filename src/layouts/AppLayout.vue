@@ -272,7 +272,7 @@ function isActive(path: string) {
                     class="dropdown-item"
                     @click="goToHousehold"
                   >
-                    Household
+                    Agregado
                   </button>
                   <button
                     type="button"
@@ -306,6 +306,9 @@ function isActive(path: string) {
           >
             {{ planLabel }}
           </RouterLink>
+          <span v-if="!sidebarCollapsed && householdStore.household?.name" class="sidebar-household-name">
+            {{ householdStore.household.name }}
+          </span>
           <button v-if="!sidebarCollapsed" type="button" class="sidebar-collapse-btn" @click="toggleSidebar" title="Minimizar">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="11 17 6 12 11 7"/><polyline points="18 17 13 12 18 7"/></svg>
           </button>
@@ -470,7 +473,7 @@ html.dark .sidebar {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 1.125rem 0.875rem 0.875rem;
+  padding: 1rem 0.875rem 0.875rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.12);
 }
 
@@ -495,6 +498,18 @@ html.dark .sidebar {
 .sidebar-plan-link:focus-visible {
   background: rgba(255, 255, 255, 0.25);
   text-decoration: none;
+}
+
+.sidebar-household-name {
+  font-size: 0.6875rem;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.45);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: 0.02em;
+  flex: 1;
+  min-width: 0;
 }
 
 .sidebar-nav {
@@ -1077,7 +1092,10 @@ html.dark .sidebar-expand-btn:hover {
 
 .sidebar.collapsed .sidebar-plan {
   padding: 0.75rem 0.5rem;
-  justify-content: center;
+}
+
+.sidebar.collapsed .sidebar-household-name {
+  display: none;
 }
 
 .sidebar.collapsed .sidebar-plan-link {
