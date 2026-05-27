@@ -23,6 +23,7 @@ ChartJS.register(
 
 const props = defineProps<{
   data: MonthlyTrend[]
+  period?: string
 }>()
 
 const chartData = computed(() => ({
@@ -47,7 +48,7 @@ const chartData = computed(() => ({
   ],
 }))
 
-const options = {
+const options = computed(() => ({
   responsive: true,
   maintainAspectRatio: false,
   interaction: {
@@ -74,6 +75,20 @@ const options = {
       grid: {
         display: false,
       },
+      ticks: {
+        maxRotation: 0,
+        autoSkip: false,
+        callback: function (_value: unknown, index: number) {
+          const item = props.data[index]
+          if (!item) return null
+          if (props.period === '5A') {
+            const prev = index > 0 ? props.data[index - 1] : null
+            if (!prev || item.year !== prev.year) return String(item.year)
+            return null
+          }
+          return item.label
+        },
+      },
     },
     y: {
       beginAtZero: true,
@@ -82,7 +97,7 @@ const options = {
       },
     },
   },
-}
+}))
 </script>
 
 <template>

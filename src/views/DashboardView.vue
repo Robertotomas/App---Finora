@@ -367,9 +367,7 @@ onMounted(async () => {
           await Promise.all([
             dashboard.fetch(true).then(() => {
               const trend = dashboard.monthlyTrend.value
-              if (trend.length > 0) {
-                trendChartData.value = trend
-              }
+              trendChartData.value = fillMissingMonths(trend, trendChartMonths.value)
             }),
             accountsStore.fetchAccounts(),
             loadObjectivesPreview(),
@@ -779,6 +777,40 @@ const trendChartMonths = computed(() => {
   return map[trendChartPeriod.value]
 })
 
+const MONTH_SHORT = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
+
+function fillMissingMonths(data: MonthlyTrend[], totalMonths: number): MonthlyTrend[] {
+  const now = new Date()
+  const endYear = now.getFullYear()
+  const endMonth = now.getMonth() + 1
+  const allMonths: MonthlyTrend[] = []
+  const dataMap = new Map<string, MonthlyTrend>()
+  for (const d of data) {
+    dataMap.set(`${d.year}-${d.month}`, d)
+  }
+  for (let i = totalMonths - 1; i >= 0; i--) {
+    let y = endYear
+    let m = endMonth - i
+    while (m <= 0) { m += 12; y-- }
+    while (m > 12) { m -= 12; y++ }
+    const key = `${y}-${m}`
+    const existing = dataMap.get(key)
+    if (existing) {
+      allMonths.push(existing)
+    } else {
+      allMonths.push({
+        year: y,
+        month: m,
+        label: `${MONTH_SHORT[m - 1]} ${y}`,
+        income: 0,
+        expenses: 0,
+        savings: 0,
+      })
+    }
+  }
+  return allMonths
+}
+
 async function fetchTrendChartData() {
   trendChartLoading.value = true
   try {
@@ -789,7 +821,7 @@ async function fetchTrendChartData() {
     const get = (key: string) => res[key] ?? res[key.charAt(0).toUpperCase() + key.slice(1)]
     const arr = get('monthlyTrend')
     if (Array.isArray(arr)) {
-      trendChartData.value = arr.map((x: Record<string, unknown>) => ({
+      const parsed = arr.map((x: Record<string, unknown>) => ({
         year: Number(x.year ?? x.Year) || 0,
         month: Number(x.month ?? x.Month) || 0,
         label: String(x.label ?? x.Label ?? ''),
@@ -797,6 +829,7 @@ async function fetchTrendChartData() {
         expenses: Number(x.expenses ?? x.Expenses) || 0,
         savings: Number(x.savings ?? x.Savings) || 0,
       }))
+      trendChartData.value = fillMissingMonths(parsed, trendChartMonths.value)
     }
   } catch { /* keep existing */ }
   finally { trendChartLoading.value = false }
@@ -1104,21 +1137,17 @@ const showContent = computed(() =>
           </div>
         </div>
         <div v-if="trendChartLoading" class="trend-loading"><div class="spinner"></div></div>
-        <div v-else class="trend-card-charts">
+        <div v-else class="trend-card-charts" :class="{ 'trend-card-charts--stacked': trendChartData.length > 8 }">
           <div class="chart-card">
             <h3 class="chart-title">Evolução mensal</h3>
-            <div class="trend-charts-scroll" :class="{ 'trend-charts-scroll--wide': trendChartData.length > 8 }">
-              <div class="trend-charts-inner" :style="trendChartData.length > 8 ? { minWidth: (trendChartData.length * 80) + 'px' } : {}">
-                <MonthlyLineChart :data="trendChartData" />
-              </div>
+            <div class="trend-charts-inner">
+              <MonthlyLineChart :data="trendChartData" :period="trendChartPeriod" />
             </div>
           </div>
           <div class="chart-card">
             <h3 class="chart-title">Receitas vs Despesas</h3>
-            <div class="trend-charts-scroll" :class="{ 'trend-charts-scroll--wide': trendChartData.length > 8 }">
-              <div class="trend-charts-inner" :style="trendChartData.length > 8 ? { minWidth: (trendChartData.length * 80) + 'px' } : {}">
-                <IncomeVsExpensesBarChart :data="trendChartData" />
-              </div>
+            <div class="trend-charts-inner">
+              <IncomeVsExpensesBarChart :data="trendChartData" :period="trendChartPeriod" />
             </div>
           </div>
         </div>
@@ -2182,34 +2211,15 @@ html.dark .daily-avg-banner-progress-bar {
   gap: 1.25rem;
 }
 
+.trend-card-charts--stacked {
+  grid-template-columns: 1fr;
+}
+
 .trend-loading {
   display: flex;
   justify-content: center;
   align-items: center;
   height: 280px;
-}
-
-.trend-charts-scroll {
-  position: relative;
-}
-
-.trend-charts-scroll--wide {
-  overflow-x: auto;
-  overflow-y: hidden;
-  -webkit-overflow-scrolling: touch;
-}
-
-.trend-charts-scroll--wide::-webkit-scrollbar {
-  height: 6px;
-}
-
-.trend-charts-scroll--wide::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.trend-charts-scroll--wide::-webkit-scrollbar-thumb {
-  background: var(--color-border);
-  border-radius: 3px;
 }
 
 .trend-charts-inner {
