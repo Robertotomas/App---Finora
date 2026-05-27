@@ -446,8 +446,6 @@ const hasChartData = computed(
 const hasExpensesForChart = computed(() => dashboard.monthlyExpenses.value > 0)
 const hasIncomeForChart = computed(() => dashboard.monthlyIncome.value > 0)
 
-type ChartTab = 'expenses' | 'income'
-const chartTab = ref<ChartTab>('expenses')
 
 const budgetForPeriod = computed(() => {
   budget.budgetStore.value // reactive dependency
@@ -1265,31 +1263,17 @@ const showContent = computed(() =>
         </div>
         <!-- Gráficos de movimentos (dentro do mesmo card) -->
         <div v-if="hasChartData" class="charts-section-inner">
-          <div class="chart-tab-bar">
-            <button
-              type="button"
-              class="chart-tab-btn"
-              :class="{ active: chartTab === 'expenses' }"
-              @click="chartTab = 'expenses'"
-            >Despesas</button>
-            <button
-              type="button"
-              class="chart-tab-btn"
-              :class="{ active: chartTab === 'income' }"
-              @click="chartTab = 'income'"
-            >Receitas</button>
-          </div>
-          <div class="chart-card">
-            <template v-if="chartTab === 'expenses'">
+          <div class="charts-side-by-side">
+            <div class="chart-card">
               <h3 class="chart-title">Despesas por categoria</h3>
               <ExpensesPieChart v-if="hasExpensesForChart" :data="expensesForChart" />
               <p v-else class="chart-empty-text">Sem despesas neste período</p>
-            </template>
-            <template v-else>
+            </div>
+            <div class="chart-card">
               <h3 class="chart-title">Receitas por categoria</h3>
               <IncomePieChart v-if="hasIncomeForChart" :data="incomeForChart" />
               <p v-else class="chart-empty-text">Sem receitas neste período</p>
-            </template>
+            </div>
           </div>
         </div>
         <!-- Plano mensal (dentro do card filtrado) -->
@@ -2127,51 +2111,25 @@ html.dark .daily-avg-banner-progress-bar {
     flex-direction: column;
     align-items: flex-start;
   }
+
+  .charts-side-by-side {
+    grid-template-columns: 1fr;
+  }
 }
 
 .charts-section-inner {
   display: flex;
   flex-direction: column;
-  align-items: center;
   gap: 1.25rem;
   margin-top: 1.5rem;
   padding-top: 1.25rem;
   border-top: 1px solid var(--color-border);
 }
 
-.chart-tab-bar {
-  display: inline-flex;
-  background: var(--color-table-row-hover);
-  border-radius: 10px;
-  padding: 3px;
-  gap: 2px;
-}
-
-.chart-tab-btn {
-  padding: 0.375rem 1rem;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  font-family: inherit;
-  border: none;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--color-text-muted);
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.chart-tab-btn.active {
-  background: var(--color-bg-card);
-  color: var(--color-text);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
-}
-
-.chart-tab-btn:not(.active):hover {
-  color: var(--color-text);
-}
-
-.chart-tab-btn.active[class*="expenses"] {
-  color: #dc2626;
+.charts-side-by-side {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
 }
 
 .chart-empty-text {
