@@ -18,6 +18,9 @@ export const objectivesApi = {
   finalize: (id: string) =>
     api.post<SavingsObjectivesOverview>(`/api/objectives/${id}/finalize`),
 
+  liquidate: (id: string) =>
+    api.post<SavingsObjectivesOverview>(`/api/objectives/${id}/liquidate`),
+
   delete: (id: string) =>
     api.delete<SavingsObjectivesOverview>(`/api/objectives/${id}`),
 }

@@ -100,9 +100,10 @@ async function loadObjectivesPreview() {
     objectivesReserved.value = Number(pick('reservedByCompletedObjectives')) || 0
     objectivesTotalSavings.value = Number(pick('totalSavings')) || 0
 
-    // totalSavings is already the remaining after completed objectives were "spent"
-    // Distribute it across active objectives by sortOrder priority
-    const available = Math.max(0, objectivesTotalSavings.value)
+    // Pool disponível = já vem calculado pelo backend (poupança menos o que está
+    // reservado por objetivos concluídos ainda não liquidados). Distribuímos esse
+    // valor pelos objetivos ativos por ordem de prioridade.
+    const available = Math.max(0, Number(pick('availableForActiveObjectives')) || 0)
     if (available > 0 && all.length > 0) {
       for (const goal of all) {
         const allocated = Math.min(available, goal.targetAmount)
@@ -122,6 +123,10 @@ async function loadObjectivesPreview() {
       targetDate: parseTargetDateOnly(h.targetDate ?? h.TargetDate),
       sortOrder: Number(h.sortOrder ?? h.SortOrder ?? 0),
       completedAt: String(h.completedAt ?? h.CompletedAt ?? ''),
+      liquidatedAt: (() => {
+        const v = h.liquidatedAt ?? h.LiquidatedAt
+        return v ? String(v) : null
+      })(),
     })) : []
   } catch {
     objectivesPreview.value = []
@@ -558,6 +563,10 @@ const accountCategoryGroups = computed(() => {
 
 const totalAllocatedToObjectives = computed(() => objectivesReserved.value)
 
+// Apenas os objetivos concluídos que ainda não foram liquidados aparecem no
+// modal "por liquidar". Os já liquidados ficam no histórico mas saem daqui.
+const unliquidatedHistory = computed(() => objectivesHistory.value.filter((h) => !h.liquidatedAt))
+
 function openSettleModal() { settleModalOpen.value = true; settleConfirmId.value = null }
 function closeSettleModal() { settleModalOpen.value = false; settleConfirmId.value = null }
 
@@ -569,10 +578,10 @@ async function onSettleConfirmYes() {
   if (!settleConfirmId.value) return
   settleLoading.value = true
   try {
-    await objectivesApi.delete(settleConfirmId.value)
+    await objectivesApi.liquidate(settleConfirmId.value)
     await loadObjectivesPreview()
     settleConfirmId.value = null
-    if (objectivesHistory.value.length === 0) closeSettleModal()
+    if (unliquidatedHistory.value.length === 0) closeSettleModal()
   } catch {
     // handled
   } finally {
@@ -1398,10 +1407,10 @@ const showContent = computed(() =>
           </div>
 
           <div v-else class="settle-list">
-            <div v-if="objectivesHistory.length === 0" class="settle-empty">
+            <div v-if="unliquidatedHistory.length === 0" class="settle-empty">
               <p>Nenhum objetivo concluído por liquidar</p>
             </div>
-            <div v-for="h in objectivesHistory" :key="h.id" class="settle-item">
+            <div v-for="h in unliquidatedHistory" :key="h.id" class="settle-item">
               <div class="settle-item-info">
                 <span class="settle-item-name">{{ h.name }}</span>
                 <span class="settle-item-amount">{{ formatCurrency(h.targetAmount, dashboard.currency.value) }}</span>

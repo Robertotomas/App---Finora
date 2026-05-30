@@ -137,21 +137,26 @@ function normalizeOverview(payload: unknown): SavingsObjectivesOverview {
         targetDate: parseTargetDateField(item.targetDate ?? item.TargetDate),
         sortOrder: Number(item.sortOrder ?? item.SortOrder) || 0,
         completedAt: String(item.completedAt ?? item.CompletedAt ?? ''),
+        liquidatedAt: (() => {
+          const v = item.liquidatedAt ?? item.LiquidatedAt
+          return v ? String(v) : null
+        })(),
       }
     }),
   }
 }
 
 function distributeLocalSavings(ov: ReturnType<typeof normalizeOverview>) {
-  const available = Math.max(0, ov.totalSavings)
-  if (available > 0 && ov.activeObjectives.length > 0) {
-    for (const goal of ov.activeObjectives) {
-      const allocated = Math.min(available, goal.targetAmount)
-      goal.allocatedAmount = allocated
-      goal.progressPercent = goal.targetAmount > 0 ? (allocated / goal.targetAmount) * 100 : 0
-      goal.canFinalize = allocated >= goal.targetAmount
-    }
-    ov.availableForActiveObjectives = available
+  // O pool disponível para objetivos ativos já vem calculado pelo backend
+  // (poupança acumulada menos o que está reservado pelos objetivos finalizados).
+  // Usamos esse valor — NÃO o totalSavings — para não voltar a contar o
+  // dinheiro já reservado por finalizados.
+  const available = Math.max(0, ov.availableForActiveObjectives)
+  for (const goal of ov.activeObjectives) {
+    const allocated = Math.min(available, goal.targetAmount)
+    goal.allocatedAmount = allocated
+    goal.progressPercent = goal.targetAmount > 0 ? (allocated / goal.targetAmount) * 100 : 0
+    goal.canFinalize = allocated >= goal.targetAmount
   }
   return ov
 }
@@ -510,12 +515,14 @@ watch(() => route.query.action, (action) => {
                   <div class="goal-info">
                     <div class="goal-name-row">
                       <h3 class="goal-name">{{ item.name }}</h3>
-                      <span class="badge badge--completed">Concluído</span>
+                      <span v-if="item.liquidatedAt" class="badge badge--liquidated">Liquidado</span>
+                      <span v-else class="badge badge--completed">Concluído</span>
                     </div>
                     <p class="goal-amounts">{{ formatCurrency(item.targetAmount) }}</p>
                     <div class="goal-meta">
                       <span v-if="item.targetDate" class="goal-meta-item">Meta: {{ formatDate(item.targetDate) }}</span>
                       <span class="goal-meta-item">Finalizado: {{ formatDate(item.completedAt) }}</span>
+                      <span v-if="item.liquidatedAt" class="goal-meta-item">Liquidado: {{ formatDate(item.liquidatedAt) }}</span>
                     </div>
                   </div>
                 </div>
@@ -838,6 +845,11 @@ html.dark .goal-icon-wrap--completed {
 .badge--completed {
   color: #fff;
   background: #64748b;
+}
+
+.badge--liquidated {
+  color: #fff;
+  background: #166534;
 }
 
 /* ── Goal actions ── */
