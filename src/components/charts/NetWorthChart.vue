@@ -47,6 +47,44 @@ const MONTH_NAMES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Se
 
 const chartKey = computed(() => `${isDark.value}-${props.points.length}-${props.period}`)
 
+// Pré-calcula que índices recebem etiqueta no eixo X. O primeiro mês/ano é
+// sempre etiquetado; as fronteiras seguintes só aparecem se estiverem a uma
+// distância mínima da última etiqueta mostrada (evita sobreposições quando o
+// primeiro mês é parcial, ex.: 1A começa a 30/Mai e Jun ficaria colado).
+const tickLabels = computed<(string | null)[]>(() => {
+  const pts = props.points
+  const n = pts.length
+  const labels: (string | null)[] = new Array(n).fill(null)
+  if (n === 0) return labels
+
+  const is5A = props.period === '5A'
+  const minGap = Math.max(2, Math.round(n / 24))
+  let lastShown = -Infinity
+
+  for (let i = 0; i < n; i++) {
+    const dateStr = pts[i]?.date
+    if (!dateStr) continue
+    const prev = i > 0 ? pts[i - 1]?.date : null
+
+    let label: string | null = null
+    if (is5A) {
+      const y = dateStr.substring(0, 4)
+      if (!prev || y !== prev.substring(0, 4)) label = y
+    } else {
+      const ym = dateStr.substring(0, 7)
+      if (!prev || ym !== prev.substring(0, 7)) {
+        label = MONTH_NAMES[Number(dateStr.substring(5, 7)) - 1]
+      }
+    }
+
+    if (label !== null && i - lastShown >= minGap) {
+      labels[i] = label
+      lastShown = i
+    }
+  }
+  return labels
+})
+
 const chartData = computed(() => {
   const pts = props.points
   const dark = isDark.value
@@ -149,24 +187,7 @@ const chartOptions = computed(() => {
           maxRotation: 0,
           autoSkip: false,
           callback: function (_value: unknown, index: number) {
-            const dateStr = pts[index]?.date
-            if (!dateStr) return null
-            const prevDateStr = index > 0 ? pts[index - 1]?.date : null
-
-            if (props.period === '5A') {
-              const y = dateStr.substring(0, 4)
-              const prevY = prevDateStr?.substring(0, 4)
-              if (!prevY || y !== prevY) return y
-              return null
-            }
-
-            const ym = dateStr.substring(0, 7)
-            const prevYm = prevDateStr?.substring(0, 7)
-            if (!prevYm || ym !== prevYm) {
-              const m = Number(dateStr.substring(5, 7))
-              return MONTH_NAMES[m - 1]
-            }
-            return null
+            return tickLabels.value[index] ?? null
           },
         },
       },
