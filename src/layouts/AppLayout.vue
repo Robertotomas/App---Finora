@@ -45,12 +45,6 @@ function logout() {
   router.replace({ name: 'entrar' })
 }
 
-function setTheme(dark: boolean) {
-  if (themeStore.isDark !== dark) {
-    themeStore.toggle()
-  }
-}
-
 function toggleMenu() {
   userMenuOpen.value = !userMenuOpen.value
 }
@@ -234,59 +228,82 @@ function isActive(path: string) {
             </button>
             <Transition name="dropdown">
               <div v-show="userMenuOpen" class="user-dropdown">
-                <div class="dropdown-section">
-                  <span class="dropdown-label">Tema</span>
-                  <div class="theme-options">
-                    <button
-                      type="button"
-                      class="theme-btn"
-                      :class="{ active: !themeStore.isDark }"
-                      title="Modo claro"
-                      @click="setTheme(false)"
-                    >
-                      ☀️
-                    </button>
-                    <button
-                      type="button"
-                      class="theme-btn"
-                      :class="{ active: themeStore.isDark }"
-                      title="Modo escuro"
-                      @click="setTheme(true)"
-                    >
-                      🌙
-                    </button>
+                <!-- Cabeçalho de perfil -->
+                <div v-if="authStore.isAuthenticated" class="dropdown-profile">
+                  <img :src="iconMale" alt="" class="dropdown-profile-avatar" />
+                  <div class="dropdown-profile-info">
+                    <span class="dropdown-profile-name">{{ authStore.user?.firstName }} {{ authStore.user?.lastName }}</span>
+                    <span class="dropdown-profile-email">{{ authStore.user?.email }}</span>
                   </div>
                 </div>
+
                 <template v-if="authStore.isAuthenticated">
                   <div class="dropdown-divider" />
-                  <button
-                    type="button"
-                    class="dropdown-item"
-                    @click="goToProfile"
-                  >
-                    Perfil
+
+                  <!-- Gerir / atualizar plano -->
+                  <button type="button" class="dropdown-item" @click="goToSubscription">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m16 12-4-4-4 4"/><path d="M12 16V8"/></svg>
+                    <span class="dropdown-item-label">{{ planManageLabel }}</span>
                   </button>
-                  <button
-                    v-if="showHouseholdInUserMenu"
-                    type="button"
-                    class="dropdown-item"
-                    @click="goToHousehold"
-                  >
-                    Agregado
+
+                  <!-- Perfil -->
+                  <button type="button" class="dropdown-item" @click="goToProfile">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                    <span class="dropdown-item-label">Perfil</span>
                   </button>
-                  <button
-                    type="button"
-                    class="dropdown-item"
-                    @click="goToSubscription"
-                  >
-                    {{ planManageLabel }}
+
+                  <!-- Agregado -->
+                  <button v-if="showHouseholdInUserMenu" type="button" class="dropdown-item" @click="goToHousehold">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                    <span class="dropdown-item-label">Agregado</span>
                   </button>
-                  <button
-                    type="button"
-                    class="dropdown-item dropdown-logout"
-                    @click="logout"
-                  >
-                    Sair
+
+                  <div class="dropdown-divider" />
+
+                  <!-- Aparência (tema sempre visível) -->
+                  <span class="dropdown-section-label">Aparência</span>
+                  <button type="button" class="dropdown-item" :class="{ active: themeStore.mode === 'light' }" @click="themeStore.setMode('light')">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
+                    <span class="dropdown-item-label">Claro</span>
+                    <svg v-if="themeStore.mode === 'light'" class="dropdown-check" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                  </button>
+                  <button type="button" class="dropdown-item" :class="{ active: themeStore.mode === 'dark' }" @click="themeStore.setMode('dark')">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+                    <span class="dropdown-item-label">Escuro</span>
+                    <svg v-if="themeStore.mode === 'dark'" class="dropdown-check" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                  </button>
+                  <button type="button" class="dropdown-item" :class="{ active: themeStore.mode === 'system' }" @click="themeStore.setMode('system')">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/></svg>
+                    <span class="dropdown-item-label">Sistema</span>
+                    <svg v-if="themeStore.mode === 'system'" class="dropdown-check" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                  </button>
+
+                  <div class="dropdown-divider" />
+
+                  <!-- Terminar sessão -->
+                  <button type="button" class="dropdown-item dropdown-logout" @click="logout">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>
+                    <span class="dropdown-item-label">Terminar sessão</span>
+                  </button>
+                </template>
+
+                <!-- Visitante: apenas tema -->
+                <template v-else>
+                  <span class="dropdown-section-label">Aparência</span>
+                  <button type="button" class="dropdown-item" :class="{ active: themeStore.mode === 'light' }" @click="themeStore.setMode('light')">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
+                    <span class="dropdown-item-label">Claro</span>
+                    <svg v-if="themeStore.mode === 'light'" class="dropdown-check" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                  </button>
+                  <button type="button" class="dropdown-item" :class="{ active: themeStore.mode === 'dark' }" @click="themeStore.setMode('dark')">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+                    <span class="dropdown-item-label">Escuro</span>
+                    <svg v-if="themeStore.mode === 'dark'" class="dropdown-check" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                  </button>
+                  <button type="button" class="dropdown-item" :class="{ active: themeStore.mode === 'system' }" @click="themeStore.setMode('system')">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/></svg>
+                    <span class="dropdown-item-label">Sistema</span>
+                    <svg v-if="themeStore.mode === 'system'" class="dropdown-check" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
                   </button>
                 </template>
               </div>
@@ -908,7 +925,8 @@ html.dark .header-brand-img {
   position: absolute;
   top: calc(100% + 0.5rem);
   right: 0;
-  min-width: 220px;
+  min-width: 244px;
+  max-width: 280px;
   padding: 0.375rem;
   background: var(--color-bg-card);
   border: 1px solid var(--color-border);
@@ -917,50 +935,68 @@ html.dark .header-brand-img {
   z-index: 100;
 }
 
-.dropdown-section {
-  padding: 0.5rem 1rem;
-}
-
-.dropdown-label {
-  display: block;
-  font-size: 0.6875rem;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  color: var(--color-text-muted);
-  margin-bottom: 0.5rem;
-}
-
-.theme-options {
-  display: flex;
-  gap: 0.5rem;
-}
-
-.theme-btn {
-  width: 36px;
-  height: 36px;
+/* Cabeçalho de perfil */
+.dropdown-profile {
   display: flex;
   align-items: center;
-  justify-content: center;
-  font-size: 1.125rem;
-  background: transparent;
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
+  gap: 0.625rem;
+  padding: 0.625rem 0.75rem 0.5rem;
 }
 
-.theme-btn:hover {
-  background: var(--color-btn-secondary-hover);
+.dropdown-profile-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: contain;
+  flex-shrink: 0;
 }
 
-.theme-btn.active {
-  background: rgba(22, 101, 52, 0.14);
-  border-color: #166534;
+html.dark .dropdown-profile-avatar {
+  filter: invert(1);
 }
 
-html.dark .theme-btn.active {
-  background: rgba(74, 222, 128, 0.12);
-  border-color: #4ade80;
+.dropdown-profile-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.dropdown-profile-name {
+  font-size: 0.8125rem;
+  font-weight: 650;
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dropdown-profile-email {
+  font-size: 0.6875rem;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Título de secção (Aparência) */
+.dropdown-section-label {
+  display: block;
+  padding: 0.375rem 0.75rem 0.25rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+/* Check da opção ativa */
+.dropdown-check {
+  flex-shrink: 0;
+  color: #166534;
+}
+
+html.dark .dropdown-check {
+  color: #4ade80;
 }
 
 .dropdown-divider {
@@ -972,7 +1008,7 @@ html.dark .theme-btn.active {
 .dropdown-item {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.625rem;
   width: 100%;
   padding: 0.5rem 0.75rem;
   font-size: 0.8125rem;
@@ -981,17 +1017,50 @@ html.dark .theme-btn.active {
   border: none;
   border-radius: 8px;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: background 0.15s, color 0.15s;
   text-align: left;
   font-weight: 500;
+  font-family: inherit;
+}
+
+.dropdown-item > svg {
+  flex-shrink: 0;
+  color: var(--color-text-muted);
+  transition: color 0.15s;
+}
+
+.dropdown-item-label {
+  flex: 1;
 }
 
 .dropdown-item:hover {
   background: var(--color-table-row-hover);
 }
 
+.dropdown-item:hover > svg {
+  color: var(--color-text);
+}
+
+.dropdown-item.active {
+  color: #166534;
+  font-weight: 650;
+}
+
+.dropdown-item.active > svg {
+  color: #166534;
+}
+
+html.dark .dropdown-item.active,
+html.dark .dropdown-item.active > svg {
+  color: #4ade80;
+}
+
 .dropdown-logout:hover {
   background: rgba(220, 38, 38, 0.06);
+  color: var(--color-expense);
+}
+
+.dropdown-logout:hover > svg {
   color: var(--color-expense);
 }
 
