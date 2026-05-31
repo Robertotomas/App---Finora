@@ -466,7 +466,7 @@ function isActive(path: string) {
 }
 
 html.dark .sidebar {
-  background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
+  background: linear-gradient(180deg, #161616 0%, #0d0d0d 100%);
 }
 
 .sidebar-plan {
@@ -741,9 +741,9 @@ html.dark .sidebar-nav-icon-reports {
   background: transparent;
 }
 
-/* Modo escuro: texto verde escuro → branco; ícones FF em verde repostos após invert */
+/* Modo escuro: wordmark a branco sólido — limpo e legível no preto */
 html.dark .header-brand-img {
-  filter: invert(1) hue-rotate(156deg) saturate(1.2) brightness(1.07);
+  filter: brightness(0) invert(1);
 }
 
 .header-search {

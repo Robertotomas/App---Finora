@@ -2698,8 +2698,8 @@ html.dark .patrimonio-reserved {
 }
 
 html.dark .patrimonio-period-btn.active {
-  background: #e2e8f0;
-  color: #0f172a;
+  background: #f5f5f5;
+  color: #0a0a0a;
 }
 
 .patrimonio-body {

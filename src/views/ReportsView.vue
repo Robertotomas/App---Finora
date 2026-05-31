@@ -751,9 +751,9 @@ html.dark .action-btn--download:hover {
 }
 
 html.dark .action-btn--refresh:hover:not(:disabled) {
-  color: #60a5fa;
-  border-color: rgba(96, 165, 250, 0.3);
-  background: rgba(96, 165, 250, 0.1);
+  color: #4ade80;
+  border-color: rgba(74, 222, 128, 0.3);
+  background: rgba(74, 222, 128, 0.1);
 }
 
 .spinner-sm {

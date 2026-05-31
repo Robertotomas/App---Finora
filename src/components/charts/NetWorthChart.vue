@@ -115,7 +115,7 @@ const chartData = computed(() => {
         pointRadius: 0,
         pointHoverRadius: 6,
         pointHoverBackgroundColor: dark ? '#4ade80' : '#166534',
-        pointHoverBorderColor: dark ? '#0f172a' : '#fff',
+        pointHoverBorderColor: dark ? '#0a0a0a' : '#fff',
         pointHoverBorderWidth: 2.5,
       },
     ],
@@ -146,10 +146,10 @@ const chartOptions = computed(() => {
     plugins: {
       legend: { display: false },
       tooltip: {
-        backgroundColor: dark ? '#1e293b' : '#fff',
-        titleColor: dark ? '#e2e8f0' : '#334155',
-        bodyColor: dark ? '#f8fafc' : '#0f172a',
-        borderColor: dark ? '#334155' : '#e2e8f0',
+        backgroundColor: dark ? '#161616' : '#fff',
+        titleColor: dark ? '#d4d4d4' : '#334155',
+        bodyColor: dark ? '#fafafa' : '#0f172a',
+        borderColor: dark ? '#2a2a2a' : '#e2e8f0',
         borderWidth: 1,
         padding: 12,
         cornerRadius: 10,
@@ -181,7 +181,7 @@ const chartOptions = computed(() => {
         grid: { display: false },
         border: { display: false },
         ticks: {
-          color: dark ? '#64748b' : '#94a3b8',
+          color: dark ? '#737373' : '#94a3b8',
           font: { size: 12 },
           padding: 8,
           maxRotation: 0,
