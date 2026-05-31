@@ -1429,21 +1429,15 @@ function getResponsibleDisplay(tx: Transaction): string {
   const map = membersMap.value
   if (tx.splits.length === 1 && tx.splits[0].percentage === 100) {
     const m = map.get(tx.splits[0].userId)
-    if (m) return m.id === authStore.user?.id ? 'Tu' : `${m.firstName} ${m.lastName}`
-    return 'Tu'
+    return m ? `${m.firstName} ${m.lastName}` : '-'
   }
   return tx.splits
     .map((s) => {
       const m = map.get(s.userId)
-      const name = m ? (m.id === authStore.user?.id ? 'Tu' : m.firstName) : '?'
+      const name = m ? m.firstName : '?'
       return `${name} ${s.percentage}%`
     })
     .join(', ')
-}
-
-function getSplitsDisplay(tx: Transaction): string {
-  if (tx.splits.length <= 1) return '-'
-  return tx.splits.map((s) => `${s.percentage}%`).join(' / ')
 }
 
 function openRecurringCreateModal() {
@@ -2090,7 +2084,6 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
               <th>Tipo</th>
               <th class="amount-col">Valor</th>
               <th>Responsável</th>
-              <th v-if="householdStore.isCouple">Repartição</th>
               <th class="actions-col"></th>
             </tr>
           </thead>
@@ -2116,7 +2109,6 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
                 {{ formatAmount(tx.amount, tx.type) }}
               </td>
               <td>{{ getResponsibleDisplay(tx) }}</td>
-              <td v-if="householdStore.isCouple">{{ getSplitsDisplay(tx) }}</td>
                 <td class="actions-col">
                 <button
                   type="button"

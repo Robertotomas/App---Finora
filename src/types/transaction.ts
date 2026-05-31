@@ -4,6 +4,11 @@ export enum TransactionType {
   Transfer = 2
 }
 
+export enum TransactionEntityType {
+  Entity = 0,
+  Person = 1
+}
+
 export enum TransactionCategory {
   Salary = 0,
   Freelance = 1,
@@ -60,6 +65,8 @@ export interface Transaction {
   amount: number
   date: string
   description?: string
+  entityType?: TransactionEntityType
+  entityName?: string | null
   destinationAccountId?: string
   splits: TransactionSplit[]
 }
@@ -71,6 +78,8 @@ export interface CreateTransactionRequest {
   amount: number
   date: string
   description?: string
+  entityType?: TransactionEntityType
+  entityName?: string | null
   destinationAccountId?: string
   splits?: TransactionSplitInput[]
 }
@@ -82,6 +91,8 @@ export interface UpdateTransactionRequest {
   amount: number
   date: string
   description?: string
+  entityType?: TransactionEntityType
+  entityName?: string | null
   destinationAccountId?: string
   splits?: TransactionSplitInput[]
 }

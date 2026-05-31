@@ -1,4 +1,4 @@
-import type { TransactionType, TransactionCategory } from '@/types/transaction'
+import type { TransactionType, TransactionCategory, TransactionEntityType } from '@/types/transaction'
 
 export enum RecurringFrequency {
   Monthly = 0,
@@ -24,6 +24,8 @@ export interface RecurringTransaction {
   category: TransactionCategory
   amount: number
   description?: string
+  entityType?: TransactionEntityType
+  entityName?: string | null
   destinationAccountId?: string
   frequency: RecurringFrequency
   annualMonth?: number
@@ -39,6 +41,8 @@ export interface CreateRecurringTransactionRequest {
   category: TransactionCategory
   amount: number
   description?: string
+  entityType?: TransactionEntityType
+  entityName?: string | null
   destinationAccountId?: string
   frequency: RecurringFrequency
   annualMonth?: number
@@ -50,6 +54,8 @@ export interface UpdateRecurringTransactionRequest {
   category: TransactionCategory
   amount: number
   description?: string
+  entityType?: TransactionEntityType
+  entityName?: string | null
   destinationAccountId?: string
   frequency: RecurringFrequency
   annualMonth?: number

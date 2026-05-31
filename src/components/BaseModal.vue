@@ -22,7 +22,9 @@ defineEmits<{
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" x2="6" y1="6" y2="18"/><line x1="6" x2="18" y1="6" y2="18"/></svg>
         </button>
       </div>
-      <slot />
+      <div class="modal-body">
+        <slot />
+      </div>
     </div>
   </div>
 </template>
@@ -37,8 +39,8 @@ defineEmits<{
   justify-content: center;
   z-index: 50;
   padding: 1rem;
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   animation: overlay-in 0.2s ease;
 }
 
@@ -53,10 +55,22 @@ defineEmits<{
   border: 1px solid var(--color-border, #e2e8f0);
   border-radius: 14px;
   padding: 1.5rem;
-  max-width: 420px;
+  max-width: 500px;
   width: 100%;
+  max-height: calc(100vh - 2rem);
+  display: flex;
+  flex-direction: column;
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
   animation: modal-in 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.modal-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  /* margem negativa + padding para a scrollbar não colar ao conteúdo */
+  margin: 0 -0.5rem;
+  padding: 0 0.5rem;
 }
 
 @keyframes modal-in {
@@ -76,6 +90,7 @@ defineEmits<{
   justify-content: space-between;
   gap: 1rem;
   margin-bottom: 1rem;
+  flex-shrink: 0;
 }
 
 .modal-title {
