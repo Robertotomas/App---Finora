@@ -36,6 +36,29 @@ const overview = ref<SavingsObjectivesOverview>({
   historyObjectives: [],
 })
 
+// Textos dos tooltips dos cards. No plano Couple falamos no plural (2 membros);
+// nos planos individuais (Free/Pro) no singular.
+const isCouple = computed(() => subscriptionStore.plan === 'Couple')
+const statTooltips = computed(() =>
+  isCouple.value
+    ? {
+        savings:
+          'Receitas − Despesas\nTotal que pouparam desde o início até ao último mês.\nPode ser negativo se as despesas forem superiores às receitas.',
+        reserved:
+          'Valor reservado para objetivos concluídos mas ainda não liquidados. Não está disponível para outros objetivos.',
+        available:
+          'Poupança disponível para distribuir pelos objetivos ativos, depois de descontado o valor reservado.',
+      }
+    : {
+        savings:
+          'Receitas − Despesas\nTotal que poupaste desde o início até ao último mês.\nPode ser negativo se as despesas forem superiores às receitas.',
+        reserved:
+          'Valor reservado para objetivos concluídos mas ainda não liquidados. Não está disponível para outros objetivos.',
+        available:
+          'Poupança disponível para distribuir pelos objetivos ativos, depois de descontado o valor reservado.',
+      },
+)
+
 const formOpen = ref(false)
 const editingId = ref<string | null>(null)
 const formName = ref('')
@@ -352,15 +375,35 @@ watch(() => route.query.action, (action) => {
           <!-- Summary stats -->
           <div class="stats-grid">
             <div class="stat-card">
-              <p class="stat-label">Poupança acumulada</p>
-              <p class="stat-value">{{ formatCurrency(overview.totalSavings) }}</p>
+              <div class="stat-header">
+                <p class="stat-label">Poupança acumulada</p>
+                <span class="stat-info" tabindex="0" role="button" aria-label="O que é a poupança acumulada?">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="16" y2="12"/><line x1="12" x2="12.01" y1="8" y2="8"/></svg>
+                  <span class="stat-tooltip" role="tooltip">{{ statTooltips.savings }}</span>
+                </span>
+              </div>
+              <p class="stat-value" :class="{ 'stat-value--negative': overview.totalSavings < 0 }">
+                {{ formatCurrency(overview.totalSavings) }}
+              </p>
             </div>
             <div class="stat-card">
-              <p class="stat-label">Reservado por finalizados</p>
+              <div class="stat-header">
+                <p class="stat-label">Reservado por finalizados</p>
+                <span class="stat-info" tabindex="0" role="button" aria-label="O que é o reservado por finalizados?">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="16" y2="12"/><line x1="12" x2="12.01" y1="8" y2="8"/></svg>
+                  <span class="stat-tooltip" role="tooltip">{{ statTooltips.reserved }}</span>
+                </span>
+              </div>
               <p class="stat-value">{{ formatCurrency(overview.reservedByCompletedObjectives) }}</p>
             </div>
             <div class="stat-card">
-              <p class="stat-label">Disponível para ativos</p>
+              <div class="stat-header">
+                <p class="stat-label">Disponível para ativos</p>
+                <span class="stat-info" tabindex="0" role="button" aria-label="O que é o disponível para ativos?">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="16" y2="12"/><line x1="12" x2="12.01" y1="8" y2="8"/></svg>
+                  <span class="stat-tooltip" role="tooltip">{{ statTooltips.available }}</span>
+                </span>
+              </div>
               <p class="stat-value">{{ formatCurrency(overview.availableForActiveObjectives) }}</p>
             </div>
           </div>
@@ -648,6 +691,12 @@ watch(() => route.query.action, (action) => {
   box-shadow: var(--app-shadow-card, 0 1px 3px rgba(0, 0, 0, 0.06));
 }
 
+.stat-header {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
 .stat-label {
   font-size: 0.75rem;
   font-weight: 600;
@@ -657,12 +706,78 @@ watch(() => route.query.action, (action) => {
   margin: 0;
 }
 
+/* ── Info tooltip (i) ── */
+.stat-info {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-muted);
+  cursor: help;
+  outline: none;
+  flex-shrink: 0;
+  transition: color 0.15s ease;
+}
+
+.stat-info:hover,
+.stat-info:focus-visible {
+  color: var(--color-success);
+}
+
+.stat-tooltip {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  width: max-content;
+  max-width: 240px;
+  padding: 0.625rem 0.75rem;
+  background: var(--color-bg-card);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.4;
+  text-transform: none;
+  letter-spacing: normal;
+  white-space: pre-line;
+  z-index: 30;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.15s ease, transform 0.15s ease, visibility 0.15s;
+}
+
+/* Seta do tooltip */
+.stat-tooltip::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-top-color: var(--color-border);
+}
+
+.stat-info:hover .stat-tooltip,
+.stat-info:focus-visible .stat-tooltip {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+}
+
 .stat-value {
   font-size: 1.25rem;
   font-weight: 700;
   color: var(--color-text);
   margin: 0.25rem 0 0;
   letter-spacing: -0.02em;
+}
+
+.stat-value--negative {
+  color: var(--color-expense);
 }
 
 /* ── Goals grid ── */
