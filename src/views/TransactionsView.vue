@@ -2065,14 +2065,14 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
       </div>
 
       <div v-else-if="transactionsStore.transactions.length === 0" class="empty-state">
-        <p>Nenhuma transação ainda. Cria a tua primeira transação.</p>
+        <p>Nenhum movimento ainda. Cria o teu primeiro movimento.</p>
         <button type="button" class="btn-add" @click="openCreateModal">
-          + Nova transação
+          + Novo movimento
         </button>
       </div>
 
       <div v-else-if="filteredTransactions.length === 0" class="empty-state">
-        <p>Nenhuma transação encontrada com os filtros selecionados.</p>
+        <p>Nenhum movimento encontrado com os filtros selecionados.</p>
       </div>
 
       <div v-else class="table-container">

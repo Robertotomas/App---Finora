@@ -1161,6 +1161,11 @@ html.dark .sidebar-expand-btn:hover {
 
 .sidebar.collapsed .sidebar-plan {
   padding: 0.75rem 0.5rem;
+  justify-content: center;
+}
+
+.sidebar.collapsed .coming-soon-badge {
+  display: none;
 }
 
 .sidebar.collapsed .sidebar-household-name {

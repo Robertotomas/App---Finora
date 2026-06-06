@@ -886,6 +886,7 @@ const showContent = computed(() =>
           <div class="patrimonio-info">
             <span class="patrimonio-label-row">
               <span class="patrimonio-label">PATRIMÔNIO TOTAL</span>
+              <span class="card-info card-info--inline card-info--right" tabindex="0" role="button" aria-label="O que inclui o património total?"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="16" y2="12"/><line x1="12" x2="12.01" y1="8" y2="8"/></svg><span class="card-tooltip" role="tooltip">Soma dos saldos atuais de todas as contas. O valor reservado para objetivos está incluído (não é descontado). Investimentos e Bens e Valores serão somados em breve.</span></span>
               <button class="patrimonio-eye-btn" @click="hideValues = !hideValues" :title="hideValues ? 'Mostrar valores' : 'Esconder valores'">
                 <svg v-if="!hideValues" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>
                 <svg v-else xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/></svg>
@@ -1256,22 +1257,22 @@ const showContent = computed(() =>
         <template v-else>
         <div class="summary-cards summary-cards-fallback">
           <div class="card card-income">
-            <p class="card-title card-title--with-arrow">Receitas <svg class="card-arrow card-arrow--income" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 11 12 6 7 11"/><line x1="12" x2="12" y1="6" y2="18"/></svg></p>
+            <p class="card-title card-title--with-arrow">Receitas <svg class="card-arrow card-arrow--income" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 11 12 6 7 11"/><line x1="12" x2="12" y1="6" y2="18"/></svg><span class="card-info" tabindex="0" role="button" aria-label="O que são as receitas?"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="16" y2="12"/><line x1="12" x2="12.01" y1="8" y2="8"/></svg><span class="card-tooltip" role="tooltip">Total de receitas do período selecionado.</span></span></p>
             <p class="card-value">{{ hideValues ? '••••• €' : formattedIncome }}</p>
             <p class="card-subtitle">{{ periodLabel }}</p>
           </div>
           <div class="card card-expense">
-            <p class="card-title card-title--with-arrow">Despesas <svg class="card-arrow card-arrow--expense" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="7 13 12 18 17 13"/><line x1="12" x2="12" y1="18" y2="6"/></svg></p>
+            <p class="card-title card-title--with-arrow">Despesas <svg class="card-arrow card-arrow--expense" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="7 13 12 18 17 13"/><line x1="12" x2="12" y1="18" y2="6"/></svg><span class="card-info" tabindex="0" role="button" aria-label="O que são as despesas?"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="16" y2="12"/><line x1="12" x2="12.01" y1="8" y2="8"/></svg><span class="card-tooltip" role="tooltip">Total de despesas do período selecionado.</span></span></p>
             <p class="card-value">{{ hideValues ? '••••• €' : formattedExpenses }}</p>
             <p class="card-subtitle">{{ periodLabel }}</p>
           </div>
           <div class="card card-savings">
-            <p class="card-title card-title--with-arrow">Poupança <svg class="card-arrow card-arrow--savings" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 5c-1.5 0-2.8 1.4-3 2-3.5-1.5-11-.3-11 5 0 1.8 0 3 2 4.5V20h4v-2h3v2h4v-4c1-.5 1.7-1 2-2h2v-4h-2c0-1-.5-1.5-1-2"/><path d="M2 9.1C1.7 11 2 12 2 12"/><circle cx="15.5" cy="9.5" r=".5" fill="currentColor"/></svg></p>
+            <p class="card-title card-title--with-arrow">Poupança <svg class="card-arrow card-arrow--savings" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 5c-1.5 0-2.8 1.4-3 2-3.5-1.5-11-.3-11 5 0 1.8 0 3 2 4.5V20h4v-2h3v2h4v-4c1-.5 1.7-1 2-2h2v-4h-2c0-1-.5-1.5-1-2"/><path d="M2 9.1C1.7 11 2 12 2 12"/><circle cx="15.5" cy="9.5" r=".5" fill="currentColor"/></svg><span class="card-info" tabindex="0" role="button" aria-label="O que é a poupança?"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="16" y2="12"/><line x1="12" x2="12.01" y1="8" y2="8"/></svg><span class="card-tooltip" role="tooltip">Receitas − Despesas do período selecionado.</span></span></p>
             <p class="card-value">{{ hideValues ? '••••• €' : formattedSavings }}</p>
             <p class="card-subtitle">{{ periodLabel }}</p>
           </div>
           <div class="card card-savings">
-            <p class="card-title card-title--with-arrow">Taxa de poupança <svg class="card-arrow card-arrow--rate" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" x2="9" y1="9" y2="15"/><line x1="9" x2="9.01" y1="9" y2="9"/><line x1="15" x2="15.01" y1="15" y2="15"/></svg></p>
+            <p class="card-title card-title--with-arrow">Taxa de poupança <svg class="card-arrow card-arrow--rate" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" x2="9" y1="9" y2="15"/><line x1="9" x2="9.01" y1="9" y2="9"/><line x1="15" x2="15.01" y1="15" y2="15"/></svg><span class="card-info" tabindex="0" role="button" aria-label="O que é a taxa de poupança?"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="16" y2="12"/><line x1="12" x2="12.01" y1="8" y2="8"/></svg><span class="card-tooltip" role="tooltip">Percentagem das receitas que foi poupada (Poupança ÷ Receitas).</span></span></p>
             <p class="card-value">{{ hideValues ? '•••' : formatPercent(savingsRate) }}</p>
             <p class="card-subtitle">% da receita real poupada</p>
           </div>
@@ -1282,6 +1283,7 @@ const showContent = computed(() =>
               <span class="daily-avg-banner-title">
                 <svg class="daily-avg-banner-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
                 Média diária de gastos
+                <span class="card-info card-info--inline" tabindex="0" role="button" aria-label="O que é a média diária de gastos?"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="16" y2="12"/><line x1="12" x2="12.01" y1="8" y2="8"/></svg><span class="card-tooltip" role="tooltip">Despesas do período ÷ número de dias. No mês atual, a projeção estima o total ao manter este ritmo até ao fim do mês.</span></span>
               </span>
               <span class="daily-avg-banner-value-row">
                 <span class="daily-avg-banner-value">{{ hideValues ? '••••• €' : formatCurrency(dailyAverage.avg, dashboard.currency.value) }}</span>
@@ -1830,6 +1832,7 @@ html.dark .objectives-completed-badge {
 }
 
 .summary-cards-fallback .card {
+  position: relative;
   background: var(--color-bg-card);
   border-radius: 14px;
   padding: 1.125rem 1.25rem;
@@ -1847,6 +1850,121 @@ html.dark .objectives-completed-badge {
   display: inline-flex;
   align-items: center;
   gap: 0.375rem;
+}
+
+/* ── Info tooltip (i) no canto superior direito dos cards do dashboard ── */
+.card-info {
+  position: absolute;
+  top: 0.875rem;
+  right: 1rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-muted);
+  cursor: help;
+  outline: none;
+  flex-shrink: 0;
+  z-index: 2;
+  transition: color 0.15s ease;
+}
+
+.card-info:hover,
+.card-info:focus-visible {
+  color: var(--color-success);
+}
+
+.card-tooltip {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  right: -0.25rem;
+  transform: translateY(4px);
+  width: max-content;
+  max-width: 220px;
+  padding: 0.625rem 0.75rem;
+  background: var(--color-bg-card);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.4;
+  text-transform: none;
+  letter-spacing: normal;
+  text-align: left;
+  z-index: 30;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.15s ease, transform 0.15s ease, visibility 0.15s;
+}
+
+.card-tooltip::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  right: 0.5rem;
+  border: 6px solid transparent;
+  border-top-color: var(--color-border);
+}
+
+.card-info:hover .card-tooltip,
+.card-info:focus-visible .card-tooltip {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+/* Variante inline (ex.: banner da média diária) — fica junto ao título e o
+   tooltip abre centrado sobre o ícone, em vez de no canto do card. */
+.card-info--inline {
+  position: relative;
+  top: auto;
+  right: auto;
+  vertical-align: middle;
+  margin-left: 0.25rem;
+}
+
+.card-info--inline .card-tooltip {
+  right: auto;
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+}
+
+.card-info--inline:hover .card-tooltip,
+.card-info--inline:focus-visible .card-tooltip {
+  transform: translateX(-50%) translateY(0);
+}
+
+.card-info--inline .card-tooltip::after {
+  right: auto;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+/* Variante que abre para a DIREITA, ao lado do ícone (evita o corte em cima
+   quando está no topo da página). Usar com --inline. */
+.card-info--right .card-tooltip {
+  bottom: auto;
+  top: 50%;
+  left: calc(100% + 8px);
+  right: auto;
+  transform: translateY(calc(-50% - 8px)) translateX(-4px);
+}
+
+.card-info--right:hover .card-tooltip,
+.card-info--right:focus-visible .card-tooltip {
+  transform: translateY(calc(-50% - 8px)) translateX(0);
+}
+
+.card-info--right .card-tooltip::after {
+  top: calc(50% + 8px);
+  left: auto;
+  right: 100%;
+  bottom: auto;
+  transform: translateY(-50%);
+  border-top-color: transparent;
+  border-right-color: var(--color-border);
 }
 
 .summary-cards-fallback .card-arrow {
