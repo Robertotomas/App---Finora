@@ -9,6 +9,7 @@ import iconMale from '@/assets/images/icon-male.png'
 import iconFinoraFlow from '@/assets/images/finoraflow-icon.png'
 import PartnerLeftModal from '@/components/PartnerLeftModal.vue'
 import NotificationBell from '@/components/NotificationBell.vue'
+import GlobalSearch from '@/components/GlobalSearch.vue'
 import { useNotificationStore } from '@/stores/notifications'
 
 const authStore = useAuthStore()
@@ -205,9 +206,7 @@ function isActive(path: string) {
           <!-- Notification bell -->
           <NotificationBell v-if="authStore.isAuthenticated" />
 
-        <div class="header-search">
-          <input type="text" placeholder="Pesquisar..." class="search-input" />
-        </div>
+        <GlobalSearch v-if="authStore.isAuthenticated" class="header-search" />
 
           <div class="user-menu">
             <button

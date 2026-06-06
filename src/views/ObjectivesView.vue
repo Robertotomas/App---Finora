@@ -23,10 +23,17 @@ const loading = ref(true)
 const saving = ref(false)
 const error = ref<string | null>(null)
 
-const activeTab = computed<'active' | 'history'>({
-  get: () => (route.query.tab === 'history' ? 'history' : 'active'),
-  set: (val) => router.replace({ query: { ...route.query, tab: val } })
+type SectionFilter = 'all' | 'active' | 'history'
+const sectionFilter = computed<SectionFilter>({
+  get: () =>
+    route.query.tab === 'history' ? 'history' : route.query.tab === 'active' ? 'active' : 'all',
+  set: (val) => {
+    const tab = val === 'all' ? undefined : val
+    router.replace({ query: { ...route.query, tab } })
+  },
 })
+const showActive = computed(() => sectionFilter.value !== 'history')
+const showHistory = computed(() => sectionFilter.value !== 'active')
 
 const overview = ref<SavingsObjectivesOverview>({
   totalSavings: 0,
@@ -83,6 +90,8 @@ function resetForm() {
 function openCreateForm() {
   if (objectivesLocked.value) return
   resetForm()
+  // Garante que a secção Ativos (que contém o formulário) está visível.
+  if (sectionFilter.value === 'history') sectionFilter.value = 'all'
   formOpen.value = true
 }
 
@@ -205,7 +214,7 @@ watch(
     await loadOverview()
     if (!enabled) {
       error.value = null
-      activeTab.value = 'active'
+      sectionFilter.value = 'all'
       resetForm()
     }
   }
@@ -257,7 +266,7 @@ async function finalizeObjective(item: SavingsObjectiveActive) {
   try {
     const { data } = await objectivesApi.finalize(item.id)
     overview.value = distributeLocalSavings(normalizeOverview(data))
-    activeTab.value = 'active'
+    sectionFilter.value = 'all'
   } catch (e: unknown) {
     const err = e as { response?: { data?: { message?: string } }; message?: string }
     error.value = err.response?.data?.message || err.message || 'Não foi possível finalizar objetivo.'
@@ -354,11 +363,10 @@ watch(() => route.query.action, (action) => {
       <!-- Page header -->
       <div class="page-header">
         <div class="page-header-text">
-          <h1 class="page-title">{{ activeTab === 'active' ? 'Objetivos Ativos' : 'Objetivos Concluídos' }}</h1>
-          <p class="page-subtitle">{{ activeTab === 'active' ? 'Define objetivos de poupança e acompanha o progresso' : 'Histórico dos objetivos já alcançados' }}</p>
+          <h1 class="page-title">Objetivos</h1>
+          <p class="page-subtitle">Define objetivos de poupança e acompanha o progresso</p>
         </div>
         <button
-          v-if="activeTab === 'active'"
           type="button"
           class="btn-add"
           :disabled="objectivesLocked"
@@ -408,11 +416,18 @@ watch(() => route.query.action, (action) => {
             </div>
           </div>
 
+          <!-- Filtro de secções -->
+          <div class="filter-chips" role="tablist">
+            <button type="button" class="filter-chip" :class="{ active: sectionFilter === 'all' }" role="tab" :aria-selected="sectionFilter === 'all'" @click="sectionFilter = 'all'">Todos</button>
+            <button type="button" class="filter-chip" :class="{ active: sectionFilter === 'active' }" role="tab" :aria-selected="sectionFilter === 'active'" @click="sectionFilter = 'active'">Ativos</button>
+            <button type="button" class="filter-chip" :class="{ active: sectionFilter === 'history' }" role="tab" :aria-selected="sectionFilter === 'history'" @click="sectionFilter = 'history'">Concluídos</button>
+          </div>
+
           <!-- Error -->
           <div v-if="error" class="global-error">{{ error }}</div>
 
-          <!-- ═══ ACTIVE TAB ═══ -->
-          <section v-if="activeTab === 'active'">
+          <!-- ═══ ATIVOS ═══ -->
+          <section v-if="showActive" id="sec-ativos" class="objectives-section">
             <!-- Create/Edit form -->
             <div v-if="formOpen" class="form-card">
               <h2 class="form-title">{{ editingId ? 'Editar objetivo' : 'Novo objetivo' }}</h2>
@@ -440,6 +455,8 @@ watch(() => route.query.action, (action) => {
                 </button>
               </div>
             </div>
+
+            <h2 class="section-heading">Ativos</h2>
 
             <!-- Loading -->
             <div v-if="loading && !objectivesLocked" class="loading-state">
@@ -536,14 +553,11 @@ watch(() => route.query.action, (action) => {
             </div>
           </section>
 
-          <!-- ═══ HISTORY TAB ═══ -->
-          <section v-else>
-            <div v-if="loading && !objectivesLocked" class="loading-state">
-              <div class="spinner"></div>
-              <p>A carregar objetivos concluídos...</p>
-            </div>
+          <!-- ═══ CONCLUÍDOS ═══ -->
+          <section v-if="!loading && showHistory" id="sec-concluidos" class="objectives-section" :class="{ 'objectives-section--history': sectionFilter === 'all' }">
+            <h2 class="section-heading">Concluídos</h2>
 
-            <div v-else-if="historyObjectives.length === 0 && !loading" class="empty-card">
+            <div v-if="historyObjectives.length === 0" class="empty-card">
               <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="empty-icon"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
               <p class="empty-text">Sem objetivos finalizados</p>
               <p class="empty-hint">Quando finalizares um objetivo ativo, ele aparece aqui.</p>
@@ -778,6 +792,57 @@ watch(() => route.query.action, (action) => {
 
 .stat-value--negative {
   color: var(--color-expense);
+}
+
+/* ── Filtro de secções ── */
+.filter-chips {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.filter-chip {
+  padding: 0.4rem 0.875rem;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-card);
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.filter-chip:hover {
+  color: var(--color-text);
+  border-color: var(--color-text-muted);
+}
+
+.filter-chip.active {
+  background: #166534;
+  border-color: #166534;
+  color: #ffffff;
+}
+
+html.dark .filter-chip.active {
+  background: #15803d;
+  border-color: #15803d;
+}
+
+/* ── Secções (Ativos / Concluídos) ── */
+.section-heading {
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: var(--color-text);
+  margin: 0 0 0.875rem;
+  letter-spacing: -0.01em;
+}
+
+.objectives-section--history {
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--color-border);
 }
 
 /* ── Goals grid ── */
