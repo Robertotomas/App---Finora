@@ -43,18 +43,18 @@ async function handleSubmit() {
     <div class="auth-body">
     <div class="auth-card">
       <div class="auth-intro">
-        <p class="auth-intro-title">Log In</p>
-        <p class="auth-intro-welcome">Welcome! Let's start!</p>
+        <p class="auth-intro-title">Iniciar Sessão</p>
+        <p class="auth-intro-welcome">Bem-vindo! Vamos começar!</p>
       </div>
       <form @submit.prevent="handleSubmit">
         <div v-if="error" class="auth-error">{{ error }}</div>
         <div class="auth-field">
           <label for="email">Email</label>
-          <input id="email" v-model="email" type="email" required placeholder="email@exemplo.pt" />
+          <input id="email" v-model="email" type="email" required placeholder="Introduza o e-mail" />
         </div>
         <div class="auth-field">
           <label for="password">Password</label>
-          <input id="password" v-model="password" type="password" required placeholder="••••••••" />
+          <input id="password" v-model="password" type="password" required placeholder="Introduza a palavra-passe" />
         </div>
         <button type="submit" class="auth-btn" :disabled="loading">
           {{ loading ? 'A entrar...' : 'Entrar' }}

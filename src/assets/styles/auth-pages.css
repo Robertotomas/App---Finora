@@ -26,7 +26,7 @@
 }
 
 .auth-intro-title {
-  margin: 0 0 0.25rem;
+  margin: 0 0 0.625rem;
   font-size: 1.625rem;
   font-weight: 800;
   color: #0f172a;
@@ -205,7 +205,7 @@
   margin-top: 2rem;
   text-align: center;
   font-size: 0.8125rem;
-  color: #94a3b8;
+  color: #334155;
 }
 
 .auth-footer a {
@@ -285,7 +285,7 @@ html.dark .auth-error {
 }
 
 html.dark .auth-footer {
-  color: #a3a3a3;
+  color: #e5e5e5;
 }
 
 html.dark .auth-footer a {
