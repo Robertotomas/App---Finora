@@ -773,6 +773,29 @@ const heroDisplayDate = computed(() => {
   return 'Hoje'
 })
 
+/* ── Variação do património vs. fim do mês anterior ── */
+const monthChange = computed<{ pct: number; positive: boolean } | null>(() => {
+  const pts = dailyBalancePoints.value
+  if (pts.length === 0) return null
+  const now = new Date()
+  // Último dia do mês anterior = dia 0 do mês atual
+  const endPrev = new Date(now.getFullYear(), now.getMonth(), 0)
+  const target = `${endPrev.getFullYear()}-${String(endPrev.getMonth() + 1).padStart(2, '0')}-${String(endPrev.getDate()).padStart(2, '0')}`
+  // Saldo no fim do mês anterior = último ponto (série ascendente) com data <= alvo
+  let prevBalance: number | null = null
+  for (const p of pts) {
+    if (p.date <= target) prevBalance = p.balance
+    else break
+  }
+  if (prevBalance === null || prevBalance === 0) return null
+  const pct = ((currentTotalBalance.value - prevBalance) / Math.abs(prevBalance)) * 100
+  return { pct, positive: pct >= 0 }
+})
+
+function formatPct(pct: number): string {
+  return Math.abs(pct).toFixed(1).replace('.', ',') + '%'
+}
+
 /* ── Seletor de período para gráficos de tendência (line + bar) ── */
 type TrendChartPeriod = 'YTD' | '3M' | '6M' | '1A' | '5A'
 const trendChartPeriod = ref<TrendChartPeriod>('6M')
@@ -893,6 +916,11 @@ const showContent = computed(() =>
               </button>
             </span>
             <p class="patrimonio-value">{{ hideValues ? '••••••' : formatCurrency(heroDisplayBalance, dashboard.currency.value) }}</p>
+            <span
+              v-if="monthChange && !hideValues"
+              class="patrimonio-trend"
+              :class="{ 'patrimonio-trend--down': !monthChange.positive }"
+            >{{ monthChange.positive ? '▲' : '▼' }} {{ formatPct(monthChange.pct) }} este mês</span>
             <span class="patrimonio-date">{{ heroDisplayDate }}</span>
             <span v-if="totalAllocatedToObjectives > 0" class="patrimonio-reserved">
               {{ hideValues ? '•••••' : formatCurrency(totalAllocatedToObjectives, dashboard.currency.value) }} reservado para objetivos
@@ -2753,6 +2781,27 @@ html.dark .patrimonio-label {
   margin: 0;
   letter-spacing: -0.03em;
   line-height: 1.15;
+}
+
+.patrimonio-trend {
+  display: block;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: #16a34a;
+  margin-top: 0.375rem;
+  letter-spacing: -0.01em;
+}
+
+.patrimonio-trend--down {
+  color: #dc2626;
+}
+
+html.dark .patrimonio-trend {
+  color: #4ade80;
+}
+
+html.dark .patrimonio-trend--down {
+  color: #f87171;
 }
 
 .patrimonio-date {

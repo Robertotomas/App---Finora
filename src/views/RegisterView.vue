@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { RouterLink } from 'vue-router'
 import iconFinoraFlow from '@/assets/images/finoraflow-icon.png'
+import AuthShowcase from '@/components/AuthShowcase.vue'
 import { coupleInvitationsApi } from '@/api/coupleInvitations'
 
 const router = useRouter()
@@ -88,59 +89,65 @@ async function handleSubmit() {
 
 <template>
   <div class="auth-page">
-    <div class="auth-brand auth-brand-hero">
-      <img :src="iconFinoraFlow" alt="FinoraFlow" class="auth-brand-hero-img" width="800" height="200" />
-    </div>
-    <div class="auth-body">
-    <div class="auth-card auth-card-wide">
-      <div class="auth-intro">
-        <p class="auth-intro-title">Criar conta</p>
-        <p class="auth-intro-welcome">Bem-vindo! Vamos começar!</p>
-        <p v-if="inviteValidating" class="auth-intro-welcome">A validar convite…</p>
-        <p v-else-if="inviteInfo" class="auth-invite-banner">
-          Convite de <strong>{{ inviteInfo.inviterName || 'alguém' }}</strong>
-          <span v-if="inviteInfo.householdName"> · {{ inviteInfo.householdName }}</span>
-          <br />
-          <span class="auth-invite-email-hint">Usa o email convidado: {{ inviteInfo.inviteeEmailMasked }}</span>
+    <div class="auth-left">
+      <div class="auth-brand">
+        <img :src="iconFinoraFlow" alt="FinoraFlow" class="auth-brand-img" />
+      </div>
+      <div class="auth-left-inner">
+        <div class="auth-intro">
+          <p class="auth-intro-title">Criar conta</p>
+          <p class="auth-intro-welcome">Bem-vindo! Vamos começar!</p>
+          <p v-if="inviteValidating" class="auth-intro-welcome">A validar convite…</p>
+          <p v-else-if="inviteInfo" class="auth-invite-banner">
+            Convite de <strong>{{ inviteInfo.inviterName || 'alguém' }}</strong>
+            <span v-if="inviteInfo.householdName"> · {{ inviteInfo.householdName }}</span>
+            <br />
+            <span class="auth-invite-email-hint">Usa o email convidado: {{ inviteInfo.inviteeEmailMasked }}</span>
+          </p>
+        </div>
+        <form @submit.prevent="handleSubmit">
+          <div v-if="error" class="auth-error">{{ error }}</div>
+          <div class="auth-field">
+            <label for="firstName">Nome</label>
+            <input id="firstName" v-model="firstName" type="text" required placeholder="Introduza o nome" />
+          </div>
+          <div class="auth-field">
+            <label for="lastName">Apelido</label>
+            <input id="lastName" v-model="lastName" type="text" required placeholder="Introduza o apelido" />
+          </div>
+          <div class="auth-field">
+            <label for="email">Email</label>
+            <input id="email" v-model="email" type="email" required placeholder="Introduza o e-mail" />
+          </div>
+          <div class="auth-field">
+            <label for="password">Password</label>
+            <input id="password" v-model="password" type="password" required placeholder="Introduza a palavra-passe" />
+            <ul v-if="password.length > 0" class="pw-rules">
+              <li :class="{ ok: passwordRules.minLength }">Mínimo 8 caracteres</li>
+              <li :class="{ ok: passwordRules.hasUpper }">Uma letra maiúscula</li>
+              <li :class="{ ok: passwordRules.hasLower }">Uma letra minúscula</li>
+              <li :class="{ ok: passwordRules.hasNumber }">Um número</li>
+            </ul>
+          </div>
+          <button type="submit" class="auth-btn" :disabled="loading || !passwordValid">
+            {{ loading ? 'A registar...' : 'Registar' }}
+          </button>
+        </form>
+        <p class="auth-footer">
+          Já tens conta? <RouterLink to="/entrar">Entrar</RouterLink>
         </p>
       </div>
-      <form @submit.prevent="handleSubmit">
-        <div v-if="error" class="auth-error">{{ error }}</div>
-        <div class="auth-field">
-          <label for="firstName">Nome</label>
-          <input id="firstName" v-model="firstName" type="text" required placeholder="Introduza o nome" />
-        </div>
-        <div class="auth-field">
-          <label for="lastName">Apelido</label>
-          <input id="lastName" v-model="lastName" type="text" required placeholder="Introduza o apelido" />
-        </div>
-        <div class="auth-field">
-          <label for="email">Email</label>
-          <input id="email" v-model="email" type="email" required placeholder="Introduza o e-mail" />
-        </div>
-        <div class="auth-field">
-          <label for="password">Password</label>
-          <input id="password" v-model="password" type="password" required placeholder="Introduza a palavra-passe" />
-          <ul v-if="password.length > 0" class="pw-rules">
-            <li :class="{ ok: passwordRules.minLength }">Mínimo 8 caracteres</li>
-            <li :class="{ ok: passwordRules.hasUpper }">Uma letra maiúscula</li>
-            <li :class="{ ok: passwordRules.hasLower }">Uma letra minúscula</li>
-            <li :class="{ ok: passwordRules.hasNumber }">Um número</li>
-          </ul>
-        </div>
-        <button type="submit" class="auth-btn" :disabled="loading || !passwordValid">
-          {{ loading ? 'A registar...' : 'Registar' }}
-        </button>
-      </form>
-      <p class="auth-footer">
-        Já tens conta? <RouterLink to="/entrar">Entrar</RouterLink>
-      </p>
     </div>
-    </div>
+    <AuthShowcase />
   </div>
 </template>
 
 <style scoped>
+/* Registo tem mais campos (mais alto) — fica mais perto do topo que o login */
+.auth-left-inner {
+  margin: clamp(3.5rem, 12vh, 7rem) 0 auto;
+}
+
 .pw-rules {
   list-style: none;
   padding: 0;

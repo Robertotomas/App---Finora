@@ -4,6 +4,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { RouterLink } from 'vue-router'
 import iconFinoraFlow from '@/assets/images/finoraflow-icon.png'
+import AuthShowcase from '@/components/AuthShowcase.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -37,33 +38,34 @@ async function handleSubmit() {
 
 <template>
   <div class="auth-page">
-    <div class="auth-brand auth-brand-hero">
-      <img :src="iconFinoraFlow" alt="FinoraFlow" class="auth-brand-hero-img" width="800" height="200" />
-    </div>
-    <div class="auth-body">
-    <div class="auth-card">
-      <div class="auth-intro">
-        <p class="auth-intro-title">Iniciar Sessão</p>
-        <p class="auth-intro-welcome">Bem-vindo! Vamos começar!</p>
+    <div class="auth-left">
+      <div class="auth-brand">
+        <img :src="iconFinoraFlow" alt="FinoraFlow" class="auth-brand-img" />
       </div>
-      <form @submit.prevent="handleSubmit">
-        <div v-if="error" class="auth-error">{{ error }}</div>
-        <div class="auth-field">
-          <label for="email">Email</label>
-          <input id="email" v-model="email" type="email" required placeholder="Introduza o e-mail" />
+      <div class="auth-left-inner">
+        <div class="auth-intro">
+          <p class="auth-intro-title">Iniciar Sessão</p>
+          <p class="auth-intro-welcome">Bem-vindo! Vamos começar!</p>
         </div>
-        <div class="auth-field">
-          <label for="password">Password</label>
-          <input id="password" v-model="password" type="password" required placeholder="Introduza a palavra-passe" />
-        </div>
-        <button type="submit" class="auth-btn" :disabled="loading">
-          {{ loading ? 'A entrar...' : 'Entrar' }}
-        </button>
-      </form>
-      <p class="auth-footer">
-        Não tens conta? <RouterLink to="/registar">Regista-te</RouterLink>
-      </p>
+        <form @submit.prevent="handleSubmit">
+          <div v-if="error" class="auth-error">{{ error }}</div>
+          <div class="auth-field">
+            <label for="email">Email</label>
+            <input id="email" v-model="email" type="email" required placeholder="Introduza o e-mail" />
+          </div>
+          <div class="auth-field">
+            <label for="password">Password</label>
+            <input id="password" v-model="password" type="password" required placeholder="Introduza a palavra-passe" />
+          </div>
+          <button type="submit" class="auth-btn" :disabled="loading">
+            {{ loading ? 'A entrar...' : 'Entrar' }}
+          </button>
+        </form>
+        <p class="auth-footer">
+          Não tens conta? <RouterLink to="/registar">Criar conta</RouterLink>
+        </p>
+      </div>
     </div>
-    </div>
+    <AuthShowcase />
   </div>
 </template>
