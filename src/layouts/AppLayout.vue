@@ -125,21 +125,9 @@ const patrimonioItems = [
   { to: '', label: 'Bens e Valores', icon: 'gem', comingSoon: true },
 ]
 
-const objectivesSubItems = [
-  { to: '/objetivos?tab=active', label: 'Ativos', tabKey: 'active' },
-  { to: '/objetivos?tab=history', label: 'Concluídos', tabKey: 'history' },
-]
-
 const toolsItems = [
   { to: '/relatorios', label: 'Relatórios' },
 ]
-
-function isObjectivesSubActive(tabKey: string) {
-  if (!route.path.startsWith('/objetivos')) return false
-  const tab = route.query.tab as string | undefined
-  if (tabKey === 'active') return !tab || tab === 'active'
-  return tab === tabKey
-}
 
 function isMovimentsSubActive(tabKey: string) {
   if (!route.path.startsWith('/movimentos')) return false
@@ -406,17 +394,14 @@ function isActive(path: string) {
           <div class="sidebar-section">
             <span class="sidebar-section-title">Objetivos</span>
             <RouterLink
-              v-for="sub in objectivesSubItems"
-              :key="sub.tabKey"
-              :to="sub.to"
+              to="/objetivos"
               class="sidebar-link"
-              :class="{ active: isObjectivesSubActive(sub.tabKey) }"
+              :class="{ active: isActive('/objetivos') }"
             >
               <span class="sidebar-icon">
-                <svg v-if="sub.tabKey === 'active'" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/><line x1="22" x2="12" y1="2" y2="12"/></svg>
-                <svg v-else xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/><line x1="22" x2="12" y1="2" y2="12"/></svg>
               </span>
-              <span class="sidebar-label">{{ sub.label }}</span>
+              <span class="sidebar-label">Objetivos</span>
             </RouterLink>
           </div>
 

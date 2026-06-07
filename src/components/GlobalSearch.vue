@@ -2,14 +2,18 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { searchApi, type GlobalSearchResult } from '@/api/search'
+import { TRANSACTION_CATEGORY_LABELS, type TransactionCategory } from '@/types/transaction'
 
 const router = useRouter()
+
+const emptyResult = (): GlobalSearchResult => ({ transactions: [], recurrings: [], accounts: [], objectives: [] })
+const categoryLabel = (c: number): string => TRANSACTION_CATEGORY_LABELS[c as TransactionCategory] ?? 'Movimento'
 
 const query = ref('')
 const open = ref(false)
 const loading = ref(false)
 const activeIndex = ref(0)
-const result = ref<GlobalSearchResult>({ transactions: [], accounts: [], objectives: [] })
+const result = ref<GlobalSearchResult>(emptyResult())
 
 const rootEl = ref<HTMLElement | null>(null)
 const inputEl = ref<HTMLInputElement | null>(null)
@@ -80,13 +84,23 @@ const groups = computed<PaletteGroup[]>(() => {
   // Dados (vêm do backend)
   const tx = result.value.transactions.map<PaletteItem>((t) => ({
     id: 'tx-' + t.id,
-    label: t.description || t.entityName || 'Movimento',
+    label: t.description || t.entityName || categoryLabel(t.category),
     sublabel: t.entityName && t.description ? t.entityName : undefined,
     meta: `${fmtAmount(t)} · ${fmtDate(t.date)}`,
     icon: 'tx',
     run: () => go('/movimentos?tab=movements'),
   }))
   if (tx.length) out.push({ title: 'Movimentos', items: tx })
+
+  const rec = result.value.recurrings.map<PaletteItem>((r) => ({
+    id: 'rec-' + r.id,
+    label: r.description || r.entityName || categoryLabel(r.category),
+    sublabel: r.entityName && r.description ? r.entityName : undefined,
+    meta: `${fmtAmount(r)} · ${r.frequency === 1 ? 'Anual' : 'Mensal'}`,
+    icon: 'clock',
+    run: () => go('/movimentos?tab=recurring'),
+  }))
+  if (rec.length) out.push({ title: 'Recorrentes', items: rec })
 
   const accs = result.value.accounts.map<PaletteItem>((a) => ({
     id: 'acc-' + a.id,
@@ -139,13 +153,13 @@ watch(query, (val) => {
   activeIndex.value = 0
   if (!q) {
     open.value = false
-    result.value = { transactions: [], accounts: [], objectives: [] }
+    result.value = emptyResult()
     return
   }
   open.value = true
   if (q.length < 2) {
     // Só navegação/ações para 1 caractere — não chamamos o backend.
-    result.value = { transactions: [], accounts: [], objectives: [] }
+    result.value = emptyResult()
     return
   }
   if (debounceTimer) clearTimeout(debounceTimer)
@@ -160,7 +174,7 @@ async function runSearch(q: string) {
     if (id !== requestId) return // resultado obsoleto
     result.value = data
   } catch {
-    if (id === requestId) result.value = { transactions: [], accounts: [], objectives: [] }
+    if (id === requestId) result.value = emptyResult()
   } finally {
     if (id === requestId) loading.value = false
   }

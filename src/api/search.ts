@@ -10,6 +10,16 @@ export interface SearchTransaction {
   date: string
 }
 
+export interface SearchRecurring {
+  id: string
+  description?: string | null
+  entityName?: string | null
+  amount: number
+  type: number
+  category: number
+  frequency: number
+}
+
 export interface SearchAccount {
   id: string
   name: string
@@ -24,6 +34,7 @@ export interface SearchObjective {
 
 export interface GlobalSearchResult {
   transactions: SearchTransaction[]
+  recurrings: SearchRecurring[]
   accounts: SearchAccount[]
   objectives: SearchObjective[]
 }
