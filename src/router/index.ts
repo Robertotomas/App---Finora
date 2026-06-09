@@ -17,6 +17,12 @@ const router = createRouter({
       meta: { requiresAuth: false, guestOnly: true },
     },
     {
+      path: '/redefinir-password',
+      name: 'redefinir-password',
+      component: () => import('@/views/ResetPasswordView.vue'),
+      meta: { requiresAuth: false },
+    },
+    {
       path: '/subscricao',
       name: 'subscricao',
       component: () => import('@/views/SubscriptionView.vue'),

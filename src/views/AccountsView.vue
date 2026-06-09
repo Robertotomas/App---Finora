@@ -43,15 +43,23 @@ const deleteWithTransferAccount = ref<Account | null>(null)
 const archiveModalOpen = ref(false)
 const archiveAccount = ref<Account | null>(null)
 
-// Filtro de secção (chips Ativas / Arquivadas), ligado a ?tab=archived
-type SectionFilter = 'active' | 'archived'
+// Filtro de secção (chips Todas / Ativas / Arquivadas), ligado a ?tab=active|archived
+type SectionFilter = 'all' | 'active' | 'archived'
 const sectionFilter = computed<SectionFilter>({
-  get: () => (route.query.tab === 'archived' ? 'archived' : 'active'),
+  get: () =>
+    route.query.tab === 'archived' ? 'archived' : route.query.tab === 'active' ? 'active' : 'all',
   set: (val) => {
-    const tab = val === 'active' ? undefined : val
+    const tab = val === 'all' ? undefined : val
     router.replace({ query: { ...route.query, tab } })
   },
 })
+
+const showActiveSection = computed(
+  () => sectionFilter.value === 'all' || sectionFilter.value === 'active'
+)
+const showArchivedSection = computed(
+  () => sectionFilter.value === 'all' || sectionFilter.value === 'archived'
+)
 
 const needsPrimarySelection = computed(
   () => subscriptionStore.limits.needsPrimaryAccountSelection === true
@@ -368,6 +376,16 @@ function accountIcon(type: AccountType): string {
         <button
           type="button"
           class="filter-chip"
+          :class="{ active: sectionFilter === 'all' }"
+          role="tab"
+          :aria-selected="sectionFilter === 'all'"
+          @click="sectionFilter = 'all'"
+        >
+          Todas
+        </button>
+        <button
+          type="button"
+          class="filter-chip"
           :class="{ active: sectionFilter === 'active' }"
           role="tab"
           :aria-selected="sectionFilter === 'active'"
@@ -389,7 +407,7 @@ function accountIcon(type: AccountType): string {
 
       <!-- Primary selection banner -->
       <div
-        v-if="sectionFilter === 'active' && needsPrimarySelection && accountsStore.activeAccounts.length > 1"
+        v-if="showActiveSection && needsPrimarySelection && accountsStore.activeAccounts.length > 1"
         class="banner banner--warning"
       >
         <div class="banner-content">
@@ -416,7 +434,7 @@ function accountIcon(type: AccountType): string {
       </div>
 
       <!-- Unlock banner -->
-      <div v-if="sectionFilter === 'active' && showUnlockAccountsBanner" class="banner banner--warning">
+      <div v-if="showActiveSection && showUnlockAccountsBanner" class="banner banner--warning">
         <div class="banner-content banner-row">
           <div>
             <p class="banner-title">Contas bloqueadas</p>
@@ -445,7 +463,8 @@ function accountIcon(type: AccountType): string {
       </div>
 
       <!-- Active accounts -->
-      <template v-if="sectionFilter === 'active' && accountsStore.activeAccounts.length > 0">
+      <template v-if="showActiveSection && accountsStore.activeAccounts.length > 0">
+        <h2 v-if="sectionFilter === 'all'" class="section-heading">Ativas</h2>
         <div class="accounts-grid">
           <div
             v-for="account in accountsStore.activeAccounts"
@@ -519,7 +538,8 @@ function accountIcon(type: AccountType): string {
       </div>
 
       <!-- Archived accounts -->
-      <div v-if="sectionFilter === 'archived' && accountsStore.archivedAccounts.length > 0" class="archived-section">
+      <div v-if="showArchivedSection && accountsStore.archivedAccounts.length > 0" class="archived-section">
+        <h2 v-if="sectionFilter === 'all'" class="section-heading">Arquivadas</h2>
         <div class="accounts-grid">
           <div
             v-for="account in accountsStore.archivedAccounts"
@@ -718,6 +738,19 @@ function accountIcon(type: AccountType): string {
 .btn-add:hover {
   background: #15803d;
   transform: translateY(-1px);
+}
+
+/* ── Section heading (vista "Todas") ── */
+.section-heading {
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: var(--color-text);
+  margin: 0 0 0.875rem;
+  letter-spacing: -0.01em;
+}
+
+.archived-section {
+  margin-top: 1.75rem;
 }
 
 /* ── Accounts grid ── */

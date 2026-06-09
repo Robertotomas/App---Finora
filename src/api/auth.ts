@@ -11,6 +11,12 @@ export const authApi = {
   refresh: (refreshToken: string) =>
     api.post<AuthResponse>('/api/auth/refresh', { refreshToken }),
 
+  forgotPassword: (email: string) =>
+    api.post<{ message: string }>('/api/auth/forgot-password', { email }),
+
+  resetPassword: (token: string, newPassword: string) =>
+    api.post<{ message: string }>('/api/auth/reset-password', { token, newPassword }),
+
   me: () => api.get('/api/auth/me'),
 
   getProfile: () => api.get<User>('/api/auth/profile'),

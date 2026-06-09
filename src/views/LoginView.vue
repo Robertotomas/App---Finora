@@ -5,6 +5,7 @@ import { useAuthStore } from '@/stores/auth'
 import { RouterLink } from 'vue-router'
 import iconFinoraFlow from '@/assets/images/finoraflow-icon.png'
 import AuthShowcase from '@/components/AuthShowcase.vue'
+import ForgotPasswordModal from '@/components/ForgotPasswordModal.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -14,6 +15,7 @@ const email = ref('')
 const password = ref('')
 const error = ref('')
 const loading = ref(false)
+const forgotPasswordOpen = ref(false)
 
 async function handleSubmit() {
   error.value = ''
@@ -57,6 +59,11 @@ async function handleSubmit() {
             <label for="password">Password</label>
             <input id="password" v-model="password" type="password" required placeholder="Introduza a palavra-passe" />
           </div>
+          <div class="auth-forgot">
+            <button type="button" class="auth-forgot-link" @click="forgotPasswordOpen = true">
+              Esqueceste-te da palavra-passe?
+            </button>
+          </div>
           <button type="submit" class="auth-btn" :disabled="loading">
             {{ loading ? 'A entrar...' : 'Entrar' }}
           </button>
@@ -67,5 +74,44 @@ async function handleSubmit() {
       </div>
     </div>
     <AuthShowcase />
+
+    <ForgotPasswordModal
+      v-if="forgotPasswordOpen"
+      :initial-email="email"
+      @close="forgotPasswordOpen = false"
+    />
   </div>
 </template>
+
+<style scoped>
+.auth-forgot {
+  display: flex;
+  justify-content: flex-end;
+  margin: -0.5rem 0 1rem;
+}
+
+.auth-forgot-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #166534;
+  cursor: pointer;
+  transition: color 0.15s;
+}
+
+.auth-forgot-link:hover {
+  color: #14532d;
+  text-decoration: underline;
+}
+
+:global(html.dark) .auth-forgot-link {
+  color: #4ade80;
+}
+
+:global(html.dark) .auth-forgot-link:hover {
+  color: #86efac;
+}
+</style>
