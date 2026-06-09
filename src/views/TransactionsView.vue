@@ -24,6 +24,7 @@ import {
   TransactionType,
   TransactionCategory
 } from '@/types/transaction'
+import { INCOME_CATEGORIES, EXPENSE_CATEGORIES, CATEGORY_COLORS } from '@/types/categoryMeta'
 import type { HouseholdMember } from '@/types/household'
 
 const transactionsStore = useTransactionsStore()
@@ -110,13 +111,14 @@ const accountLabel = computed(() => {
   return 'Todas as contas'
 })
 
-const incomeCategories = [TransactionCategory.Salary, TransactionCategory.Freelance, TransactionCategory.Investment, TransactionCategory.Gift, TransactionCategory.Refund]
-const expenseCategories = [TransactionCategory.Food, TransactionCategory.Transport, TransactionCategory.Housing, TransactionCategory.Utilities, TransactionCategory.Health, TransactionCategory.Entertainment, TransactionCategory.Shopping, TransactionCategory.Education, TransactionCategory.Other]
+const incomeCategories = INCOME_CATEGORIES
+const expenseCategories = EXPENSE_CATEGORIES
 
 const availableCategories = computed(() => {
   let cats: TransactionCategory[]
-  if (filterType.value === 'income') cats = incomeCategories
-  else if (filterType.value === 'expense') cats = expenseCategories
+  if (filterType.value === 'income') cats = [...incomeCategories]
+  else if (filterType.value === 'expense') cats = [...expenseCategories]
+  else if (filterType.value === 'transfer') cats = [TransactionCategory.Transfer]
   else cats = [...incomeCategories, ...expenseCategories]
   const result: Record<number, string> = {}
   for (const c of cats) result[c] = TRANSACTION_CATEGORY_LABELS[c]
@@ -740,13 +742,8 @@ function accountName(accountId: string): string {
   return accountsStore.accounts.find(a => a.id === accountId)?.name ?? ''
 }
 
-// Category colors for the bars
-const categoryColors: Record<number, string> = {
-  0: '#059669', 1: '#10b981', 2: '#0ea5e9', 3: '#8b5cf6', 4: '#6366f1',
-  10: '#ef4444', 11: '#f97316', 12: '#eab308', 13: '#84cc16', 14: '#ec4899',
-  15: '#a855f7', 16: '#f43f5e', 17: '#14b8a6', 99: '#94a3b8',
-  100: '#2563eb'
-}
+// Category colors for the bars (fonte única em categoryMeta)
+const categoryColors = CATEGORY_COLORS
 
 watch([summaryDateFrom, summaryDateTo, summaryFilterAccount], () => {
   summaryPage.value = 1

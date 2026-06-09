@@ -2,13 +2,14 @@
 import { ref, computed, watch } from 'vue'
 import BaseModal from './BaseModal.vue'
 import BaseSelect from './BaseSelect.vue'
+import CategorySelect from './CategorySelect.vue'
 import type { Transaction, CreateTransactionRequest } from '@/types/transaction'
 import {
-  TRANSACTION_CATEGORY_LABELS,
   TransactionType,
   TransactionCategory,
   TransactionEntityType
 } from '@/types/transaction'
+import { INCOME_CATEGORIES, EXPENSE_CATEGORIES } from '@/types/categoryMeta'
 import type { Account } from '@/types/account'
 import type { HouseholdMember } from '@/types/household'
 
@@ -34,7 +35,7 @@ const emit = defineEmits<{
 const accountId = ref('')
 const destinationAccountId = ref('')
 const type = ref<TransactionType>(TransactionType.Expense)
-const category = ref<TransactionCategory>(TransactionCategory.Other)
+const category = ref<TransactionCategory>(TransactionCategory.OtherExpense)
 const amount = ref<number | null>(null)
 const date = ref('')
 const description = ref('')
@@ -56,29 +57,8 @@ const errors = ref<Record<string, string>>({})
 
 const isEdit = computed(() => !!props.transaction)
 
-const incomeCategories = [
-  TransactionCategory.Salary,
-  TransactionCategory.Freelance,
-  TransactionCategory.Investment,
-  TransactionCategory.Gift,
-  TransactionCategory.Refund,
-  TransactionCategory.Other
-]
-
-const expenseCategories = [
-  TransactionCategory.Food,
-  TransactionCategory.Transport,
-  TransactionCategory.Housing,
-  TransactionCategory.Utilities,
-  TransactionCategory.Health,
-  TransactionCategory.Entertainment,
-  TransactionCategory.Shopping,
-  TransactionCategory.Education,
-  TransactionCategory.Other
-]
-
 const categoryOptions = computed(() =>
-  type.value === TransactionType.Income ? incomeCategories : expenseCategories
+  type.value === TransactionType.Income ? INCOME_CATEGORIES : EXPENSE_CATEGORIES
 )
 
 const destinationOptions = computed(() =>
@@ -89,9 +69,6 @@ const destinationOptions = computed(() =>
 const accountOptions = computed(() => props.accounts.map((a) => ({ value: a.id, label: a.name })))
 const destinationAccountOptions = computed(() =>
   destinationOptions.value.map((a) => ({ value: a.id, label: a.name }))
-)
-const categorySelectOptions = computed(() =>
-  categoryOptions.value.map((c) => ({ value: c as number, label: TRANSACTION_CATEGORY_LABELS[c] }))
 )
 const entityTypeOptions = [
   { value: TransactionEntityType.Entity as number, label: 'Entidade' },
@@ -122,7 +99,7 @@ watch(
       } else {
         accountId.value = props.accounts[0]?.id ?? ''
         type.value = props.isTransfer ? TransactionType.Transfer : TransactionType.Expense
-        category.value = props.isTransfer ? TransactionCategory.Transfer : TransactionCategory.Other
+        category.value = props.isTransfer ? TransactionCategory.Transfer : TransactionCategory.OtherExpense
         amount.value = null
         // Data por defeito = sempre o dia atual.
         date.value = todayLocal()
@@ -349,10 +326,10 @@ const modalTitle = computed(() => {
 
         <div class="form-group">
           <label>Categoria</label>
-          <BaseSelect
+          <CategorySelect
             :model-value="category"
-            :options="categorySelectOptions"
-            @update:model-value="(v) => (category = Number(v) as TransactionCategory)"
+            :type="type === TransactionType.Income ? 'income' : 'expense'"
+            @update:model-value="(v) => (category = v as TransactionCategory)"
           />
         </div>
 
