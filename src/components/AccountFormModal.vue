@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import BaseModal from './BaseModal.vue'
-import type { Account, CreateAccountRequest, AccountType } from '@/types/account'
-import { ACCOUNT_TYPE_LABELS } from '@/types/account'
+import type { Account, CreateAccountRequest } from '@/types/account'
+import { AccountType } from '@/types/account'
 
 const props = defineProps<{
   open: boolean
@@ -16,9 +16,7 @@ const emit = defineEmits<{
 }>()
 
 const name = ref('')
-const type = ref<AccountType>(0)
-const balance = ref<number>(0)
-const currency = ref('EUR')
+const balance = ref<number | null>(null)
 
 const errors = ref<Record<string, string>>({})
 
@@ -31,14 +29,10 @@ watch(
       errors.value = {}
       if (props.account) {
         name.value = props.account.name
-        type.value = props.account.type
         balance.value = props.account.balance
-        currency.value = props.account.currency
       } else {
         name.value = ''
-        type.value = 0
-        balance.value = 0
-        currency.value = 'EUR'
+        balance.value = null
       }
     }
   }
@@ -48,7 +42,6 @@ function validate(): boolean {
   const e: Record<string, string> = {}
   if (!name.value.trim()) e.name = 'Nome é obrigatório'
   else if (name.value.length > 200) e.name = 'Nome é demasiado longo'
-  if (currency.value.length !== 3) e.currency = 'Moeda deve ter 3 caracteres (ex: EUR)'
   errors.value = e
   return Object.keys(e).length === 0
 }
@@ -57,26 +50,21 @@ function handleSubmit() {
   if (!validate()) return
   emit('submit', {
     name: name.value.trim(),
-    type: type.value,
-    balance: balance.value,
-    currency: currency.value.toUpperCase()
+    type: AccountType.Bank,
+    balance: Number(balance.value) || 0,
+    currency: 'EUR'
   })
 }
 
 function handleClose() {
   if (!props.loading) emit('close')
 }
-
-const accountTypes = Object.entries(ACCOUNT_TYPE_LABELS).map(([k, v]) => ({
-  value: Number(k) as AccountType,
-  label: v
-}))
 </script>
 
 <template>
   <BaseModal
     v-if="open"
-    :title="isEdit ? 'Editar conta' : 'Nova conta'"
+    :title="isEdit ? 'Editar conta' : 'Adicionar conta'"
     @close="handleClose"
   >
     <form @submit.prevent="handleSubmit" class="account-form">
@@ -95,49 +83,20 @@ const accountTypes = Object.entries(ACCOUNT_TYPE_LABELS).map(([k, v]) => ({
       </div>
 
       <div class="form-group">
-        <label for="account-type">Tipo</label>
-        <select
-          id="account-type"
-          v-model="type"
-          class="input"
-        >
-          <option
-            v-for="opt in accountTypes"
-            :key="opt.value"
-            :value="opt.value"
-          >
-            {{ opt.label }}
-          </option>
-        </select>
-      </div>
-
-      <div class="form-row">
-        <div class="form-group">
-          <label for="account-balance">Saldo</label>
+        <label for="account-balance">Saldo</label>
+        <div class="amount-wrap">
           <input
             id="account-balance"
             v-model.number="balance"
             type="number"
             step="0.01"
-            class="input"
+            class="input amount-input"
             :class="{ 'input-error': errors.balance }"
-            placeholder="0.00"
+            placeholder="0,00"
           />
-          <span v-if="errors.balance" class="error-text">{{ errors.balance }}</span>
+          <span class="amount-suffix">€</span>
         </div>
-        <div class="form-group">
-          <label for="account-currency">Moeda</label>
-          <input
-            id="account-currency"
-            v-model="currency"
-            type="text"
-            class="input"
-            :class="{ 'input-error': errors.currency }"
-            placeholder="EUR"
-            maxlength="3"
-          />
-          <span v-if="errors.currency" class="error-text">{{ errors.currency }}</span>
-        </div>
+        <span v-if="errors.balance" class="error-text">{{ errors.balance }}</span>
       </div>
 
       <div class="modal-actions">
@@ -168,13 +127,36 @@ const accountTypes = Object.entries(ACCOUNT_TYPE_LABELS).map(([k, v]) => ({
 .form-group label {
   font-size: 0.8125rem;
   font-weight: 500;
-  color: #475569;
+  color: var(--color-text-muted, #475569);
 }
 
-.form-row {
-  display: grid;
-  grid-template-columns: 1fr 80px;
-  gap: 2rem;
+.amount-wrap {
+  position: relative;
+}
+
+.amount-input {
+  width: 100%;
+  padding-right: 2rem;
+  /* Esconde as setas do input numérico para o € ficar limpo */
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.amount-input::-webkit-outer-spin-button,
+.amount-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.amount-suffix {
+  position: absolute;
+  right: 0.875rem;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--color-text-muted, #64748b);
+  pointer-events: none;
 }
 
 .input {
@@ -186,17 +168,17 @@ const accountTypes = Object.entries(ACCOUNT_TYPE_LABELS).map(([k, v]) => ({
 
 .input:focus {
   outline: none;
-  border-color: #2563eb;
-  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+  border-color: #166534;
+  box-shadow: 0 0 0 2px rgba(22, 101, 52, 0.2);
+}
+
+html.dark .input:focus {
+  border-color: #4ade80;
+  box-shadow: 0 0 0 2px rgba(74, 222, 128, 0.2);
 }
 
 .input-error {
   border-color: #dc2626;
-}
-
-.input-error:focus {
-  border-color: #dc2626;
-  box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.2);
 }
 
 .error-text {
@@ -227,12 +209,12 @@ const accountTypes = Object.entries(ACCOUNT_TYPE_LABELS).map(([k, v]) => ({
 
 .btn-primary {
   padding: 0.5rem 1rem;
-  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  background: linear-gradient(135deg, #166534 0%, #15803d 100%);
   color: white;
   border: none;
   border-radius: 8px;
   font-size: 0.875rem;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
 }
 

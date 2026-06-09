@@ -43,6 +43,16 @@ const deleteWithTransferAccount = ref<Account | null>(null)
 const archiveModalOpen = ref(false)
 const archiveAccount = ref<Account | null>(null)
 
+// Filtro de secção (chips Ativas / Arquivadas), ligado a ?tab=archived
+type SectionFilter = 'active' | 'archived'
+const sectionFilter = computed<SectionFilter>({
+  get: () => (route.query.tab === 'archived' ? 'archived' : 'active'),
+  set: (val) => {
+    const tab = val === 'active' ? undefined : val
+    router.replace({ query: { ...route.query, tab } })
+  },
+})
+
 const needsPrimarySelection = computed(
   () => subscriptionStore.limits.needsPrimaryAccountSelection === true
 )
@@ -349,9 +359,37 @@ function accountIcon(type: AccountType): string {
         {{ accountsStore.error }}
       </div>
 
+      <!-- Filtro Ativas / Arquivadas -->
+      <div
+        v-if="accountsStore.activeAccounts.length > 0 || accountsStore.archivedAccounts.length > 0"
+        class="filter-chips"
+        role="tablist"
+      >
+        <button
+          type="button"
+          class="filter-chip"
+          :class="{ active: sectionFilter === 'active' }"
+          role="tab"
+          :aria-selected="sectionFilter === 'active'"
+          @click="sectionFilter = 'active'"
+        >
+          Ativas
+        </button>
+        <button
+          type="button"
+          class="filter-chip"
+          :class="{ active: sectionFilter === 'archived' }"
+          role="tab"
+          :aria-selected="sectionFilter === 'archived'"
+          @click="sectionFilter = 'archived'"
+        >
+          Arquivadas
+        </button>
+      </div>
+
       <!-- Primary selection banner -->
       <div
-        v-if="needsPrimarySelection && accountsStore.activeAccounts.length > 1"
+        v-if="sectionFilter === 'active' && needsPrimarySelection && accountsStore.activeAccounts.length > 1"
         class="banner banner--warning"
       >
         <div class="banner-content">
@@ -378,7 +416,7 @@ function accountIcon(type: AccountType): string {
       </div>
 
       <!-- Unlock banner -->
-      <div v-if="showUnlockAccountsBanner" class="banner banner--warning">
+      <div v-if="sectionFilter === 'active' && showUnlockAccountsBanner" class="banner banner--warning">
         <div class="banner-content banner-row">
           <div>
             <p class="banner-title">Contas bloqueadas</p>
@@ -407,11 +445,7 @@ function accountIcon(type: AccountType): string {
       </div>
 
       <!-- Active accounts -->
-      <template v-if="accountsStore.activeAccounts.length > 0">
-        <div class="section-label">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 10h20"/><circle cx="17" cy="15" r="1.5"/></svg>
-          Contas Ativas
-        </div>
+      <template v-if="sectionFilter === 'active' && accountsStore.activeAccounts.length > 0">
         <div class="accounts-grid">
           <div
             v-for="account in accountsStore.activeAccounts"
@@ -474,13 +508,18 @@ function accountIcon(type: AccountType): string {
         </div>
       </template>
 
-      <!-- Archived accounts -->
-      <div v-if="accountsStore.archivedAccounts.length > 0" class="archived-section">
-        <div class="section-label">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></svg>
-          Contas Arquivadas
-        </div>
+      <!-- Archived empty state -->
+      <div
+        v-if="sectionFilter === 'archived' && accountsStore.archivedAccounts.length === 0"
+        class="empty-card"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="empty-icon"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></svg>
+        <p class="empty-text">Sem contas arquivadas</p>
+        <p class="empty-hint">As contas que arquivares aparecem aqui, sem perderes o histórico.</p>
+      </div>
 
+      <!-- Archived accounts -->
+      <div v-if="sectionFilter === 'archived' && accountsStore.archivedAccounts.length > 0" class="archived-section">
         <div class="accounts-grid">
           <div
             v-for="account in accountsStore.archivedAccounts"
@@ -878,21 +917,43 @@ html.dark .action-btn--reactivate:hover {
   background: rgba(74, 222, 128, 0.1);
 }
 
-/* ── Archived section ── */
-.archived-section {
-  margin-top: 2rem;
+/* ── Filtro Ativas / Arquivadas ── */
+.filter-chips {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.25rem;
 }
 
-.section-label {
-  display: flex;
+.filter-chip {
+  display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.4rem;
+  padding: 0.4rem 0.875rem;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-card);
+  color: var(--color-text-muted);
   font-size: 0.8125rem;
   font-weight: 600;
-  color: var(--color-text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  margin-bottom: 0.75rem;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.filter-chip:hover {
+  color: var(--color-text);
+  border-color: var(--color-text-muted);
+}
+
+.filter-chip.active {
+  background: #166534;
+  border-color: #166534;
+  color: #ffffff;
+}
+
+html.dark .filter-chip.active {
+  background: #15803d;
+  border-color: #15803d;
 }
 
 /* ── Banners ── */

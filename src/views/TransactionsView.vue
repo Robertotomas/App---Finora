@@ -3389,6 +3389,12 @@ html.dark .dr-day.is-end {
   color: var(--color-text-muted);
 }
 
+.summary-search-input:focus,
+.summary-search-input:focus-visible {
+  box-shadow: none;
+  outline: none;
+}
+
 /* Summary cards */
 .summary-totals {
   display: grid;
