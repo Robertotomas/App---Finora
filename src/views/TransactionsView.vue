@@ -17,7 +17,7 @@ import ConfirmDeleteModal from '@/components/ConfirmDeleteModal.vue'
 import BaseModal from '@/components/BaseModal.vue'
 import type { Transaction, CreateTransactionRequest } from '@/types/transaction'
 import type { RecurringTransaction, CreateRecurringTransactionRequest } from '@/types/recurringTransaction'
-import { RecurringFrequency, RECURRING_FREQUENCY_LABELS } from '@/types/recurringTransaction'
+import { recurringAmountForMonth, recurringFrequencyDescription } from '@/types/recurringTransaction'
 import {
   TRANSACTION_TYPE_LABELS,
   TRANSACTION_CATEGORY_LABELS,
@@ -541,20 +541,20 @@ async function fetchSummaryTransactions() {
         const ym = `${y}-${String(m).padStart(2, '0')}`
         const inRange = (!fromYM || ym >= fromYM) && (!toYM || ym <= toYM)
         if (inRange) {
-          const amt = r.frequency === RecurringFrequency.Annual
-            ? Math.round((r.amount / 12) * 100) / 100
-            : r.amount
-          virtual.push({
-            id: `recurring-${r.id}-${y}-${m}`,
-            accountId: r.accountId,
-            householdId: r.householdId,
-            type: r.type,
-            category: r.category,
-            amount: amt,
-            description: r.description ?? '',
-            date: `${y}-${String(m).padStart(2, '0')}-01`,
-            splits: []
-          })
+          const amt = recurringAmountForMonth(r, m)
+          if (amt !== 0) {
+            virtual.push({
+              id: `recurring-${r.id}-${y}-${m}`,
+              accountId: r.accountId,
+              householdId: r.householdId,
+              type: r.type,
+              category: r.category,
+              amount: amt,
+              description: r.description ?? '',
+              date: `${y}-${String(m).padStart(2, '0')}-01`,
+              splits: []
+            })
+          }
         }
         m++
         if (m > 12) { m = 1; y++ }
@@ -794,10 +794,8 @@ const recurringInRange = computed(() => {
       const ym = `${y}-${String(m).padStart(2, '0')}`
       const inRange = (!fromYM || ym >= fromYM) && (!toYM || ym <= toYM)
       if (inRange) {
-        const amt = r.frequency === RecurringFrequency.Annual
-          ? Math.round((r.amount / 12) * 100) / 100
-          : r.amount
-        entries.push({ type: r.type, amount: amt })
+        const amt = recurringAmountForMonth(r, m)
+        if (amt !== 0) entries.push({ type: r.type, amount: amt })
       }
       m++
       if (m > 12) { m = 1; y++ }
@@ -914,9 +912,7 @@ const recExpandedTotals = computed(() => {
       const ym = `${y}-${String(m).padStart(2, '0')}`
       const inRange = (!fromYM || ym >= fromYM) && (!toYM || ym <= toYM)
       if (inRange) {
-        const amt = r.frequency === RecurringFrequency.Annual
-          ? Math.round((r.amount / 12) * 100) / 100
-          : r.amount
+        const amt = recurringAmountForMonth(r, m)
         if (r.type === TransactionType.Income) income += amt
         else if (r.type === TransactionType.Expense) expenses += amt
       }
@@ -2317,7 +2313,7 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
                 <td class="amount-col" :class="{ 'amount-income': r.type === TransactionType.Income, 'amount-expense': r.type === TransactionType.Expense, 'amount-transfer': r.type === TransactionType.Transfer }">
                   {{ formatAmount(r.amount, r.type) }}
                 </td>
-                <td>{{ RECURRING_FREQUENCY_LABELS[r.frequency as RecurringFrequency] }}</td>
+                <td>{{ recurringFrequencyDescription(r) }}</td>
                 <td>{{ MONTH_NAMES[r.startMonth] }} {{ r.startYear }}</td>
                 <td class="actions-col">
                   <button

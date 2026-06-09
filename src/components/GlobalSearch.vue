@@ -3,6 +3,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { searchApi, type GlobalSearchResult } from '@/api/search'
 import { TRANSACTION_CATEGORY_LABELS, type TransactionCategory } from '@/types/transaction'
+import { RECURRING_FREQUENCY_LABELS, RecurringFrequency } from '@/types/recurringTransaction'
 
 const router = useRouter()
 
@@ -96,7 +97,7 @@ const groups = computed<PaletteGroup[]>(() => {
     id: 'rec-' + r.id,
     label: r.description || r.entityName || categoryLabel(r.category),
     sublabel: r.entityName && r.description ? r.entityName : undefined,
-    meta: `${fmtAmount(r)} · ${r.frequency === 1 ? 'Anual' : 'Mensal'}`,
+    meta: `${fmtAmount(r)} · ${RECURRING_FREQUENCY_LABELS[r.frequency as RecurringFrequency]}`,
     icon: 'clock',
     run: () => go('/movimentos?tab=recurring'),
   }))

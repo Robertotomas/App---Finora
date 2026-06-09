@@ -4,7 +4,13 @@ import BaseModal from './BaseModal.vue'
 import BaseSelect from './BaseSelect.vue'
 import CategorySelect from './CategorySelect.vue'
 import type { CreateRecurringTransactionRequest, RecurringTransaction } from '@/types/recurringTransaction'
-import { RecurringFrequency } from '@/types/recurringTransaction'
+import {
+  RecurringFrequency,
+  MONTH_LABELS,
+  recurringOccurrencesPerYear,
+  recurringPaymentMonths,
+  shortMonthLabel
+} from '@/types/recurringTransaction'
 import {
   TransactionType,
   TransactionCategory,
@@ -35,10 +41,17 @@ const description = ref('')
 const entityType = ref<TransactionEntityType>(TransactionEntityType.Entity)
 const entityName = ref('')
 const frequency = ref<RecurringFrequency>(RecurringFrequency.Monthly)
+const spread = ref(true)
+const referenceMonth = ref<number>(new Date().getMonth() + 1)
 
 const errors = ref<Record<string, string>>({})
 
 const isEdit = computed(() => !!props.recurring)
+const isPeriodic = computed(() => frequency.value !== RecurringFrequency.Monthly)
+
+const monthOptions = computed(() =>
+  Object.entries(MONTH_LABELS).map(([value, label]) => ({ value: Number(value), label }))
+)
 
 const categoryOptions = computed(() =>
   type.value === TransactionType.Income ? INCOME_CATEGORIES : EXPENSE_CATEGORIES
@@ -75,6 +88,9 @@ watch(
         entityName.value = props.recurring.entityName ?? ''
         destinationAccountId.value = props.recurring.destinationAccountId ?? ''
         frequency.value = props.recurring.frequency ?? RecurringFrequency.Monthly
+        spread.value = props.recurring.annualMonth == null
+        referenceMonth.value =
+          props.recurring.annualMonth ?? props.recurring.startMonth ?? new Date().getMonth() + 1
       } else {
         accountId.value = props.accounts[0]?.id ?? ''
         type.value = props.isTransfer ? TransactionType.Transfer : TransactionType.Expense
@@ -85,6 +101,8 @@ watch(
         entityName.value = ''
         destinationAccountId.value = ''
         frequency.value = RecurringFrequency.Monthly
+        spread.value = true
+        referenceMonth.value = new Date().getMonth() + 1
       }
     }
   }
@@ -120,7 +138,8 @@ function handleSubmit() {
     entityType: transfer ? undefined : entityType.value,
     entityName: transfer ? undefined : (entityName.value.trim() || undefined),
     destinationAccountId: transfer ? destinationAccountId.value : undefined,
-    frequency: frequency.value
+    frequency: frequency.value,
+    annualMonth: isPeriodic.value && !spread.value ? referenceMonth.value : undefined
   })
 }
 
@@ -128,10 +147,37 @@ function handleClose() {
   if (!props.loading) emit('close')
 }
 
-const monthlyEquivalent = computed(() => {
-  if (frequency.value !== RecurringFrequency.Annual || !amount.value) return ''
-  const monthly = (amount.value / 12).toFixed(2)
-  return `≈ ${monthly} €/mês`
+const amountLabel = computed(() => {
+  switch (frequency.value) {
+    case RecurringFrequency.Quarterly: return 'Montante por trimestre'
+    case RecurringFrequency.SemiAnnual: return 'Montante por semestre'
+    case RecurringFrequency.Annual: return 'Montante anual'
+    default: return 'Montante'
+  }
+})
+
+const referenceMonthTooltip = computed(() => {
+  switch (frequency.value) {
+    case RecurringFrequency.Quarterly:
+      return 'É o primeiro mês em que o pagamento sai. Os seguintes repetem-se de 3 em 3 meses.'
+    case RecurringFrequency.SemiAnnual:
+      return 'É o primeiro mês em que o pagamento sai. O outro é 6 meses depois.'
+    default:
+      return 'É o mês em que o pagamento sai.'
+  }
+})
+
+const frequencyHint = computed(() => {
+  if (!isPeriodic.value || !amount.value) return ''
+  if (spread.value) {
+    const occ = recurringOccurrencesPerYear(frequency.value)
+    const monthly = (Number(amount.value) * occ / 12).toFixed(2)
+    return `≈ ${monthly} €/mês (diluído)`
+  }
+  const labels = recurringPaymentMonths(frequency.value, referenceMonth.value)
+    .map((m) => shortMonthLabel(m))
+    .join(', ')
+  return `${Number(amount.value).toFixed(2)} € em ${labels}`
 })
 
 const modalTitle = computed(() => {
@@ -149,28 +195,73 @@ const modalTitle = computed(() => {
     @close="handleClose"
   >
     <form @submit.prevent="handleSubmit" class="recurring-form">
-      <!-- Frequência (mensal ou anual) -->
+      <!-- Frequência -->
       <div class="form-group">
         <label>Frequência</label>
-        <div class="type-toggle">
+        <div class="type-toggle type-toggle--freq">
           <button
             type="button"
             class="type-toggle-btn"
-            :class="{ 'active-neutral': frequency === 0 }"
-            @click="frequency = 0"
+            :class="{ 'active-neutral': frequency === RecurringFrequency.Monthly }"
+            @click="frequency = RecurringFrequency.Monthly"
           >
             Mensal
           </button>
           <button
             type="button"
             class="type-toggle-btn"
-            :class="{ 'active-neutral': frequency === 1 }"
-            @click="frequency = 1"
+            :class="{ 'active-neutral': frequency === RecurringFrequency.Quarterly }"
+            @click="frequency = RecurringFrequency.Quarterly"
+          >
+            Trimestral
+          </button>
+          <button
+            type="button"
+            class="type-toggle-btn"
+            :class="{ 'active-neutral': frequency === RecurringFrequency.SemiAnnual }"
+            @click="frequency = RecurringFrequency.SemiAnnual"
+          >
+            Semestral
+          </button>
+          <button
+            type="button"
+            class="type-toggle-btn"
+            :class="{ 'active-neutral': frequency === RecurringFrequency.Annual }"
+            @click="frequency = RecurringFrequency.Annual"
           >
             Anual
           </button>
         </div>
       </div>
+
+      <!-- Opções de periodicidade (trimestral/semestral/anual) -->
+      <template v-if="isPeriodic">
+        <div class="form-group">
+          <label class="checkbox-row">
+            <input type="checkbox" v-model="spread" />
+            <span>Diluir pelos 12 meses</span>
+          </label>
+          <span class="field-hint">
+            Distribui o montante igualmente por todos os meses no orçamento. Desmarca para o lançar
+            apenas no mês em que sai.
+          </span>
+        </div>
+
+        <div v-if="!spread" class="form-group">
+          <div class="label-row">
+            <label>Mês de referência</label>
+            <span class="info-tip" tabindex="0" role="button" aria-label="O que é o mês de referência?">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="16" y2="12"/><line x1="12" x2="12.01" y1="8" y2="8"/></svg>
+              <span class="info-tooltip" role="tooltip">{{ referenceMonthTooltip }}</span>
+            </span>
+          </div>
+          <BaseSelect
+            :model-value="referenceMonth"
+            :options="monthOptions"
+            @update:model-value="(v) => (referenceMonth = Number(v))"
+          />
+        </div>
+      </template>
 
       <!-- Transferência -->
       <template v-if="isTransferMode">
@@ -199,7 +290,7 @@ const modalTitle = computed(() => {
         </div>
 
         <div class="form-group">
-          <label for="rec-amount-t">{{ frequency === 1 ? 'Montante anual' : 'Montante' }}</label>
+          <label for="rec-amount-t">{{ amountLabel }}</label>
           <div class="amount-wrap">
             <input
               id="rec-amount-t"
@@ -213,7 +304,7 @@ const modalTitle = computed(() => {
             <span class="amount-suffix">€</span>
           </div>
           <span v-if="errors.amount" class="error-text">{{ errors.amount }}</span>
-          <span v-if="monthlyEquivalent" class="monthly-hint">{{ monthlyEquivalent }}</span>
+          <span v-if="frequencyHint" class="monthly-hint">{{ frequencyHint }}</span>
         </div>
 
         <div class="form-group">
@@ -278,7 +369,7 @@ const modalTitle = computed(() => {
         </div>
 
         <div class="form-group">
-          <label for="rec-amount">{{ frequency === 1 ? 'Montante anual' : 'Montante' }}</label>
+          <label for="rec-amount">{{ amountLabel }}</label>
           <div class="amount-wrap">
             <input
               id="rec-amount"
@@ -292,7 +383,7 @@ const modalTitle = computed(() => {
             <span class="amount-suffix">€</span>
           </div>
           <span v-if="errors.amount" class="error-text">{{ errors.amount }}</span>
-          <span v-if="monthlyEquivalent" class="monthly-hint">{{ monthlyEquivalent }}</span>
+          <span v-if="frequencyHint" class="monthly-hint">{{ frequencyHint }}</span>
         </div>
 
         <div class="form-group">
@@ -408,6 +499,103 @@ html.dark .input:focus {
   border: 1.5px solid var(--color-border, #e2e8f0);
   border-radius: 10px;
   background: var(--color-bg, #f8fafc);
+}
+
+.type-toggle--freq .type-toggle-btn {
+  font-size: 0.8125rem;
+  padding: 0.5rem 0.25rem;
+}
+
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  font-weight: 500;
+  color: var(--color-text, #1e293b);
+}
+
+.checkbox-row input {
+  width: 16px;
+  height: 16px;
+  accent-color: #166534;
+  cursor: pointer;
+}
+
+.field-hint {
+  font-size: 0.75rem;
+  color: var(--color-text-muted, #64748b);
+  line-height: 1.4;
+}
+
+/* ── Label com info (i) ── */
+.label-row {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.info-tip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-muted, #64748b);
+  cursor: help;
+  outline: none;
+  flex-shrink: 0;
+  transition: color 0.15s ease;
+}
+
+.info-tip:hover,
+.info-tip:focus-visible {
+  color: #166534;
+}
+
+html.dark .info-tip:hover,
+html.dark .info-tip:focus-visible {
+  color: #4ade80;
+}
+
+.info-tooltip {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  width: max-content;
+  max-width: 240px;
+  padding: 0.625rem 0.75rem;
+  background: var(--color-bg-card, #ffffff);
+  color: var(--color-text, #0f172a);
+  border: 1px solid var(--color-border, #e2e8f0);
+  border-radius: 10px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.4;
+  white-space: normal;
+  z-index: 30;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.15s ease, transform 0.15s ease, visibility 0.15s;
+}
+
+.info-tooltip::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-top-color: var(--color-border, #e2e8f0);
+}
+
+.info-tip:hover .info-tooltip,
+.info-tip:focus-visible .info-tooltip {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
 }
 
 .type-toggle-btn {
