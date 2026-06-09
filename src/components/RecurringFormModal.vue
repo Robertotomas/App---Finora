@@ -18,11 +18,15 @@ import {
 } from '@/types/transaction'
 import { INCOME_CATEGORIES, EXPENSE_CATEGORIES } from '@/types/categoryMeta'
 import type { Account } from '@/types/account'
+import type { HouseholdMember } from '@/types/household'
 
 const props = defineProps<{
   open: boolean
   recurring?: RecurringTransaction | null
   accounts: Account[]
+  members?: HouseholdMember[]
+  isCouple?: boolean
+  currentUserId?: string
   loading?: boolean
   isTransfer?: boolean
 }>()
@@ -43,6 +47,15 @@ const entityName = ref('')
 const frequency = ref<RecurringFrequency>(RecurringFrequency.Monthly)
 const spread = ref(true)
 const referenceMonth = ref<number>(new Date().getMonth() + 1)
+// Casais: responsável pela recorrente (mesmo padrão dos movimentos).
+const responsibleUserId = ref('')
+
+const memberOptions = computed(() =>
+  (props.members ?? []).map((m) => ({ value: m.id, label: `${m.firstName} ${m.lastName}` }))
+)
+const showResponsible = computed(
+  () => !!props.isCouple && (props.members ?? []).length > 0 && !isTransferMode.value
+)
 
 const errors = ref<Record<string, string>>({})
 
@@ -91,6 +104,7 @@ watch(
         spread.value = props.recurring.annualMonth == null
         referenceMonth.value =
           props.recurring.annualMonth ?? props.recurring.startMonth ?? new Date().getMonth() + 1
+        responsibleUserId.value = props.recurring.responsibleUserId ?? props.currentUserId ?? ''
       } else {
         accountId.value = props.accounts[0]?.id ?? ''
         type.value = props.isTransfer ? TransactionType.Transfer : TransactionType.Expense
@@ -103,6 +117,7 @@ watch(
         frequency.value = RecurringFrequency.Monthly
         spread.value = true
         referenceMonth.value = new Date().getMonth() + 1
+        responsibleUserId.value = props.currentUserId ?? ''
       }
     }
   }
@@ -122,6 +137,9 @@ function validate(): boolean {
     if (!destinationAccountId.value) e.destinationAccountId = 'Seleciona a conta de destino'
     if (destinationAccountId.value === accountId.value) e.destinationAccountId = 'A conta de destino deve ser diferente'
   }
+  if (showResponsible.value && !responsibleUserId.value) {
+    e.responsible = 'Seleciona o responsável'
+  }
   errors.value = e
   return Object.keys(e).length === 0
 }
@@ -139,7 +157,8 @@ function handleSubmit() {
     entityName: transfer ? undefined : (entityName.value.trim() || undefined),
     destinationAccountId: transfer ? destinationAccountId.value : undefined,
     frequency: frequency.value,
-    annualMonth: isPeriodic.value && !spread.value ? referenceMonth.value : undefined
+    annualMonth: isPeriodic.value && !spread.value ? referenceMonth.value : undefined,
+    responsibleUserId: showResponsible.value ? responsibleUserId.value : undefined
   })
 }
 
@@ -419,6 +438,18 @@ const modalTitle = computed(() => {
           </div>
         </div>
       </template>
+
+      <div v-if="showResponsible" class="form-group">
+        <label>Responsável pela recorrente</label>
+        <BaseSelect
+          :model-value="responsibleUserId"
+          :options="memberOptions"
+          placeholder="Seleciona o responsável"
+          :error="!!errors.responsible"
+          @update:model-value="(v) => (responsibleUserId = String(v))"
+        />
+        <span v-if="errors.responsible" class="error-text">{{ errors.responsible }}</span>
+      </div>
 
       <div class="modal-actions">
         <button type="button" class="btn-cancel" @click="handleClose">

@@ -1433,6 +1433,12 @@ function getResponsibleDisplay(tx: Transaction): string {
     .join(', ')
 }
 
+function getRecurringResponsibleDisplay(r: RecurringTransaction): string {
+  if (!r.responsibleUserId) return '-'
+  const m = membersMap.value.get(r.responsibleUserId)
+  return m ? `${m.firstName} ${m.lastName}` : '-'
+}
+
 function openRecurringCreateModal() {
   if (needsPrimarySelection.value) {
     limitModalKind.value = 'primary'
@@ -2289,6 +2295,7 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
                 <th class="amount-col">Valor</th>
                 <th>Frequência</th>
                 <th>Início</th>
+                <th v-if="householdStore.isCouple">Responsável</th>
                 <th class="actions-col"></th>
               </tr>
             </thead>
@@ -2315,6 +2322,7 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
                 </td>
                 <td>{{ recurringFrequencyDescription(r) }}</td>
                 <td>{{ MONTH_NAMES[r.startMonth] }} {{ r.startYear }}</td>
+                <td v-if="householdStore.isCouple">{{ getRecurringResponsibleDisplay(r) }}</td>
                 <td class="actions-col">
                   <button
                     type="button"
@@ -2399,6 +2407,9 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
     <RecurringFormModal
       :open="recurringCreateModalOpen"
       :accounts="accountsForRecurringCreate"
+      :members="members"
+      :is-couple="householdStore.isCouple"
+      :current-user-id="authStore.user?.id ?? ''"
       :loading="actionLoading"
       :is-transfer="isRecTransferMode"
       @close="closeRecurringCreateModal"
@@ -2409,6 +2420,9 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
       :open="recurringEditModalOpen"
       :recurring="recurringToEdit"
       :accounts="accountsForRecurringEdit"
+      :members="members"
+      :is-couple="householdStore.isCouple"
+      :current-user-id="authStore.user?.id ?? ''"
       :loading="actionLoading"
       :is-transfer="isRecTransferMode"
       @close="closeRecurringEditModal"

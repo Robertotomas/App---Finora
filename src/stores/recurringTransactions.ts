@@ -37,6 +37,7 @@ function mapRecurring(d: {
   amount: number
   description?: string
   destinationAccountId?: string
+  responsibleUserId?: string | null
   frequency?: number
   annualMonth?: number
   startMonth: number
@@ -53,6 +54,7 @@ function mapRecurring(d: {
     amount: Number(d.amount),
     description: d.description,
     destinationAccountId: d.destinationAccountId,
+    responsibleUserId: d.responsibleUserId ?? null,
     frequency: d.frequency ?? 0,
     annualMonth: d.annualMonth,
     startMonth: d.startMonth,

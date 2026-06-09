@@ -87,6 +87,7 @@ export interface RecurringTransaction {
   entityType?: TransactionEntityType
   entityName?: string | null
   destinationAccountId?: string
+  responsibleUserId?: string | null
   frequency: RecurringFrequency
   annualMonth?: number
   startMonth: number
@@ -104,6 +105,7 @@ export interface CreateRecurringTransactionRequest {
   entityType?: TransactionEntityType
   entityName?: string | null
   destinationAccountId?: string
+  responsibleUserId?: string | null
   frequency: RecurringFrequency
   annualMonth?: number
 }
@@ -117,6 +119,7 @@ export interface UpdateRecurringTransactionRequest {
   entityType?: TransactionEntityType
   entityName?: string | null
   destinationAccountId?: string
+  responsibleUserId?: string | null
   frequency: RecurringFrequency
   annualMonth?: number
 }
