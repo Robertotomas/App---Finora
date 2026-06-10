@@ -62,7 +62,7 @@ async function handleSubmit() {
 }
 
 function goToLogin() {
-  router.push('/entrar')
+  router.push('/login')
 }
 </script>
 
@@ -81,7 +81,7 @@ function goToLogin() {
         <!-- Sem token -->
         <div v-if="!token" class="auth-error">
           Link inválido. Abre o link mais recente que recebeste por email ou pede um novo no
-          <RouterLink to="/entrar">início de sessão</RouterLink>.
+          <RouterLink to="/login">início de sessão</RouterLink>.
         </div>
 
         <!-- Sucesso -->
@@ -120,7 +120,7 @@ function goToLogin() {
         </form>
 
         <p class="auth-footer">
-          Lembraste-te? <RouterLink to="/entrar">Iniciar sessão</RouterLink>
+          Lembraste-te? <RouterLink to="/login">Iniciar sessão</RouterLink>
         </p>
       </div>
     </div>

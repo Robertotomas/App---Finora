@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useHouseholdStore } from '@/stores/household'
 import { useSubscriptionStore } from '@/stores/subscription'
 import { reportsApi, type MonthlyReportListItem } from '@/api/reports'
+import PlanUpsellCard from '@/components/PlanUpsellCard.vue'
 
 const householdStore = useHouseholdStore()
 const subscriptionStore = useSubscriptionStore()
@@ -229,7 +230,7 @@ onUnmounted(() => {
     <!-- No household -->
     <div v-else-if="!householdStore.household" class="empty-state">
       <p>Configura primeiro o teu household.</p>
-      <router-link to="/inicio" class="link">Ir para o painel</router-link>
+      <router-link to="/overview" class="link">Ir para o painel</router-link>
     </div>
 
     <template v-else>
@@ -241,46 +242,41 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <div class="reports-shell-wrap" :class="{ 'reports-shell-wrap--locked': reportsLocked }">
+      <PlanUpsellCard
+        v-if="reportsLocked"
+        title="Receba relatórios mensais automáticos"
+        description="Um resumo claro das tuas finanças, gerado automaticamente ao fim de cada mês."
+        :features="[
+          'Resumo de receitas, despesas e saldo do mês',
+          'Gráficos de evolução e repartição por categoria',
+          'PDF pronto a descarregar e partilhar',
+        ]"
+      >
+        <template #icon>
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><polyline points="14 2 14 8 20 8"/><line x1="16" x2="8" y1="13" y2="13"/><line x1="16" x2="8" y1="17" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+        </template>
+      </PlanUpsellCard>
+
+      <div v-else class="reports-shell-wrap">
         <div class="reports-shell-inner">
           <!-- Global error -->
-          <div v-if="error && !reportsLocked" class="global-error">{{ error }}</div>
+          <div v-if="error" class="global-error">{{ error }}</div>
 
           <!-- Loading reports -->
-          <div v-if="loading && !reportsLocked" class="loading-state">
+          <div v-if="loading" class="loading-state">
             <div class="spinner"></div>
             <p>A carregar relatórios…</p>
           </div>
 
           <!-- Empty state -->
-          <div v-else-if="!reportsLocked && !loading && items.length === 0" class="empty-card">
+          <div v-else-if="!loading && items.length === 0" class="empty-card">
             <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="empty-icon"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><polyline points="14 2 14 8 20 8"/><line x1="16" x2="8" y1="13" y2="13"/><line x1="16" x2="8" y1="17" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
             <p class="empty-text">Ainda não há relatórios</p>
             <p class="empty-hint">Os relatórios são gerados automaticamente ao fim de cada mês.</p>
           </div>
 
-          <!-- Locked placeholder -->
-          <template v-if="reportsLocked">
-            <div class="section-label">
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><polyline points="14 2 14 8 20 8"/></svg>
-              Relatórios Mensais
-            </div>
-            <div class="reports-grid">
-              <div v-for="n in 4" :key="n" class="report-card report-card--placeholder">
-                <div class="report-card__main">
-                  <div class="placeholder-block" style="width:40px;height:40px;border-radius:10px"></div>
-                  <div style="flex:1;display:flex;flex-direction:column;gap:0.5rem">
-                    <div class="placeholder-block" style="width:60%;height:14px;border-radius:6px"></div>
-                    <div class="placeholder-block" style="width:40%;height:10px;border-radius:6px"></div>
-                    <div class="placeholder-block" style="width:30%;height:10px;border-radius:6px"></div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </template>
-
           <!-- Reports list -->
-          <template v-else-if="!reportsLocked && items.length > 0">
+          <template v-else-if="items.length > 0">
             <div class="reports-toolbar">
               <div class="section-label" style="margin-bottom:0">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><polyline points="14 2 14 8 20 8"/></svg>
@@ -375,17 +371,6 @@ onUnmounted(() => {
               </div>
             </div>
           </template>
-        </div>
-
-        <!-- Lock overlay -->
-        <div v-if="reportsLocked" class="reports-lock-overlay" aria-hidden="true">
-          <div class="reports-lock-panel">
-            <p class="reports-lock-title">Relatórios nos planos Pro e Couple</p>
-            <p class="reports-lock-text">
-              Atualiza o plano para teres acesso aos relatórios mensais automáticos com resumos e gráficos.
-            </p>
-            <router-link :to="{ name: 'subscricao' }" class="btn-confirm">Ver planos</router-link>
-          </div>
         </div>
       </div>
     </template>
@@ -765,70 +750,6 @@ html.dark .action-btn--refresh:hover:not(:disabled) {
   animation: spin 0.8s linear infinite;
 }
 
-/* ── Shell wrap (lock) ── */
-.reports-shell-wrap {
-  position: relative;
-}
-
-.reports-shell-wrap--locked .reports-shell-inner {
-  filter: blur(9px) grayscale(0.25);
-  opacity: 0.52;
-  pointer-events: none;
-  user-select: none;
-}
-
-.reports-lock-overlay {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 1.5rem;
-  background: rgba(0, 0, 0, 0.06);
-  pointer-events: none;
-}
-
-html.dark .reports-lock-overlay {
-  background: rgba(0, 0, 0, 0.28);
-}
-
-.reports-lock-panel {
-  pointer-events: auto;
-  max-width: 420px;
-  text-align: center;
-  padding: 1.5rem 2rem;
-  border-radius: 14px;
-  background: var(--color-bg-card);
-  border: 1px solid var(--color-border);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-}
-
-.lock-icon-wrap {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
-  background: var(--color-table-row-hover);
-  color: var(--color-text-muted);
-  margin-bottom: 1rem;
-}
-
-.reports-lock-title {
-  margin: 0 0 0.5rem;
-  font-size: 1rem;
-  font-weight: 700;
-  color: var(--color-text);
-}
-
-.reports-lock-text {
-  margin: 0 0 1.25rem;
-  font-size: 0.8125rem;
-  line-height: 1.5;
-  color: var(--color-text-muted);
-}
-
 /* ── Buttons ── */
 .btn-confirm {
   display: inline-flex;
@@ -1002,14 +923,6 @@ html.dark .pdf-preview-body {
 }
 
 /* ── Placeholder cards (locked state) ── */
-.report-card--placeholder {
-  pointer-events: none;
-}
-
-.placeholder-block {
-  background: var(--color-border);
-}
-
 /* ── Generating overlay ── */
 .generating-overlay {
   position: fixed;

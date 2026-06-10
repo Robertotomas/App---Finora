@@ -68,7 +68,7 @@ async function handleSubmit() {
       ...(inviteToken.value && { inviteToken: inviteToken.value }),
       timeZoneId: Intl.DateTimeFormat().resolvedOptions().timeZone,
     })
-    router.push('/inicio')
+    router.push('/overview')
   } catch (e: unknown) {
     const err = e as { rateLimited?: boolean; rateLimitMessage?: string; response?: { data?: { message?: string; errors?: Record<string, string[]> } } }
     if (err.rateLimited) {
@@ -134,7 +134,7 @@ async function handleSubmit() {
           </button>
         </form>
         <p class="auth-footer">
-          Já tens conta? <RouterLink to="/entrar">Entrar</RouterLink>
+          Já tens conta? <RouterLink to="/login">Entrar</RouterLink>
         </p>
       </div>
     </div>

@@ -10,6 +10,7 @@ import BaseModal from '@/components/BaseModal.vue'
 import ConfirmDeleteModal from '@/components/ConfirmDeleteModal.vue'
 import DeleteAccountWithTransferModal from '@/components/DeleteAccountWithTransferModal.vue'
 import ArchiveAccountModal from '@/components/ArchiveAccountModal.vue'
+import PlanUpsellModal from '@/components/PlanUpsellModal.vue'
 import type { Account, CreateAccountRequest } from '@/types/account'
 import { ACCOUNT_TYPE_LABELS, AccountType } from '@/types/account'
 
@@ -664,23 +665,17 @@ function accountIcon(type: AccountType): string {
       @confirm="handleArchiveConfirm"
     />
 
-    <BaseModal
-      v-if="accountLimitModalOpen"
-      title="Limite do plano Free"
+    <PlanUpsellModal
+      :open="accountLimitModalOpen"
+      title="Adicione todas as suas contas"
+      description="No plano Free só podes ter 1 conta. Atualiza para Pro ou Couple para juntares todas as que precisares."
+      :features="[
+        'Contas ilimitadas',
+        'Vê o teu património completo num só sítio',
+        'Objetivos de poupança e relatórios mensais',
+      ]"
       @close="accountLimitModalOpen = false"
-    >
-      <div class="blocked-body">
-        <p class="blocked-msg">
-          Atingiste o limite de contas do plano Free. Atualiza para Pro ou Couple para adicionares mais.
-        </p>
-        <div class="blocked-footer">
-          <button type="button" class="btn-cancel" @click="accountLimitModalOpen = false">Agora não</button>
-          <router-link :to="{ name: 'subscricao' }" class="btn-confirm" @click="accountLimitModalOpen = false">
-            Ver planos
-          </router-link>
-        </div>
-      </div>
-    </BaseModal>
+    />
   </div>
 </template>
 

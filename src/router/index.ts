@@ -5,25 +5,25 @@ const router = createRouter({
   history: createWebHistory(),
   routes: [
     {
-      path: '/entrar',
+      path: '/login',
       name: 'entrar',
       component: () => import('@/views/LoginView.vue'),
       meta: { requiresAuth: false, guestOnly: true },
     },
     {
-      path: '/registar',
+      path: '/register',
       name: 'registar',
       component: () => import('@/views/RegisterView.vue'),
       meta: { requiresAuth: false, guestOnly: true },
     },
     {
-      path: '/redefinir-password',
+      path: '/reset-password',
       name: 'redefinir-password',
       component: () => import('@/views/ResetPasswordView.vue'),
       meta: { requiresAuth: false },
     },
     {
-      path: '/subscricao',
+      path: '/subscription',
       name: 'subscricao',
       component: () => import('@/views/SubscriptionView.vue'),
       meta: { requiresAuth: true },
@@ -33,49 +33,49 @@ const router = createRouter({
       component: () => import('@/layouts/AppLayout.vue'),
       children: [
         {
-          path: 'inicio',
+          path: 'overview',
           name: 'inicio',
           component: () => import('@/views/DashboardView.vue'),
           meta: { requiresAuth: true },
         },
         {
-          path: 'plano-mensal',
+          path: 'monthly-plan',
           name: 'plano-mensal',
           component: () => import('@/views/MonthlyFinanceView.vue'),
           meta: { requiresAuth: true },
         },
         {
-          path: 'agregado',
+          path: 'household',
           name: 'agregado',
           component: () => import('@/views/HouseholdSettingsView.vue'),
           meta: { requiresAuth: true },
         },
         {
-          path: 'contas',
+          path: 'accounts',
           name: 'contas',
           component: () => import('@/views/AccountsView.vue'),
           meta: { requiresAuth: true },
         },
         {
-          path: 'movimentos',
+          path: 'transactions',
           name: 'movimentos',
           component: () => import('@/views/TransactionsView.vue'),
           meta: { requiresAuth: true },
         },
         {
-          path: 'objetivos',
+          path: 'goals',
           name: 'objetivos',
           component: () => import('@/views/ObjectivesView.vue'),
           meta: { requiresAuth: true },
         },
         {
-          path: 'relatorios',
+          path: 'reports',
           name: 'relatorios',
           component: () => import('@/views/ReportsView.vue'),
           meta: { requiresAuth: true },
         },
         {
-          path: 'perfil',
+          path: 'profile',
           name: 'perfil',
           component: () => import('@/views/ProfileView.vue'),
           meta: { requiresAuth: true },
@@ -108,6 +108,32 @@ router.beforeEach(async (to, _from, next) => {
   }
 
   next()
+})
+
+/** Título do separador por rota → "<Página> | FinoraFlow". */
+const ROUTE_TITLES: Record<string, string> = {
+  entrar: 'Entrar',
+  registar: 'Registar',
+  'redefinir-password': 'Redefinir palavra-passe',
+  subscricao: 'Subscrição',
+  inicio: 'Visão Geral',
+  'plano-mensal': 'Plano Mensal',
+  agregado: 'Agregado',
+  contas: 'Contas',
+  movimentos: 'Movimentos',
+  objetivos: 'Objetivos',
+  relatorios: 'Relatórios',
+  perfil: 'Perfil',
+}
+
+router.afterEach((to) => {
+  let title = typeof to.name === 'string' ? ROUTE_TITLES[to.name] : undefined
+  // Movimentos: distingue a tab (Dashboard / Movimentos / Recorrentes) pelo ?tab=
+  if (to.name === 'movimentos') {
+    const tab = to.query.tab
+    title = tab === 'recurring' ? 'Recorrentes' : tab === 'movements' ? 'Movimentos' : 'Dashboard'
+  }
+  document.title = title ? `${title} | FinoraFlow` : 'FinoraFlow'
 })
 
 export default router

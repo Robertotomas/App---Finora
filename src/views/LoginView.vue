@@ -23,7 +23,7 @@ async function handleSubmit() {
   try {
     const timeZoneId = Intl.DateTimeFormat().resolvedOptions().timeZone
     await authStore.login({ email: email.value, password: password.value, timeZoneId })
-    const redirect = (route.query.redirect as string) || '/inicio'
+    const redirect = (route.query.redirect as string) || '/overview'
     router.push(redirect)
   } catch (e: unknown) {
     const err = e as { rateLimited?: boolean; rateLimitMessage?: string; response?: { data?: { message?: string } } }
@@ -69,7 +69,7 @@ async function handleSubmit() {
           </button>
         </form>
         <p class="auth-footer">
-          Não tens conta? <RouterLink to="/registar">Criar conta</RouterLink>
+          Não tens conta? <RouterLink to="/register">Criar conta</RouterLink>
         </p>
       </div>
     </div>

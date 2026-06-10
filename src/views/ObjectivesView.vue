@@ -5,6 +5,7 @@ import { useHouseholdStore } from '@/stores/household'
 import { objectivesApi } from '@/api/objectives'
 import { useSubscriptionStore } from '@/stores/subscription'
 import ConfirmDeleteModal from '@/components/ConfirmDeleteModal.vue'
+import PlanUpsellCard from '@/components/PlanUpsellCard.vue'
 import type {
   CreateSavingsObjectiveRequest,
   SavingsObjectiveActive,
@@ -367,9 +368,9 @@ watch(() => route.query.action, (action) => {
           <p class="page-subtitle">Define objetivos de poupança e acompanha o progresso</p>
         </div>
         <button
+          v-if="!objectivesLocked"
           type="button"
           class="btn-add"
-          :disabled="objectivesLocked"
           @click="openCreateForm"
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="5" y2="19"/><line x1="5" x2="19" y1="12" y2="12"/></svg>
@@ -377,7 +378,22 @@ watch(() => route.query.action, (action) => {
         </button>
       </div>
 
-      <div class="objectives-shell-wrap" :class="{ 'objectives-shell-wrap--locked': objectivesLocked }">
+      <PlanUpsellCard
+        v-if="objectivesLocked"
+        title="Defina e alcance os seus objetivos"
+        description="Crie metas de poupança e acompanhe o progresso automaticamente, mês a mês."
+        :features="[
+          'Veja quanto já tem reservado para cada meta',
+          'Saiba se está no bom caminho para a atingir',
+          'Reserve poupança sem mexer no dinheiro real',
+        ]"
+      >
+        <template #icon>
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/><line x1="22" x2="12" y1="2" y2="12"/></svg>
+        </template>
+      </PlanUpsellCard>
+
+      <div v-else class="objectives-shell-wrap">
         <div class="objectives-shell objectives-shell-inner">
 
           <!-- Summary stats -->
@@ -470,17 +486,12 @@ watch(() => route.query.action, (action) => {
               <p class="empty-text">Ainda não tens objetivos ativos</p>
               <p class="empty-hint">Cria um objetivo de poupança para começar a acompanhar o progresso.</p>
               <button
-                v-if="!objectivesLocked"
                 type="button"
                 class="btn-confirm"
                 @click="openCreateForm()"
               >
                 Criar primeiro objetivo
               </button>
-              <p v-else class="empty-hint">
-                Atualiza o plano para criar objetivos.
-                <router-link :to="{ name: 'subscricao' }" class="link">Ver planos</router-link>
-              </p>
             </div>
 
             <!-- Goals grid -->
@@ -598,17 +609,6 @@ watch(() => route.query.action, (action) => {
               </article>
             </div>
           </section>
-        </div>
-
-        <!-- Lock overlay -->
-        <div v-if="objectivesLocked" class="lock-overlay" aria-hidden="true">
-          <div class="lock-panel">
-            <p class="lock-title">Objetivos nos planos Pro e Couple</p>
-            <p class="lock-text">
-              Atualiza o plano para teres acesso aos objetivos de poupança e acompanhar o teu progresso.
-            </p>
-            <router-link :to="{ name: 'subscricao' }" class="btn-confirm">Ver planos</router-link>
-          </div>
         </div>
       </div>
     </template>
@@ -1243,62 +1243,6 @@ html.dark .action-btn--danger:hover:not(:disabled) {
   font-size: 0.8125rem;
   color: var(--color-text-muted);
   margin: 0 0 1.25rem;
-}
-
-/* ── Lock overlay ── */
-.objectives-shell-wrap {
-  position: relative;
-}
-
-.objectives-shell-wrap--locked .objectives-shell-inner {
-  filter: blur(9px) grayscale(0.25);
-  opacity: 0.52;
-  pointer-events: none;
-  user-select: none;
-}
-
-.objectives-shell {
-  transition: opacity 0.2s ease, filter 0.2s ease;
-}
-
-.lock-overlay {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 1.5rem;
-  background: rgba(0, 0, 0, 0.06);
-  pointer-events: none;
-}
-
-html.dark .lock-overlay {
-  background: rgba(0, 0, 0, 0.28);
-}
-
-.lock-panel {
-  pointer-events: auto;
-  max-width: 420px;
-  text-align: center;
-  padding: 1.5rem 2rem;
-  border-radius: 14px;
-  background: var(--color-bg-card);
-  border: 1px solid var(--color-border);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-}
-
-.lock-title {
-  margin: 0 0 0.5rem;
-  font-size: 1rem;
-  font-weight: 700;
-  color: var(--color-text);
-}
-
-.lock-text {
-  margin: 0 0 1.25rem;
-  font-size: 0.875rem;
-  line-height: 1.5;
-  color: var(--color-text-muted);
 }
 
 /* ── Loading / Error ── */

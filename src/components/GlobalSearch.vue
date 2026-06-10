@@ -37,23 +37,23 @@ interface PaletteGroup {
 
 // ── Navegação e ações (cliente, sempre disponíveis) ──
 const NAV_ITEMS = [
-  { label: 'Início', to: '/inicio', icon: 'home', keywords: 'inicio dashboard painel patrimonio' },
-  { label: 'Movimentos', to: '/movimentos?tab=movements', icon: 'swap', keywords: 'movimentos transacoes gastos' },
-  { label: 'Recorrentes', to: '/movimentos?tab=recurring', icon: 'clock', keywords: 'recorrentes subscricoes mensais' },
-  { label: 'Dashboard de movimentos', to: '/movimentos?tab=dashboard', icon: 'grid', keywords: 'dashboard graficos movimentos' },
-  { label: 'Contas', to: '/contas', icon: 'wallet', keywords: 'contas patrimonio saldos' },
-  { label: 'Objetivos', to: '/objetivos', icon: 'target', keywords: 'objetivos poupanca metas' },
-  { label: 'Plano Mensal', to: '/plano-mensal', icon: 'calendar', keywords: 'plano mensal orcamento' },
-  { label: 'Relatórios', to: '/relatorios', icon: 'report', keywords: 'relatorios pdf' },
-  { label: 'Perfil', to: '/perfil', icon: 'user', keywords: 'perfil conta definicoes' },
-  { label: 'Agregado', to: '/agregado', icon: 'users', keywords: 'agregado familia casal couple' },
+  { label: 'Início', to: '/overview', icon: 'home', keywords: 'inicio dashboard painel patrimonio overview' },
+  { label: 'Movimentos', to: '/transactions?tab=movements', icon: 'swap', keywords: 'movimentos transacoes gastos' },
+  { label: 'Recorrentes', to: '/transactions?tab=recurring', icon: 'clock', keywords: 'recorrentes subscricoes mensais' },
+  { label: 'Dashboard de movimentos', to: '/transactions?tab=dashboard', icon: 'grid', keywords: 'dashboard graficos movimentos' },
+  { label: 'Contas', to: '/accounts', icon: 'wallet', keywords: 'contas patrimonio saldos' },
+  { label: 'Objetivos', to: '/goals', icon: 'target', keywords: 'objetivos poupanca metas' },
+  { label: 'Plano Mensal', to: '/monthly-plan', icon: 'calendar', keywords: 'plano mensal orcamento' },
+  { label: 'Relatórios', to: '/reports', icon: 'report', keywords: 'relatorios pdf' },
+  { label: 'Perfil', to: '/profile', icon: 'user', keywords: 'perfil conta definicoes' },
+  { label: 'Agregado', to: '/household', icon: 'users', keywords: 'agregado familia casal couple' },
 ]
 
 const ACTION_ITEMS = [
-  { label: 'Novo movimento', to: '/movimentos?tab=movements&action=new', keywords: 'novo movimento despesa receita criar adicionar' },
-  { label: 'Novo recorrente', to: '/movimentos?tab=recurring&action=new', keywords: 'novo recorrente mensal criar adicionar' },
-  { label: 'Nova conta', to: '/contas?action=new', keywords: 'nova conta criar adicionar' },
-  { label: 'Novo objetivo', to: '/objetivos?tab=active&action=new', keywords: 'novo objetivo poupanca meta criar adicionar' },
+  { label: 'Novo movimento', to: '/transactions?tab=movements&action=new', keywords: 'novo movimento despesa receita criar adicionar' },
+  { label: 'Novo recorrente', to: '/transactions?tab=recurring&action=new', keywords: 'novo recorrente mensal criar adicionar' },
+  { label: 'Nova conta', to: '/accounts?action=new', keywords: 'nova conta criar adicionar' },
+  { label: 'Novo objetivo', to: '/goals?tab=active&action=new', keywords: 'novo objetivo poupanca meta criar adicionar' },
 ]
 
 function norm(s: string): string {
@@ -89,7 +89,7 @@ const groups = computed<PaletteGroup[]>(() => {
     sublabel: t.entityName && t.description ? t.entityName : undefined,
     meta: `${fmtAmount(t)} · ${fmtDate(t.date)}`,
     icon: 'tx',
-    run: () => go('/movimentos?tab=movements'),
+    run: () => go('/transactions?tab=movements'),
   }))
   if (tx.length) out.push({ title: 'Movimentos', items: tx })
 
@@ -99,7 +99,7 @@ const groups = computed<PaletteGroup[]>(() => {
     sublabel: r.entityName && r.description ? r.entityName : undefined,
     meta: `${fmtAmount(r)} · ${RECURRING_FREQUENCY_LABELS[r.frequency as RecurringFrequency]}`,
     icon: 'clock',
-    run: () => go('/movimentos?tab=recurring'),
+    run: () => go('/transactions?tab=recurring'),
   }))
   if (rec.length) out.push({ title: 'Recorrentes', items: rec })
 
@@ -108,7 +108,7 @@ const groups = computed<PaletteGroup[]>(() => {
     label: a.name,
     meta: a.balance.toLocaleString('pt-PT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €',
     icon: 'wallet',
-    run: () => go('/contas'),
+    run: () => go('/accounts'),
   }))
   if (accs.length) out.push({ title: 'Contas', items: accs })
 
@@ -117,7 +117,7 @@ const groups = computed<PaletteGroup[]>(() => {
     label: o.name,
     meta: o.completed ? 'Concluído' : undefined,
     icon: 'target',
-    run: () => go(o.completed ? '/objetivos?tab=history' : '/objetivos?tab=active'),
+    run: () => go(o.completed ? '/goals?tab=history' : '/goals?tab=active'),
   }))
   if (objs.length) out.push({ title: 'Objetivos', items: objs })
 

@@ -333,8 +333,8 @@ const modalTitle = computed(() => {
             v-model="description"
             type="text"
             class="input"
-            placeholder="Ex: Transferência para poupança"
-            maxlength="500"
+            placeholder="Ex: Poupança"
+            maxlength="16"
           />
         </div>
       </template>
@@ -382,8 +382,8 @@ const modalTitle = computed(() => {
             v-model="description"
             type="text"
             class="input"
-            placeholder="Ex: Netflix mensal"
-            maxlength="500"
+            placeholder="Ex: Netflix"
+            maxlength="16"
           />
         </div>
 

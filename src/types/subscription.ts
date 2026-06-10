@@ -7,6 +7,8 @@ export interface SubscriptionLimits {
   objectivesEnabled: boolean
   /** Pro/Couple; falls back to objectivesEnabled if omitted (older API responses). */
   monthlyReportsEnabled?: boolean
+  /** Pro/Couple; falls back to objectivesEnabled if omitted (older API responses). */
+  recurringEnabled?: boolean
   canInvite: boolean
   /** Free + mais do que uma conta e ainda não foi escolhida conta principal */
   needsPrimaryAccountSelection?: boolean

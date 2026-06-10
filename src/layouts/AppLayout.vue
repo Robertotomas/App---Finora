@@ -114,30 +114,30 @@ const showHouseholdInUserMenu = computed(
 )
 
 const movimentsSubItems = [
-  { to: '/movimentos?tab=dashboard', label: 'Dashboard', tabKey: 'dashboard' },
-  { to: '/movimentos?tab=movements', label: 'Movimentos', tabKey: 'movements' },
-  { to: '/movimentos?tab=recurring', label: 'Recorrentes', tabKey: 'recurring' },
+  { to: '/transactions?tab=dashboard', label: 'Dashboard', tabKey: 'dashboard' },
+  { to: '/transactions?tab=movements', label: 'Movimentos', tabKey: 'movements' },
+  { to: '/transactions?tab=recurring', label: 'Recorrentes', tabKey: 'recurring' },
 ]
 
 const patrimonioItems = [
-  { to: '/contas', label: 'Contas', icon: 'wallet', comingSoon: false },
+  { to: '/accounts', label: 'Contas', icon: 'wallet', comingSoon: false },
   { to: '', label: 'Investimentos', icon: 'trending', comingSoon: true },
   { to: '', label: 'Bens e Valores', icon: 'gem', comingSoon: true },
 ]
 
 const toolsItems = [
-  { to: '/relatorios', label: 'Relatórios' },
+  { to: '/reports', label: 'Relatórios' },
 ]
 
 function isMovimentsSubActive(tabKey: string) {
-  if (!route.path.startsWith('/movimentos')) return false
+  if (!route.path.startsWith('/transactions')) return false
   const tab = route.query.tab as string | undefined
   if (tabKey === 'dashboard') return !tab || tab === 'dashboard'
   return tab === tabKey
 }
 
 function isActive(path: string) {
-  if (path === '/inicio') return route.path === '/inicio'
+  if (path === '/overview') return route.path === '/overview'
   return route.path.startsWith(path)
 }
 
@@ -150,7 +150,7 @@ function isActive(path: string) {
       <button v-if="sidebarCollapsed && authStore.isAuthenticated" type="button" class="sidebar-expand-btn" @click="toggleSidebar" title="Expandir">
         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" x2="21" y1="6" y2="6"/><line x1="3" x2="21" y1="12" y2="12"/><line x1="3" x2="21" y1="18" y2="18"/></svg>
       </button>
-      <RouterLink to="/inicio" class="header-brand" aria-label="FinoraFlow — ir para o painel">
+      <RouterLink to="/overview" class="header-brand" aria-label="FinoraFlow — ir para o painel">
         <img
           :src="iconFinoraFlow"
           alt="FinoraFlow"
@@ -167,23 +167,23 @@ function isActive(path: string) {
             </button>
             <Transition name="dropdown">
               <div v-show="quickActionOpen" class="quick-action-dropdown">
-                <button type="button" class="quick-action-item" @click="quickAction('/movimentos?tab=movements&action=new')">
+                <button type="button" class="quick-action-item" @click="quickAction('/transactions?tab=movements&action=new')">
                   <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="7" x2="7" y1="18" y2="6"/><polyline points="3 10 7 6 11 10"/><line x1="17" x2="17" y1="6" y2="18"/><polyline points="13 14 17 18 21 14"/></svg>
                   Movimento
                 </button>
-                <button type="button" class="quick-action-item" @click="quickAction('/movimentos?tab=recurring&action=new')">
+                <button type="button" class="quick-action-item" @click="quickAction('/transactions?tab=recurring&action=new')">
                   <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
                   Recorrente
                 </button>
-                <button type="button" class="quick-action-item" @click="quickAction('/contas?action=new')">
+                <button type="button" class="quick-action-item" @click="quickAction('/accounts?action=new')">
                   <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 10h20"/><circle cx="17" cy="15" r="1.5"/></svg>
                   Conta
                 </button>
-                <button type="button" class="quick-action-item" @click="quickAction('/objetivos?tab=active&action=new')">
+                <button type="button" class="quick-action-item" @click="quickAction('/goals?tab=active&action=new')">
                   <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/><line x1="22" x2="12" y1="2" y2="12"/></svg>
                   Objetivo
                 </button>
-                <button type="button" class="quick-action-item" @click="quickAction('/plano-mensal')">
+                <button type="button" class="quick-action-item" @click="quickAction('/monthly-plan')">
                   <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/><path d="m9 16 2 2 4-4"/></svg>
                   Plano Mensal
                 </button>
@@ -310,7 +310,7 @@ function isActive(path: string) {
           >
             {{ planLabel }}
           </RouterLink>
-          <span v-if="!sidebarCollapsed && householdStore.household?.name" class="sidebar-household-name">
+          <span v-if="!sidebarCollapsed && subscriptionStore.plan === 'Couple' && householdStore.household?.name" class="sidebar-household-name">
             {{ householdStore.household.name }}
           </span>
           <button v-if="!sidebarCollapsed" type="button" class="sidebar-collapse-btn" @click="toggleSidebar" title="Minimizar">
@@ -320,9 +320,9 @@ function isActive(path: string) {
         <nav v-if="authStore.isAuthenticated" class="sidebar-nav">
           <!-- Top items (Dashboard, Plano Mensal) -->
           <RouterLink
-            to="/inicio"
+            to="/overview"
             class="sidebar-link"
-            :class="{ active: isActive('/inicio') }"
+            :class="{ active: isActive('/overview') }"
           >
             <span class="sidebar-icon">
               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
@@ -334,9 +334,9 @@ function isActive(path: string) {
           <div class="sidebar-section">
             <span class="sidebar-section-title">Planeamento</span>
             <RouterLink
-              to="/plano-mensal"
+              to="/monthly-plan"
               class="sidebar-link"
-              :class="{ active: isActive('/monthly') }"
+              :class="{ active: isActive('/monthly-plan') }"
             >
               <span class="sidebar-icon">
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/><path d="m9 16 2 2 4-4"/></svg>
@@ -394,9 +394,9 @@ function isActive(path: string) {
           <div class="sidebar-section">
             <span class="sidebar-section-title">Objetivos</span>
             <RouterLink
-              to="/objetivos"
+              to="/goals"
               class="sidebar-link"
-              :class="{ active: isActive('/objetivos') }"
+              :class="{ active: isActive('/goals') }"
             >
               <span class="sidebar-icon">
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/><line x1="22" x2="12" y1="2" y2="12"/></svg>
@@ -423,8 +423,8 @@ function isActive(path: string) {
           </div>
         </nav>
         <div v-else class="sidebar-guest">
-          <RouterLink to="/entrar" class="sidebar-link">Entrar</RouterLink>
-          <RouterLink to="/registar" class="sidebar-link btn-register">Registar</RouterLink>
+          <RouterLink to="/login" class="sidebar-link">Entrar</RouterLink>
+          <RouterLink to="/register" class="sidebar-link btn-register">Registar</RouterLink>
         </div>
       </aside>
 

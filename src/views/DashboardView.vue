@@ -27,6 +27,7 @@ import IncomePieChart from '@/components/charts/IncomePieChart.vue'
 import MonthlyLineChart from '@/components/charts/MonthlyLineChart.vue'
 import NetWorthChart from '@/components/charts/NetWorthChart.vue'
 import IncomeVsExpensesBarChart from '@/components/charts/IncomeVsExpensesBarChart.vue'
+import PlanUpsellModal from '@/components/PlanUpsellModal.vue'
 
 const router = useRouter()
 const householdStore = useHouseholdStore()
@@ -869,6 +870,20 @@ async function fetchTrendChartData() {
 
 watch(trendChartPeriod, () => fetchTrendChartData())
 
+/* ── Períodos longos (1A/5A) são exclusivos dos planos Pro/Couple ── */
+const periodUpsellOpen = ref(false)
+function isPeriodLocked(p: string): boolean {
+  return subscriptionStore.isFree && (p === '1A' || p === '5A')
+}
+function selectChartPeriod(p: ChartPeriod) {
+  if (isPeriodLocked(p)) { periodUpsellOpen.value = true; return }
+  chartPeriod.value = p
+}
+function selectTrendPeriod(p: TrendChartPeriod) {
+  if (isPeriodLocked(p)) { periodUpsellOpen.value = true; return }
+  trendChartPeriod.value = p
+}
+
 const showContent = computed(() =>
   mounted.value &&
   !loadError.value &&
@@ -935,7 +950,7 @@ const showContent = computed(() =>
               :key="p"
               class="patrimonio-period-btn"
               :class="{ active: chartPeriod === p }"
-              @click="chartPeriod = p"
+              @click="selectChartPeriod(p)"
             >{{ p }}</button>
           </div>
         </div>
@@ -1030,7 +1045,7 @@ const showContent = computed(() =>
           <div v-else class="static-card-empty">
             <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="static-card-empty-icon"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 10h20"/><circle cx="17" cy="15" r="1.5"/></svg>
             <p>Vê o saldo das tuas contas num só lugar</p>
-            <router-link to="/contas?action=new" class="static-card-action">Adicionar</router-link>
+            <router-link to="/accounts?action=new" class="static-card-action">Adicionar</router-link>
           </div>
         </div>
 
@@ -1154,7 +1169,7 @@ const showContent = computed(() =>
           <div v-else class="static-card-empty">
             <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="static-card-empty-icon"><line x1="7" x2="7" y1="18" y2="6"/><polyline points="3 10 7 6 11 10"/><line x1="17" x2="17" y1="6" y2="18"/><polyline points="13 14 17 18 21 14"/></svg>
             <p>Nenhum movimento registado</p>
-            <router-link to="/movimentos?tab=movements&action=new" class="static-card-action">Adicionar</router-link>
+            <router-link to="/transactions?tab=movements&action=new" class="static-card-action">Adicionar</router-link>
           </div>
         </div>
         </template>
@@ -1170,7 +1185,7 @@ const showContent = computed(() =>
               :key="p"
               class="patrimonio-period-btn"
               :class="{ active: trendChartPeriod === p }"
-              @click="trendChartPeriod = p"
+              @click="selectTrendPeriod(p)"
             >{{ p }}</button>
           </div>
         </div>
@@ -1399,7 +1414,7 @@ const showContent = computed(() =>
           </div>
           <div v-else class="section-empty">
             <p class="section-empty-text">Ainda não definiste o teu plano mensal</p>
-            <router-link to="/plano-mensal" class="btn-section-add">Adicionar plano mensal</router-link>
+            <router-link to="/monthly-plan" class="btn-section-add">Adicionar plano mensal</router-link>
           </div>
         </div>
         </template>
@@ -1455,6 +1470,17 @@ const showContent = computed(() =>
       </div>
     </Transition>
   </Teleport>
+
+  <PlanUpsellModal
+    :open="periodUpsellOpen"
+    description="Atingiste o limite do plano Free. Faz upgrade para acederes ao histórico alargado do teu património."
+    :features="[
+      'Evolução do património até 5 anos',
+      'Objetivos de poupança e relatórios mensais',
+      'Transações recorrentes ilimitadas',
+    ]"
+    @close="periodUpsellOpen = false"
+  />
 </template>
 
 <style scoped>

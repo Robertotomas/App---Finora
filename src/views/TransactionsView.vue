@@ -15,6 +15,8 @@ import TransactionTypeSelectionModal from '@/components/TransactionTypeSelection
 import RemoveRecurringModal from '@/components/RemoveRecurringModal.vue'
 import ConfirmDeleteModal from '@/components/ConfirmDeleteModal.vue'
 import BaseModal from '@/components/BaseModal.vue'
+import PlanUpsellCard from '@/components/PlanUpsellCard.vue'
+import PlanUpsellModal from '@/components/PlanUpsellModal.vue'
 import type { Transaction, CreateTransactionRequest } from '@/types/transaction'
 import type { RecurringTransaction, CreateRecurringTransactionRequest } from '@/types/recurringTransaction'
 import { recurringAmountForMonth, recurringFrequencyDescription } from '@/types/recurringTransaction'
@@ -48,8 +50,9 @@ watch(() => routeRef.query.tab, (tab) => {
 
 watch(() => routeRef.query.action, (action) => {
   if (action === 'new') {
-    if (activeTab.value === 'recurring') openRecurringCreateModal()
-    else openCreateModal()
+    if (activeTab.value === 'recurring') {
+      if (!recurringLocked.value) openRecurringCreateModal()
+    } else openCreateModal()
     router.replace({ query: { ...routeRef.query, action: undefined } })
   }
 })
@@ -132,6 +135,21 @@ watch(filterType, () => {
 const MONTH_NAMES = ['', 'Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 const now = new Date()
 
+/**
+ * Último mês (inclusivo) em que a recorrente ainda conta. O fim é **exclusivo**
+ * (alinha com o backend: conta se `fim > mês`), por isso o último mês ativo é o anterior ao fim.
+ * Sem fim definido → mês atual (recorrente em curso).
+ */
+function recurringActiveEnd(r: RecurringTransaction): { endY: number; endM: number } {
+  if (r.endYear != null && r.endMonth != null) {
+    let endY = r.endYear
+    let endM = r.endMonth - 1
+    if (endM < 1) { endM = 12; endY -= 1 }
+    return { endY, endM }
+  }
+  return { endY: now.getFullYear(), endM: now.getMonth() + 1 }
+}
+
 /** 1.º dia do mês do filtro: o limite Free aplica-se ao mês da data da transação, não ao mês do calendário “hoje”. */
 const defaultDateForNewTransaction = computed(() => {
   if (filterFrom.value) return filterFrom.value
@@ -147,9 +165,16 @@ const limitModalOpen = ref(false)
 const limitModalKind = ref<'plan' | 'primary'>('plan')
 const limitMessage = ref('Atualiza o teu plano para continuar.')
 
+/* Upsell de plano (limite mensal Free atingido) */
+const planUpsellOpen = ref(false)
+const planUpsellText = ref('')
+
 const needsPrimarySelection = computed(
   () => subscriptionStore.limits.needsPrimaryAccountSelection === true
 )
+
+/** Recorrentes são exclusivas dos planos Pro/Couple (bloqueadas no Free). */
+const recurringLocked = computed(() => !subscriptionStore.canAccessRecurring)
 
 const accountsForCreateModal = computed(() =>
   accountsStore.accounts.filter((a) => a.isActiveForPlan !== false && !a.isArchived)
@@ -535,8 +560,7 @@ async function fetchSummaryTransactions() {
       if (summaryFilterAccount.value && r.accountId !== summaryFilterAccount.value && r.destinationAccountId !== summaryFilterAccount.value) continue
       let y = r.startYear
       let m = r.startMonth
-      const endY = r.endYear ?? new Date().getFullYear()
-      const endM = r.endMonth ?? new Date().getMonth() + 1
+      const { endY, endM } = recurringActiveEnd(r)
       while (y < endY || (y === endY && m <= endM)) {
         const ym = `${y}-${String(m).padStart(2, '0')}`
         const inRange = (!fromYM || ym >= fromYM) && (!toYM || ym <= toYM)
@@ -552,7 +576,7 @@ async function fetchSummaryTransactions() {
               amount: amt,
               description: r.description ?? '',
               date: `${y}-${String(m).padStart(2, '0')}-01`,
-              splits: []
+              splits: r.responsibleUserId ? [{ userId: r.responsibleUserId, percentage: 100 }] : []
             })
           }
         }
@@ -788,8 +812,7 @@ const recurringInRange = computed(() => {
   for (const r of recurringStore.recurring) {
     let y = r.startYear
     let m = r.startMonth
-    const endY = r.endYear ?? new Date().getFullYear()
-    const endM = r.endMonth ?? new Date().getMonth() + 1
+    const { endY, endM } = recurringActiveEnd(r)
     while (y < endY || (y === endY && m <= endM)) {
       const ym = `${y}-${String(m).padStart(2, '0')}`
       const inRange = (!fromYM || ym >= fromYM) && (!toYM || ym <= toYM)
@@ -842,8 +865,9 @@ const activeRecurring = computed(() => {
     const startYM = `${r.startYear}-${String(r.startMonth).padStart(2, '0')}`
     if (toYM && startYM > toYM) return false
     if (r.endYear && r.endMonth) {
+      // Fim exclusivo: a recorrente só está ativa enquanto fim > mês.
       const endYM = `${r.endYear}-${String(r.endMonth).padStart(2, '0')}`
-      if (fromYM && endYM < fromYM) return false
+      if (fromYM && endYM <= fromYM) return false
     }
     return true
   })
@@ -906,8 +930,7 @@ const recExpandedTotals = computed(() => {
   for (const r of recAllFiltered.value) {
     let y = r.startYear
     let m = r.startMonth
-    const endY = r.endYear ?? new Date().getFullYear()
-    const endM = r.endMonth ?? new Date().getMonth() + 1
+    const { endY, endM } = recurringActiveEnd(r)
     while (y < endY || (y === endY && m <= endM)) {
       const ym = `${y}-${String(m).padStart(2, '0')}`
       const inRange = (!fromYM || ym >= fromYM) && (!toYM || ym <= toYM)
@@ -1181,8 +1204,9 @@ onMounted(async () => {
     // Handled in stores
   }
   if (routeRef.query.action === 'new') {
-    if (activeTab.value === 'recurring') openRecurringCreateModal()
-    else openCreateModal()
+    if (activeTab.value === 'recurring') {
+      if (!recurringLocked.value) openRecurringCreateModal()
+    } else openCreateModal()
     router.replace({ query: { ...routeRef.query, action: undefined } })
   }
 })
@@ -1305,11 +1329,10 @@ async function handleCreate(payload: CreateTransactionRequest) {
     const code = err.response?.data?.code
     if (err.response?.status === 403 && code === 'PLAN_LIMIT') {
       closeCreateModal()
-      limitModalKind.value = 'plan'
-      limitMessage.value = payload.type === TransactionType.Income
-        ? 'Atingiste o limite de receitas do plano Free: só podes adicionar 1 receita por mês. Atualiza para Pro ou Couple para continuares.'
-        : 'Atingiste o limite de despesas do plano Free: só podes adicionar 5 despesas por mês. Atualiza para Pro ou Couple para continuares.'
-      limitModalOpen.value = true
+      planUpsellText.value = payload.type === TransactionType.Income
+        ? 'Atingiste o limite de receitas do plano Free: só podes registar 1 receita por mês.'
+        : 'Atingiste o limite de despesas do plano Free: só podes registar 5 despesas por mês.'
+      planUpsellOpen.value = true
     } else if (err.response?.status === 403 && code === 'FREE_PRIMARY_REQUIRED') {
       closeCreateModal()
       limitModalKind.value = 'primary'
@@ -1440,6 +1463,7 @@ function getRecurringResponsibleDisplay(r: RecurringTransaction): string {
 }
 
 function openRecurringCreateModal() {
+  if (recurringLocked.value) return
   if (needsPrimarySelection.value) {
     limitModalKind.value = 'primary'
     limitMessage.value =
@@ -1463,6 +1487,7 @@ function closeRecurringCreateModal() {
 }
 
 function openRecurringEditModal(r: RecurringTransaction) {
+  if (recurringLocked.value) return
   if (needsPrimarySelection.value) {
     limitModalKind.value = 'primary'
     limitMessage.value =
@@ -1491,6 +1516,7 @@ function closeRecurringEditModal() {
 }
 
 function openRecurringRemoveModal(r: RecurringTransaction) {
+  recurringStore.clearError()
   recurringToRemove.value = r
   recurringRemoveModalOpen.value = true
 }
@@ -1508,13 +1534,14 @@ async function handleRecurringCreate(payload: CreateRecurringTransactionRequest)
   } catch (e: unknown) {
     const err = e as { response?: { status?: number; data?: { code?: string; message?: string } } }
     const code = err.response?.data?.code
-    if (err.response?.status === 403 && code === 'PLAN_LIMIT') {
+    if (err.response?.status === 403 && (code === 'PLAN_LIMIT' || code === 'RECURRING_LOCKED')) {
       closeRecurringCreateModal()
-      limitModalKind.value = 'plan'
-      limitMessage.value = payload.type === TransactionType.Income
-        ? 'Atingiste o limite de receitas do plano Free: só podes adicionar 1 receita por mês. Atualiza para Pro ou Couple para continuares.'
-        : 'Atingiste o limite de despesas do plano Free: só podes adicionar 5 despesas por mês. Atualiza para Pro ou Couple para continuares.'
-      limitModalOpen.value = true
+      planUpsellText.value = code === 'RECURRING_LOCKED'
+        ? 'As transações recorrentes estão disponíveis nos planos Pro e Couple.'
+        : payload.type === TransactionType.Income
+          ? 'Atingiste o limite de receitas do plano Free: só podes registar 1 receita por mês.'
+          : 'Atingiste o limite de despesas do plano Free: só podes registar 5 despesas por mês.'
+      planUpsellOpen.value = true
       return
     }
     if (err.response?.status === 403 && code === 'FREE_PRIMARY_REQUIRED') {
@@ -1628,7 +1655,7 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
 
     <div v-if="!householdStore.household && !householdStore.loading" class="empty-state">
       <p>Configura primeiro o teu household.</p>
-      <router-link to="/inicio" class="link">Ir para o painel</router-link>
+      <router-link to="/overview" class="link">Ir para o painel</router-link>
     </div>
 
     <div v-else-if="householdStore.loading && !householdStore.household" class="loading-state">
@@ -1884,6 +1911,7 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
                 <th>Descrição</th>
                 <th>Categoria</th>
                 <th>Conta</th>
+                <th v-if="householdStore.isCouple">Responsável</th>
                 <th class="text-center">Valor</th>
               </tr>
             </thead>
@@ -1897,6 +1925,7 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
                   </span>
                 </td>
                 <td class="summary-td-account">{{ accountName(tx.accountId) }}</td>
+                <td v-if="householdStore.isCouple" class="summary-td-responsible">{{ getResponsibleDisplay(tx) }}</td>
                 <td class="text-center">
                   <span :class="tx.type === TransactionType.Income ? 'val-income' : 'val-expense'">
                     {{ tx.type === TransactionType.Income ? '+' : '-' }}{{ formatCurrencySummary(tx.amount) }}
@@ -2079,6 +2108,7 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
           <thead>
             <tr>
               <th>Data</th>
+              <th>Nome</th>
               <th>Categoria</th>
               <th>Tipo</th>
               <th class="amount-col">Valor</th>
@@ -2093,6 +2123,7 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
               class="table-row"
             >
               <td>{{ formatDate(tx.date) }}</td>
+              <td class="td-name">{{ tx.description || '—' }}</td>
               <td>
                 {{ TRANSACTION_CATEGORY_LABELS[tx.category] }}
                 <span v-if="tx.type === TransactionType.Transfer" class="transfer-accounts-hint">
@@ -2141,6 +2172,21 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
       </div>
 
       <div v-show="activeTab === 'recurring'" class="tab-content">
+        <PlanUpsellCard
+          v-if="recurringLocked"
+          title="Controle as suas despesas recorrentes"
+          description="Saiba exatamente quanto gasta em subscrições e pagamentos fixos todos os meses."
+          :features="[
+            'Agrupe despesas por categoria e frequência',
+            'Preveja o total de gastos fixos do próximo mês',
+            'Identifique subscrições esquecidas ou duplicadas',
+          ]"
+        >
+          <template #icon>
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
+          </template>
+        </PlanUpsellCard>
+        <template v-else>
         <div v-if="needsPrimarySelection" class="primary-inline-hint">
           <router-link :to="{ name: 'contas' }" class="primary-inline-link">Escolhe a conta principal em Contas</router-link>
           <span> para gerires recorrentes no plano Free com várias contas.</span>
@@ -2290,6 +2336,7 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
             <thead>
               <tr>
                 <th>Conta</th>
+                <th>Nome</th>
                 <th>Categoria</th>
                 <th>Tipo</th>
                 <th class="amount-col">Valor</th>
@@ -2311,6 +2358,7 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
                     → {{ getAccountName(r.destinationAccountId ?? '') }}
                   </span>
                 </td>
+                <td class="td-name">{{ r.description || '—' }}</td>
                 <td>{{ TRANSACTION_CATEGORY_LABELS[r.category] }}</td>
                 <td>
                   <span :class="['type-badge', r.type === TransactionType.Income ? 'type-income' : r.type === TransactionType.Transfer ? 'type-transfer' : 'type-expense']">
@@ -2352,6 +2400,7 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
             </button>
           </div>
         </div>
+        </template>
       </div>
     </div>
 
@@ -2433,6 +2482,7 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
       :open="recurringRemoveModalOpen"
       :recurring="recurringToRemove"
       :loading="actionLoading"
+      :error="recurringStore.error"
       @close="closeRecurringRemoveModal"
       @remove-from-current-month="handleRecurringRemoveFromCurrentMonth"
       @remove-from-next-month="handleRecurringRemoveFromNextMonth"
@@ -2466,6 +2516,18 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
         </div>
       </div>
     </BaseModal>
+
+    <PlanUpsellModal
+      :open="planUpsellOpen"
+      title="Fazer upgrade do plano"
+      :description="planUpsellText"
+      :features="[
+        'Movimentos ilimitados todos os meses',
+        'Transações recorrentes',
+        'Objetivos de poupança e relatórios mensais',
+      ]"
+      @close="planUpsellOpen = false"
+    />
   </div>
 </template>
 
@@ -2603,6 +2665,7 @@ html.dark .tab.active {
   color: var(--color-text-muted);
   margin: 0 0 1.25rem;
 }
+
 
 .global-error {
   padding: 0.75rem 1rem;
@@ -2869,7 +2932,7 @@ html.dark .type-toggle-btn.active.type-transfer {
   border-radius: 14px;
   box-shadow: var(--app-shadow-card, 0 1px 3px rgba(0, 0, 0, 0.06));
   border: 1px solid var(--color-border);
-  overflow: hidden;
+  overflow-x: auto;
 }
 
 .transactions-table {
@@ -2879,7 +2942,7 @@ html.dark .type-toggle-btn.active.type-transfer {
 
 .transactions-table th {
   text-align: left;
-  padding: 0.875rem 1.125rem;
+  padding: 0.875rem 0.75rem;
   font-size: 0.6875rem;
   font-weight: 700;
   color: var(--color-text-muted);
@@ -2890,7 +2953,7 @@ html.dark .type-toggle-btn.active.type-transfer {
 }
 
 .transactions-table td {
-  padding: 0.875rem 1.125rem;
+  padding: 0.875rem 0.75rem;
   font-size: 0.875rem;
   color: var(--color-text);
   border-bottom: 1px solid var(--color-border);
@@ -2923,6 +2986,11 @@ html.dark .type-toggle-btn.active.type-transfer {
 
 .actions-col {
   width: 1%;
+  white-space: nowrap;
+  text-align: right;
+}
+
+.td-name {
   white-space: nowrap;
 }
 
@@ -2974,7 +3042,7 @@ html.dark .amount-transfer {
 }
 
 .btn-icon {
-  padding: 0.3rem 0.625rem;
+  padding: 0.3rem 0.5rem;
   font-size: 0.75rem;
   font-weight: 500;
   color: var(--color-text-muted);
@@ -2982,8 +3050,13 @@ html.dark .amount-transfer {
   border: 1px solid var(--color-border);
   border-radius: 6px;
   cursor: pointer;
-  margin-right: 0.25rem;
+  margin-right: 0.2rem;
+  white-space: nowrap;
   transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.actions-col .btn-icon:last-child {
+  margin-right: 0;
 }
 
 .btn-icon:hover {

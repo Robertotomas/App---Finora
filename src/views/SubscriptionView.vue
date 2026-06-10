@@ -27,45 +27,61 @@ const partnerOtpError = ref('')
 const partnerOtpSuccess = ref('')
 const partnerOtpLoading = ref(false)
 
-const planCards = [
+interface PlanCard {
+  plan: SubscriptionPlan
+  title: string
+  subtitle: string
+  price: string
+  period: string
+  preamble?: string
+  features: string[]
+  highlight?: boolean
+}
+
+const planCards: PlanCard[] = [
   {
-    plan: 'Free' as SubscriptionPlan,
+    plan: 'Free',
     title: 'Free',
     subtitle: 'Para começar',
     price: '0€',
     period: '/mês',
     features: [
-      'Até 1 conta',
+      '1 conta',
       '1 receita por mês',
-      'Até 5 despesas por mês',
-      'Objetivos bloqueados',
+      '5 despesas por mês',
+      'Transferências ilimitadas',
+      'Dashboard com histórico até 6 meses',
+      'Plano mensal e orçamento',
     ],
   },
   {
-    plan: 'Pro' as SubscriptionPlan,
+    plan: 'Pro',
     title: 'Pro',
     subtitle: 'Gestão individual completa',
     price: '7,99€',
     period: '/mês',
+    preamble: 'Tudo do Free, mais:',
     features: [
-      'Contas e transações sem limites',
-      'Objetivos de poupança ativos',
-      'Dashboard completo',
-      'Relatórios mensais',
+      'Contas ilimitadas',
+      'Receitas e despesas ilimitadas',
+      'Transações recorrentes',
+      'Objetivos de poupança',
+      'Relatórios mensais automáticos (PDF)',
+      'Dashboard completo com histórico até 5 anos',
     ],
   },
   {
-    plan: 'Couple' as SubscriptionPlan,
+    plan: 'Couple',
     title: 'Couple',
     subtitle: 'Finanças a dois, juntos',
     price: '12,99€',
     period: '/mês',
-    preamble: 'Tudo do plano Pro, mais:',
+    preamble: 'Tudo do Pro, mais:',
     features: [
-      'Convidar 1 pessoa para o household',
-      'Partilha de contas e movimentos',
+      'Convidar 1 pessoa para o agregado',
+      'Contas e movimentos partilhados',
+      'Responsável por cada movimento e recorrente',
       'Visão conjunta do orçamento',
-      'Relatórios partilhados',
     ],
     highlight: true,
   },
@@ -166,7 +182,7 @@ onMounted(async () => {
   <div class="sub-page">
     <!-- Top bar -->
     <header class="top-bar">
-      <button type="button" class="btn-back" @click="router.push('/inicio')">
+      <button type="button" class="btn-back" @click="router.push('/overview')">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
       </button>
     </header>
@@ -255,8 +271,9 @@ onMounted(async () => {
         v-for="card in planCards"
         :key="card.plan"
         class="plan-card"
-        :class="{ 'plan-card--highlight': currentPlan === card.plan }"
+        :class="{ 'plan-card--highlight': currentPlan === card.plan, 'plan-card--featured': card.highlight }"
       >
+        <span v-if="card.highlight" class="plan-tag">Mais completo</span>
         <div class="plan-body">
           <h2 class="plan-name">{{ card.title }}</h2>
           <p class="plan-subtitle">{{ card.subtitle }}</p>
@@ -356,20 +373,21 @@ onMounted(async () => {
 /* ── Plans grid ── */
 .plans-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 1.25rem;
-  max-width: 960px;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.5rem;
+  max-width: 1080px;
   margin: 0 auto;
-  padding: 0 1.5rem 2rem;
+  padding: 0 1.5rem 2.5rem;
 }
 
 .plan-card {
+  position: relative;
   display: flex;
   flex-direction: column;
   background: var(--color-bg-card);
   border: 1px solid var(--color-border);
-  border-radius: 16px;
-  padding: 1.75rem 1.5rem 1.5rem;
+  border-radius: 18px;
+  padding: 2.25rem 1.875rem 1.875rem;
   transition: box-shadow 0.2s, transform 0.2s;
 }
 
@@ -383,13 +401,32 @@ onMounted(async () => {
   box-shadow: 0 0 0 1px #166534;
 }
 
+.plan-tag {
+  position: absolute;
+  top: 0;
+  right: 1.5rem;
+  transform: translateY(-50%);
+  padding: 0.25rem 0.625rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #fff;
+  background: #166534;
+  border-radius: 999px;
+}
+
+html.dark .plan-tag {
+  background: #15803d;
+}
+
 .plan-body {
   flex: 1;
 }
 
 .plan-name {
   margin: 0;
-  font-size: 1.25rem;
+  font-size: 1.375rem;
   font-weight: 700;
   color: var(--color-text);
 }
@@ -408,7 +445,7 @@ onMounted(async () => {
 }
 
 .plan-price-value {
-  font-size: 2rem;
+  font-size: 2.375rem;
   font-weight: 750;
   color: var(--color-text);
   letter-spacing: -0.03em;
@@ -426,21 +463,21 @@ onMounted(async () => {
 }
 
 .plan-features {
-  margin: 1rem 0 0;
+  margin: 1.25rem 0 0;
   padding: 0;
   list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.625rem;
 }
 
 .plan-features li {
   display: flex;
   align-items: flex-start;
   gap: 0.5rem;
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   color: var(--color-text);
-  line-height: 1.4;
+  line-height: 1.45;
 }
 
 .plan-features li svg {
@@ -455,10 +492,10 @@ html.dark .plan-features li svg {
 
 /* ── Plan buttons ── */
 .btn-plan {
-  margin-top: 1.5rem;
+  margin-top: 1.75rem;
   width: 100%;
-  padding: 0.625rem 1rem;
-  font-size: 0.875rem;
+  padding: 0.75rem 1rem;
+  font-size: 0.9375rem;
   font-weight: 600;
   font-family: inherit;
   border-radius: 10px;
