@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { authApi } from '@/api/auth'
-import { userFromProfileResponse, type User, type LoginRequest, type RegisterRequest } from '@/types/auth'
+import { userFromProfileResponse, type User, type LoginRequest, type RegisterRequest, type AuthResponse } from '@/types/auth'
 
 const TOKEN_KEY = 'token'
 const REFRESH_TOKEN_KEY = 'refreshToken'
@@ -68,11 +68,19 @@ export const useAuthStore = defineStore('auth', () => {
     return response
   }
 
+  /**
+   * Regista. No fluxo normal devolve `{ requiresEmailConfirmation: true }` (sem iniciar
+   * sessão — falta confirmar o email). No convite de casal inicia sessão e devolve o user.
+   */
   async function register(data: RegisterRequest) {
     const { data: response } = await authApi.register(data)
-    setAuth(response.accessToken, response.user, response.refreshToken)
-    scheduleRefresh(response.expiresIn)
-    return response
+    if ('requiresEmailConfirmation' in response && response.requiresEmailConfirmation) {
+      return { requiresEmailConfirmation: true as const, email: response.email }
+    }
+    const auth = response as AuthResponse
+    setAuth(auth.accessToken, auth.user, auth.refreshToken)
+    scheduleRefresh(auth.expiresIn)
+    return { requiresEmailConfirmation: false as const, user: auth.user }
   }
 
   function logout() {

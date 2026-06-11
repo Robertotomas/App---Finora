@@ -6,6 +6,7 @@ import { RouterLink } from 'vue-router'
 import iconFinoraFlow from '@/assets/images/finoraflow-icon.png'
 import AuthShowcase from '@/components/AuthShowcase.vue'
 import { coupleInvitationsApi } from '@/api/coupleInvitations'
+import { authApi } from '@/api/auth'
 
 const router = useRouter()
 const route = useRoute()
@@ -21,6 +22,11 @@ const firstName = ref('')
 const lastName = ref('')
 const error = ref('')
 const loading = ref(false)
+
+// Ecrã "confirma o teu email" depois de registar (fluxo normal).
+const pendingEmail = ref('')
+const resending = ref(false)
+const resendNotice = ref('')
 
 const passwordRules = computed(() => ({
   minLength: password.value.length >= 8,
@@ -60,7 +66,7 @@ async function handleSubmit() {
   error.value = ''
   loading.value = true
   try {
-    await authStore.register({
+    const result = await authStore.register({
       email: email.value,
       password: password.value,
       firstName: firstName.value,
@@ -68,6 +74,12 @@ async function handleSubmit() {
       ...(inviteToken.value && { inviteToken: inviteToken.value }),
       timeZoneId: Intl.DateTimeFormat().resolvedOptions().timeZone,
     })
+    // Fluxo normal: falta confirmar o email → mostra o ecrã de confirmação.
+    if (result.requiresEmailConfirmation) {
+      pendingEmail.value = result.email
+      return
+    }
+    // Convite de casal: sessão iniciada.
     router.push('/overview')
   } catch (e: unknown) {
     const err = e as { rateLimited?: boolean; rateLimitMessage?: string; response?: { data?: { message?: string; errors?: Record<string, string[]> } } }
@@ -85,6 +97,23 @@ async function handleSubmit() {
     loading.value = false
   }
 }
+
+async function resendConfirmation() {
+  if (resending.value) return
+  resending.value = true
+  resendNotice.value = ''
+  try {
+    await authApi.resendEmailConfirmation(pendingEmail.value)
+    resendNotice.value = 'Enviámos um novo email de confirmação.'
+  } catch (e: unknown) {
+    const err = e as { rateLimited?: boolean; rateLimitMessage?: string }
+    resendNotice.value = err.rateLimited
+      ? (err.rateLimitMessage || 'Demasiados pedidos. Tenta novamente dentro de 1 minuto.')
+      : 'Não foi possível reenviar agora. Tenta novamente daqui a pouco.'
+  } finally {
+    resending.value = false
+  }
+}
 </script>
 
 <template>
@@ -93,7 +122,28 @@ async function handleSubmit() {
       <div class="auth-brand">
         <img :src="iconFinoraFlow" alt="FinoraFlow" class="auth-brand-img" />
       </div>
-      <div class="auth-left-inner">
+      <!-- Conta criada: falta confirmar o email -->
+      <div v-if="pendingEmail" class="auth-left-inner">
+        <div class="confirm-pending">
+          <div class="confirm-pending-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+          </div>
+          <p class="confirm-pending-title">Confirma o teu email</p>
+          <p class="confirm-pending-text">
+            Enviámos um link de confirmação para <strong>{{ pendingEmail }}</strong>.
+            Abre-o para ativar a conta e poder iniciar sessão.
+          </p>
+        </div>
+        <button type="button" class="auth-btn" :disabled="resending" @click="resendConfirmation">
+          {{ resending ? 'A reenviar...' : 'Reenviar email de confirmação' }}
+        </button>
+        <p v-if="resendNotice" class="confirm-resend-notice">{{ resendNotice }}</p>
+        <p class="auth-footer">
+          Já confirmaste? <RouterLink to="/login">Iniciar sessão</RouterLink>
+        </p>
+      </div>
+
+      <div v-else class="auth-left-inner">
         <div class="auth-intro">
           <p class="auth-intro-title">Criar conta</p>
           <p class="auth-intro-welcome">Bem-vindo! Vamos começar!</p>
@@ -176,5 +226,56 @@ async function handleSubmit() {
 .auth-invite-email-hint {
   font-size: 0.85rem;
   color: #94a3b8;
+}
+
+/* Ecrã "confirma o teu email" */
+.confirm-pending {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  margin-bottom: 1.25rem;
+}
+.confirm-pending-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: #ecfdf5;
+  color: #166534;
+  margin-bottom: 1rem;
+}
+:global(html.dark) .confirm-pending-icon {
+  background: rgba(22, 101, 52, 0.2);
+  color: #4ade80;
+}
+.confirm-pending-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 0.4rem;
+}
+:global(html.dark) .confirm-pending-title {
+  color: #ffffff;
+}
+.confirm-pending-text {
+  font-size: 0.875rem;
+  color: #64748b;
+  margin: 0;
+  line-height: 1.5;
+}
+:global(html.dark) .confirm-pending-text {
+  color: #a3a3a3;
+}
+.confirm-resend-notice {
+  margin: 0.75rem 0 0;
+  font-size: 0.8125rem;
+  color: #166534;
+  text-align: center;
+}
+:global(html.dark) .confirm-resend-notice {
+  color: #4ade80;
 }
 </style>

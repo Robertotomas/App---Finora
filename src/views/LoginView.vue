@@ -6,6 +6,7 @@ import { RouterLink } from 'vue-router'
 import iconFinoraFlow from '@/assets/images/finoraflow-icon.png'
 import AuthShowcase from '@/components/AuthShowcase.vue'
 import ForgotPasswordModal from '@/components/ForgotPasswordModal.vue'
+import { authApi } from '@/api/auth'
 
 const router = useRouter()
 const route = useRoute()
@@ -17,8 +18,15 @@ const error = ref('')
 const loading = ref(false)
 const forgotPasswordOpen = ref(false)
 
+// Email por confirmar (resposta 403 EMAIL_NOT_CONFIRMED): mostra opção de reenvio.
+const needsConfirmation = ref(false)
+const resending = ref(false)
+const resendNotice = ref('')
+
 async function handleSubmit() {
   error.value = ''
+  needsConfirmation.value = false
+  resendNotice.value = ''
   loading.value = true
   try {
     const timeZoneId = Intl.DateTimeFormat().resolvedOptions().timeZone
@@ -26,14 +34,34 @@ async function handleSubmit() {
     const redirect = (route.query.redirect as string) || '/overview'
     router.push(redirect)
   } catch (e: unknown) {
-    const err = e as { rateLimited?: boolean; rateLimitMessage?: string; response?: { data?: { message?: string } } }
+    const err = e as { rateLimited?: boolean; rateLimitMessage?: string; response?: { data?: { message?: string; code?: string } } }
     if (err.rateLimited) {
       error.value = err.rateLimitMessage || 'Demasiados pedidos. Tenta novamente dentro de 1 minuto.'
+    } else if (err.response?.data?.code === 'EMAIL_NOT_CONFIRMED') {
+      needsConfirmation.value = true
+      error.value = err.response.data.message || 'Confirma o teu email antes de iniciar sessão.'
     } else {
-      error.value = err.response?.data?.message || 'Email ou password incorretos.'
+      error.value = err.response?.data?.message || 'Email ou palavra-passe incorretos.'
     }
   } finally {
     loading.value = false
+  }
+}
+
+async function resendConfirmation() {
+  if (resending.value) return
+  resending.value = true
+  resendNotice.value = ''
+  try {
+    await authApi.resendEmailConfirmation(email.value)
+    resendNotice.value = 'Enviámos um novo email de confirmação.'
+  } catch (e: unknown) {
+    const err = e as { rateLimited?: boolean; rateLimitMessage?: string }
+    resendNotice.value = err.rateLimited
+      ? (err.rateLimitMessage || 'Demasiados pedidos. Tenta novamente dentro de 1 minuto.')
+      : 'Não foi possível reenviar agora. Tenta novamente daqui a pouco.'
+  } finally {
+    resending.value = false
   }
 }
 </script>
@@ -51,6 +79,12 @@ async function handleSubmit() {
         </div>
         <form @submit.prevent="handleSubmit">
           <div v-if="error" class="auth-error">{{ error }}</div>
+          <div v-if="needsConfirmation" class="auth-confirm-hint">
+            <button type="button" class="auth-resend-link" :disabled="resending" @click="resendConfirmation">
+              {{ resending ? 'A reenviar...' : 'Reenviar email de confirmação' }}
+            </button>
+            <span v-if="resendNotice" class="auth-resend-notice">{{ resendNotice }}</span>
+          </div>
           <div class="auth-field">
             <label for="email">Email</label>
             <input id="email" v-model="email" type="email" required placeholder="Introduza o e-mail" />
@@ -84,6 +118,46 @@ async function handleSubmit() {
 </template>
 
 <style scoped>
+.auth-confirm-hint {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin: -0.25rem 0 1.125rem;
+}
+.auth-resend-link {
+  align-self: flex-start;
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: inherit;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: #166534;
+  cursor: pointer;
+  transition: color 0.15s;
+}
+.auth-resend-link:hover:not(:disabled) {
+  color: #14532d;
+  text-decoration: underline;
+}
+.auth-resend-link:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.auth-resend-notice {
+  font-size: 0.8125rem;
+  color: #166534;
+}
+:global(html.dark) .auth-resend-link {
+  color: #4ade80;
+}
+:global(html.dark) .auth-resend-link:hover:not(:disabled) {
+  color: #86efac;
+}
+:global(html.dark) .auth-resend-notice {
+  color: #4ade80;
+}
+
 .auth-forgot {
   display: flex;
   justify-content: flex-end;

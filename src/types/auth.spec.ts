@@ -56,6 +56,13 @@ describe('userFromProfileResponse', () => {
     expect(userFromProfileResponse({ coupleJoinDataMigrated: false }).coupleJoinDataMigrated).toBe(false)
   })
 
+  it('emailConfirmed: true só quando estritamente true', () => {
+    expect(userFromProfileResponse({ emailConfirmed: true }).emailConfirmed).toBe(true)
+    expect(userFromProfileResponse({ EmailConfirmed: true }).emailConfirmed).toBe(true)
+    expect(userFromProfileResponse({ emailConfirmed: false }).emailConfirmed).toBe(false)
+    expect(userFromProfileResponse({}).emailConfirmed).toBe(false)
+  })
+
   it('input null/undefined não rebenta (campos a default)', () => {
     const u = userFromProfileResponse(null)
     expect(u.id).toBe('')

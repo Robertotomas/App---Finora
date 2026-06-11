@@ -23,6 +23,12 @@ const router = createRouter({
       meta: { requiresAuth: false },
     },
     {
+      path: '/confirm-email',
+      name: 'confirmar-email',
+      component: () => import('@/views/ConfirmEmailView.vue'),
+      meta: { requiresAuth: false },
+    },
+    {
       path: '/subscription',
       name: 'subscricao',
       component: () => import('@/views/SubscriptionView.vue'),
@@ -115,6 +121,7 @@ const ROUTE_TITLES: Record<string, string> = {
   entrar: 'Entrar',
   registar: 'Registar',
   'redefinir-password': 'Redefinir palavra-passe',
+  'confirmar-email': 'Confirmar email',
   subscricao: 'Subscrição',
   inicio: 'Visão Geral',
   'plano-mensal': 'Plano Mensal',
