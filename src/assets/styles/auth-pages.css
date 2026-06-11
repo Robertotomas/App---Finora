@@ -48,6 +48,9 @@
 .auth-brand {
   flex-shrink: 0;
   text-align: center;
+  /* Alinhar o logo ao nível do título do showcase (painel direito, padding-top 5rem):
+     desce-o do topo e centra-o verticalmente nessa linha. */
+  margin-top: 3.25rem;
 }
 
 .auth-brand-img {
