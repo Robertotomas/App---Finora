@@ -535,6 +535,17 @@ export const BRANDS: Brand[] = [
   { name: 'RTP', domain: 'rtp.pt', type: 'other' },
   { name: 'SIC', domain: 'sic.pt', type: 'other', aliases: ['opto'] },
   { name: 'TVI', domain: 'tvi.pt', type: 'other' },
+
+  // ───────── Ginásios (extra) ─────────
+  { name: 'Fitness UP', domain: 'fitnessup.pt', type: 'other', aliases: ['fitness up'] },
+  { name: 'GoFit', domain: 'go-fit.pt', type: 'other', aliases: ['go fit', 'go gym'] },
+  { name: 'Vivafit', domain: 'vivafit.pt', type: 'other' },
+  { name: 'Virgin Active', domain: 'virginactive.pt', type: 'other', aliases: ['virgin active'] },
+  { name: 'Kalorias', domain: 'kalorias.pt', type: 'other' },
+  { name: 'Anytime Fitness', domain: 'anytimefitness.pt', type: 'other', aliases: ['anytime fitness'] },
+  { name: 'Basic-Fit', domain: 'basic-fit.com', type: 'other', aliases: ['basic fit'] },
+  { name: 'Body Concept', domain: 'bodyconcept.pt', type: 'other', aliases: ['body concept'] },
+  { name: 'Wellhub', domain: 'wellhub.com', type: 'other', aliases: ['gympass'] },
 ]
 
 export interface Country {
