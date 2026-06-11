@@ -31,7 +31,7 @@ function isHandledPlanRestrictionError(e: unknown): boolean {
   )
 }
 
-function mapTransaction(d: { id: string; accountId: string; householdId: string; type: number; category: number; amount: number; date: string; description?: string; destinationAccountId?: string; splits?: { userId: string; percentage: number }[] }): Transaction {
+function mapTransaction(d: { id: string; accountId: string; householdId: string; type: number; category: number; amount: number; date: string; description?: string; entityType?: number; entityName?: string | null; destinationAccountId?: string; splits?: { userId: string; percentage: number }[] }): Transaction {
   return {
     id: d.id,
     accountId: d.accountId,
@@ -41,6 +41,8 @@ function mapTransaction(d: { id: string; accountId: string; householdId: string;
     amount: Number(d.amount),
     date: d.date,
     description: d.description,
+    entityType: d.entityType,
+    entityName: d.entityName ?? null,
     destinationAccountId: d.destinationAccountId,
     splits: (d.splits ?? []).map((s) => ({ userId: s.userId, percentage: Number(s.percentage) }))
   }

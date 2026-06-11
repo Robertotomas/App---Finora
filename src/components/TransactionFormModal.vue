@@ -3,6 +3,7 @@ import { ref, computed, watch } from 'vue'
 import BaseModal from './BaseModal.vue'
 import BaseSelect from './BaseSelect.vue'
 import CategorySelect from './CategorySelect.vue'
+import BrandAutocomplete from './BrandAutocomplete.vue'
 import type { Transaction, CreateTransactionRequest } from '@/types/transaction'
 import {
   TransactionType,
@@ -346,12 +347,21 @@ const modalTitle = computed(() => {
             <label for="tx-entity-name">
               {{ entityType === TransactionEntityType.Person ? 'Nome da pessoa' : 'Entidade' }}
             </label>
+            <BrandAutocomplete
+              v-if="entityType !== TransactionEntityType.Person"
+              id="tx-entity-name"
+              v-model="entityName"
+              scope="all"
+              placeholder="Ex: Continente"
+              :maxlength="200"
+            />
             <input
+              v-else
               id="tx-entity-name"
               v-model="entityName"
               type="text"
               class="input"
-              :placeholder="entityType === TransactionEntityType.Person ? 'Ex: João Silva' : 'Ex: Continente'"
+              placeholder="Ex: João Silva"
               maxlength="200"
             />
           </div>

@@ -17,6 +17,7 @@ import ConfirmDeleteModal from '@/components/ConfirmDeleteModal.vue'
 import BaseModal from '@/components/BaseModal.vue'
 import PlanUpsellCard from '@/components/PlanUpsellCard.vue'
 import PlanUpsellModal from '@/components/PlanUpsellModal.vue'
+import BrandLogo from '@/components/BrandLogo.vue'
 import type { Transaction, CreateTransactionRequest } from '@/types/transaction'
 import type { RecurringTransaction, CreateRecurringTransactionRequest } from '@/types/recurringTransaction'
 import { recurringAmountForMonth, recurringFrequencyDescription } from '@/types/recurringTransaction'
@@ -1908,6 +1909,7 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
             <thead>
               <tr>
                 <th>Data</th>
+                <th class="logo-col"></th>
                 <th>Descrição</th>
                 <th>Categoria</th>
                 <th>Conta</th>
@@ -1918,6 +1920,7 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
             <tbody>
               <tr v-for="tx in summaryPaginated" :key="tx.id">
                 <td class="summary-td-date">{{ new Date(tx.date).toLocaleDateString('pt-PT', { day: '2-digit', month: 'short' }) }}</td>
+                <td class="td-logo"><BrandLogo :name="tx.entityName || tx.description" :size="24" :show-fallback="false" /></td>
                 <td class="summary-td-desc">{{ tx.description || TRANSACTION_CATEGORY_LABELS[tx.category] || '—' }}</td>
                 <td>
                   <span class="summary-cat-badge" :style="{ background: (categoryColors[tx.category] || '#94a3b8') + '18', color: categoryColors[tx.category] || '#94a3b8' }">
@@ -2108,6 +2111,7 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
           <thead>
             <tr>
               <th>Data</th>
+              <th class="logo-col"></th>
               <th>Nome</th>
               <th>Categoria</th>
               <th>Tipo</th>
@@ -2123,6 +2127,7 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
               class="table-row"
             >
               <td>{{ formatDate(tx.date) }}</td>
+              <td class="td-logo"><BrandLogo :name="tx.entityName || tx.description" :size="24" :show-fallback="false" /></td>
               <td class="td-name">{{ tx.description || '—' }}</td>
               <td>
                 {{ TRANSACTION_CATEGORY_LABELS[tx.category] }}
@@ -2336,6 +2341,7 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
             <thead>
               <tr>
                 <th>Conta</th>
+                <th class="logo-col"></th>
                 <th>Nome</th>
                 <th>Categoria</th>
                 <th>Tipo</th>
@@ -2358,6 +2364,7 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
                     → {{ getAccountName(r.destinationAccountId ?? '') }}
                   </span>
                 </td>
+                <td class="td-logo"><BrandLogo :name="r.entityName || r.description" :size="24" :show-fallback="false" /></td>
                 <td class="td-name">{{ r.description || '—' }}</td>
                 <td>{{ TRANSACTION_CATEGORY_LABELS[r.category] }}</td>
                 <td>
@@ -2992,6 +2999,34 @@ html.dark .type-toggle-btn.active.type-transfer {
 
 .td-name {
   white-space: nowrap;
+}
+
+.logo-col {
+  width: 1%;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+.td-logo {
+  width: 1%;
+  padding-left: 0.15rem !important;
+  padding-right: 0 !important;
+  white-space: nowrap;
+}
+
+/* Data/Conta com um pequeno espaço antes do logo (sem sobrepor) */
+.transactions-table td:first-child,
+.summary-table td:first-child {
+  padding-right: 0.3rem !important;
+  white-space: nowrap;
+}
+
+.td-name {
+  padding-left: 0.6rem !important;
+}
+
+.summary-td-desc {
+  padding-left: 0.6rem !important;
 }
 
 .type-badge {

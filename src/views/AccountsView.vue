@@ -11,6 +11,7 @@ import ConfirmDeleteModal from '@/components/ConfirmDeleteModal.vue'
 import DeleteAccountWithTransferModal from '@/components/DeleteAccountWithTransferModal.vue'
 import ArchiveAccountModal from '@/components/ArchiveAccountModal.vue'
 import PlanUpsellModal from '@/components/PlanUpsellModal.vue'
+import BrandLogo from '@/components/BrandLogo.vue'
 import type { Account, CreateAccountRequest } from '@/types/account'
 import { ACCOUNT_TYPE_LABELS, AccountType } from '@/types/account'
 
@@ -475,11 +476,15 @@ function accountIcon(type: AccountType): string {
               'account-card--locked': account.isActiveForPlan === false,
             }"
           >
-            <!-- Icon -->
-            <div class="card-icon-wrap">
-              <svg v-if="isCreditCard(account.type)" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
-              <svg v-else xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path :d="accountIcon(account.type)"/></svg>
-            </div>
+            <!-- Icon: logo do banco se reconhecido, senão ícone por tipo (default) -->
+            <BrandLogo :name="account.name" :domain="account.logoDomain" :size="40" class="card-brand-logo">
+              <template #fallback>
+                <span class="card-icon-wrap">
+                  <svg v-if="isCreditCard(account.type)" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
+                  <svg v-else xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path :d="accountIcon(account.type)"/></svg>
+                </span>
+              </template>
+            </BrandLogo>
 
             <!-- Info -->
             <div class="card-body">
@@ -798,6 +803,10 @@ function accountIcon(type: AccountType): string {
 html.dark .card-icon-wrap {
   background: rgba(22, 101, 52, 0.2);
   color: #4ade80;
+}
+
+.card-brand-logo {
+  border-radius: 10px;
 }
 
 .card-icon-wrap--muted {

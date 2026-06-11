@@ -29,7 +29,8 @@ function mapAccount(a: Account): Account {
     householdId: a.householdId,
     isActiveForPlan: a.isActiveForPlan ?? true,
     isArchived: a.isArchived ?? false,
-    archivedAt: a.archivedAt
+    archivedAt: a.archivedAt,
+    logoDomain: a.logoDomain ?? null
   }
 }
 

@@ -28,6 +28,7 @@ import MonthlyLineChart from '@/components/charts/MonthlyLineChart.vue'
 import NetWorthChart from '@/components/charts/NetWorthChart.vue'
 import IncomeVsExpensesBarChart from '@/components/charts/IncomeVsExpensesBarChart.vue'
 import PlanUpsellModal from '@/components/PlanUpsellModal.vue'
+import BrandLogo from '@/components/BrandLogo.vue'
 
 const router = useRouter()
 const householdStore = useHouseholdStore()
@@ -1152,10 +1153,14 @@ const showContent = computed(() =>
               class="movement-row"
             >
               <div class="movement-row-left">
-                <span class="movement-row-icon" :class="tx.type === TransactionType.Income ? 'income' : 'expense'">
-                  <svg v-if="tx.type === TransactionType.Income" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 11 12 6 7 11"/><line x1="12" x2="12" y1="6" y2="18"/></svg>
-                  <svg v-else xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="7 13 12 18 17 13"/><line x1="12" x2="12" y1="18" y2="6"/></svg>
-                </span>
+                <BrandLogo :name="tx.entityName || tx.description" :size="28">
+                  <template #fallback>
+                    <span class="movement-row-icon" :class="tx.type === TransactionType.Income ? 'income' : 'expense'">
+                      <svg v-if="tx.type === TransactionType.Income" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 11 12 6 7 11"/><line x1="12" x2="12" y1="6" y2="18"/></svg>
+                      <svg v-else xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="7 13 12 18 17 13"/><line x1="12" x2="12" y1="18" y2="6"/></svg>
+                    </span>
+                  </template>
+                </BrandLogo>
                 <div>
                   <p class="movement-row-desc">{{ tx.description || TRANSACTION_CATEGORY_LABELS[tx.category] || 'Transação' }}</p>
                   <span class="movement-row-date">{{ new Date(tx.date).toLocaleDateString('pt-PT', { day: '2-digit', month: 'short' }) }}</span>

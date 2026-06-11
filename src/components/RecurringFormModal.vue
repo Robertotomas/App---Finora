@@ -3,6 +3,7 @@ import { ref, computed, watch } from 'vue'
 import BaseModal from './BaseModal.vue'
 import BaseSelect from './BaseSelect.vue'
 import CategorySelect from './CategorySelect.vue'
+import BrandAutocomplete from './BrandAutocomplete.vue'
 import type { CreateRecurringTransactionRequest, RecurringTransaction } from '@/types/recurringTransaction'
 import {
   RecurringFrequency,
@@ -427,12 +428,21 @@ const modalTitle = computed(() => {
             <label for="rec-entity-name">
               {{ entityType === TransactionEntityType.Person ? 'Nome da pessoa' : 'Entidade' }}
             </label>
+            <BrandAutocomplete
+              v-if="entityType !== TransactionEntityType.Person"
+              id="rec-entity-name"
+              v-model="entityName"
+              scope="all"
+              placeholder="Ex: Netflix"
+              :maxlength="200"
+            />
             <input
+              v-else
               id="rec-entity-name"
               v-model="entityName"
               type="text"
               class="input"
-              :placeholder="entityType === TransactionEntityType.Person ? 'Ex: João Silva' : 'Ex: Netflix'"
+              placeholder="Ex: João Silva"
               maxlength="200"
             />
           </div>
