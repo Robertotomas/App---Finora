@@ -132,9 +132,9 @@ async function confirmReset() {
           <h2 id="partner-left-title" class="partner-title">A outra pessoa saiu do agregado</h2>
           <p class="partner-lead">
             O plano casal terminou para este agregado. Todo o histórico (contas, movimentos, objetivos,
-            relatórios) continua <strong>aqui</strong> — só tu o vês neste agregado.
+            relatórios) continua <strong>aqui</strong> — só você o vê neste agregado.
           </p>
-          <p class="partner-hint">Escolhe como queres prosseguir:</p>
+          <p class="partner-hint">Escolha como quer prosseguir:</p>
           <div class="partner-actions-stack">
             <button type="button" class="btn-primary" @click="startContinue">
               Continuar com os dados existentes
@@ -149,7 +149,7 @@ async function confirmReset() {
         <template v-else-if="phase === 'continueAck'">
           <h2 class="partner-title">Confirmar — manter dados</h2>
           <p class="partner-lead">
-            Vais manter contas, movimentos e restante histórico neste agregado. Este aviso deixa de
+            Vai manter contas, movimentos e restante histórico neste agregado. Este aviso deixa de
             aparecer.
           </p>
           <label class="partner-check">
@@ -203,7 +203,7 @@ async function confirmReset() {
         <template v-else>
           <h2 class="partner-title">Confirmação final</h2>
           <p class="partner-lead">
-            Para apagar definitivamente, escreve <strong>RECOMECAR</strong> (maiúsculas, tal como está).
+            Para apagar definitivamente, escreva <strong>RECOMECAR</strong> (maiúsculas, tal como está).
           </p>
           <input
             ref="resetInputRef"
@@ -212,7 +212,7 @@ async function confirmReset() {
             class="partner-input"
             autocomplete="off"
             placeholder="RECOMECAR"
-            aria-label="Escreve RECOMECAR para confirmar"
+            aria-label="Escreva RECOMECAR para confirmar"
           />
           <p v-if="errorMsg" class="partner-error">{{ errorMsg }}</p>
           <div class="partner-actions-row">

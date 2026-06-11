@@ -38,7 +38,7 @@ async function handleSubmit() {
   <BaseModal title="Recuperar palavra-passe" @close="emit('close')">
     <div v-if="!sent" class="fp-body">
       <p class="fp-text">
-        Introduz o email da tua conta. Se existir, enviamos-te um link para definires uma nova palavra-passe.
+        Introduza o email da sua conta. Se existir, enviamos-lhe um link para definir uma nova palavra-passe.
       </p>
       <form @submit.prevent="handleSubmit">
         <div v-if="error" class="fp-error">{{ error }}</div>
@@ -66,9 +66,9 @@ async function handleSubmit() {
       <div class="fp-sent-icon">
         <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4Z"/></svg>
       </div>
-      <p class="fp-sent-title">Verifica o teu email</p>
+      <p class="fp-sent-title">Verifique o seu email</p>
       <p class="fp-text">
-        Se existir uma conta associada a <strong>{{ email.trim() }}</strong>, vais receber um link para
+        Se existir uma conta associada a <strong>{{ email.trim() }}</strong>, vai receber um link para
         redefinir a palavra-passe. O link expira em 1 hora.
       </p>
       <button type="button" class="fp-btn-primary fp-btn-full" @click="emit('close')">Concluir</button>

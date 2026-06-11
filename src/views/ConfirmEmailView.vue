@@ -20,7 +20,7 @@ const errorMessage = ref('')
 onMounted(async () => {
   if (!token.value) {
     state.value = 'error'
-    errorMessage.value = 'Link inválido. Abre o link mais recente que recebeste por email.'
+    errorMessage.value = 'Link inválido. Abra o link mais recente que recebeu por email.'
     return
   }
   try {
@@ -31,7 +31,7 @@ onMounted(async () => {
     state.value = 'error'
     errorMessage.value =
       err.response?.data?.message ||
-      'O link é inválido ou expirou. Tenta iniciar sessão para receber um novo email de confirmação.'
+      'O link é inválido ou expirou. Tente iniciar sessão para receber um novo email de confirmação.'
   }
 })
 
@@ -53,7 +53,7 @@ function goToLogin() {
 
         <!-- A confirmar -->
         <div v-if="state === 'loading'" class="confirm-state">
-          <p class="confirm-state-text">A confirmar o teu email…</p>
+          <p class="confirm-state-text">A confirmar o seu email…</p>
         </div>
 
         <!-- Sucesso -->
@@ -63,7 +63,7 @@ function goToLogin() {
               <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
             </div>
             <p class="confirm-state-title">Email confirmado</p>
-            <p class="confirm-state-text">A tua conta está ativa. Já podes iniciar sessão.</p>
+            <p class="confirm-state-text">A sua conta está ativa. Já pode iniciar sessão.</p>
           </div>
           <button type="button" class="auth-btn" @click="goToLogin">Iniciar sessão</button>
         </template>

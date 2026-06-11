@@ -231,7 +231,7 @@ function handleClose() {
           :error="!!errors.name"
           @select="(b) => (selectedDomain = b.domain)"
         />
-        <p class="name-hint">Escreve para ver sugestões de bancos, ou usa um nome livre.</p>
+        <p class="name-hint">Escreva para ver sugestões de bancos, ou use um nome livre.</p>
         <span v-if="errors.name" class="error-text">{{ errors.name }}</span>
       </div>
 

@@ -355,7 +355,7 @@ watch(() => route.query.action, (action) => {
 
     <!-- No household -->
     <div v-else-if="!householdStore.household" class="empty-state">
-      <p>Configura primeiro o teu household.</p>
+      <p>Configure primeiro o seu household.</p>
       <router-link to="/household" class="link">Ir para Household</router-link>
     </div>
 
@@ -365,7 +365,7 @@ watch(() => route.query.action, (action) => {
       <div class="page-header">
         <div class="page-header-text">
           <h1 class="page-title">Objetivos</h1>
-          <p class="page-subtitle">Define objetivos de poupança e acompanha o progresso</p>
+          <p class="page-subtitle">Defina objetivos de poupança e acompanhe o progresso</p>
         </div>
         <button
           v-if="!objectivesLocked"
@@ -483,8 +483,8 @@ watch(() => route.query.action, (action) => {
             <!-- Empty -->
             <div v-else-if="activeObjectives.length === 0 && !formOpen && !loading" class="empty-card">
               <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="empty-icon"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/><line x1="22" x2="12" y1="2" y2="12"/></svg>
-              <p class="empty-text">Ainda não tens objetivos ativos</p>
-              <p class="empty-hint">Cria um objetivo de poupança para começar a acompanhar o progresso.</p>
+              <p class="empty-text">Ainda não tem objetivos ativos</p>
+              <p class="empty-hint">Crie um objetivo de poupança para começar a acompanhar o progresso.</p>
               <button
                 type="button"
                 class="btn-confirm"
@@ -571,7 +571,7 @@ watch(() => route.query.action, (action) => {
             <div v-if="historyObjectives.length === 0" class="empty-card">
               <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="empty-icon"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
               <p class="empty-text">Sem objetivos finalizados</p>
-              <p class="empty-hint">Quando finalizares um objetivo ativo, ele aparece aqui.</p>
+              <p class="empty-hint">Quando finalizar um objetivo ativo, ele aparece aqui.</p>
             </div>
 
             <div v-else class="goals-grid">
@@ -618,7 +618,7 @@ watch(() => route.query.action, (action) => {
       title="Eliminar objetivo"
       :message="
         objectiveToDelete
-          ? `Tens a certeza que queres eliminar «${objectiveToDelete.name}»? Esta ação não pode ser desfeita.`
+          ? `Tem a certeza que quer eliminar «${objectiveToDelete.name}»? Esta ação não pode ser desfeita.`
           : ''
       "
       :loading="saving"

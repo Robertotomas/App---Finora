@@ -13,8 +13,8 @@ const coupleProfileHint = computed(() => {
   if (u.coupleJoinDataMigrated === null || u.coupleJoinDataMigrated === undefined)
     return 'Conta de parceiro convidado (registada por convite).'
   if (u.coupleJoinDataMigrated === true)
-    return 'Os teus dados do agregado anterior foram integrados neste household.'
-  return 'Entraste no agregado do convite sem migrar dados anteriores (ou não tinhas dados a migrar).'
+    return 'Os seus dados do agregado anterior foram integrados neste household.'
+  return 'Entrou no agregado do convite sem migrar dados anteriores (ou não tinha dados a migrar).'
 })
 
 const firstName = ref('')
@@ -136,7 +136,7 @@ async function handleSubmit() {
     <div class="page-header">
       <div class="page-header-text">
         <h1 class="page-title">Perfil</h1>
-        <p class="page-subtitle">Edita os teus dados pessoais</p>
+        <p class="page-subtitle">Edite os seus dados pessoais</p>
       </div>
     </div>
 

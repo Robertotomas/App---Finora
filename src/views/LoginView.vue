@@ -6,6 +6,8 @@ import { RouterLink } from 'vue-router'
 import iconFinoraFlow from '@/assets/images/finoraflow-icon.png'
 import AuthShowcase from '@/components/AuthShowcase.vue'
 import ForgotPasswordModal from '@/components/ForgotPasswordModal.vue'
+import TermsModal from '@/components/TermsModal.vue'
+import PrivacyModal from '@/components/PrivacyModal.vue'
 import { authApi } from '@/api/auth'
 
 const router = useRouter()
@@ -17,6 +19,8 @@ const password = ref('')
 const error = ref('')
 const loading = ref(false)
 const forgotPasswordOpen = ref(false)
+const termsModalOpen = ref(false)
+const privacyModalOpen = ref(false)
 
 // Email por confirmar (resposta 403 EMAIL_NOT_CONFIRMED): mostra opção de reenvio.
 const needsConfirmation = ref(false)
@@ -39,7 +43,7 @@ async function handleSubmit() {
       error.value = err.rateLimitMessage || 'Demasiados pedidos. Tenta novamente dentro de 1 minuto.'
     } else if (err.response?.data?.code === 'EMAIL_NOT_CONFIRMED') {
       needsConfirmation.value = true
-      error.value = err.response.data.message || 'Confirma o teu email antes de iniciar sessão.'
+      error.value = err.response.data.message || 'Confirme o seu email antes de iniciar sessão.'
     } else {
       error.value = err.response?.data?.message || 'Email ou palavra-passe incorretos.'
     }
@@ -95,7 +99,7 @@ async function resendConfirmation() {
           </div>
           <div class="auth-forgot">
             <button type="button" class="auth-forgot-link" @click="forgotPasswordOpen = true">
-              Esqueceste-te da palavra-passe?
+              Esqueceu-se da palavra-passe?
             </button>
           </div>
           <button type="submit" class="auth-btn" :disabled="loading">
@@ -103,7 +107,13 @@ async function resendConfirmation() {
           </button>
         </form>
         <p class="auth-footer">
-          Não tens conta? <RouterLink to="/register">Criar conta</RouterLink>
+          Não tem conta? <RouterLink to="/register">Criar conta</RouterLink>
+        </p>
+        <p class="auth-legal">
+          Ao entrar, aceita os
+          <button type="button" class="auth-legal-link" @click="termsModalOpen = true">Termos e Condições</button>
+          e a
+          <button type="button" class="auth-legal-link" @click="privacyModalOpen = true">Política de Privacidade</button>.
         </p>
       </div>
     </div>
@@ -114,10 +124,35 @@ async function resendConfirmation() {
       :initial-email="email"
       @close="forgotPasswordOpen = false"
     />
+
+    <TermsModal v-if="termsModalOpen" @close="termsModalOpen = false" />
+    <PrivacyModal v-if="privacyModalOpen" @close="privacyModalOpen = false" />
   </div>
 </template>
 
 <style scoped>
+.auth-legal {
+  margin: 1.25rem 0 0;
+  text-align: center;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: #94a3b8;
+}
+.auth-legal-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+}
+:global(html.dark) .auth-legal {
+  color: #737373;
+}
+
 .auth-confirm-hint {
   display: flex;
   flex-direction: column;

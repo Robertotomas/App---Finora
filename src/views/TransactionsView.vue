@@ -164,7 +164,7 @@ const actionLoading = ref(false)
 
 const limitModalOpen = ref(false)
 const limitModalKind = ref<'plan' | 'primary'>('plan')
-const limitMessage = ref('Atualiza o teu plano para continuar.')
+const limitMessage = ref('Atualize o seu plano para continuar.')
 
 /* Upsell de plano (limite mensal Free atingido) */
 const planUpsellOpen = ref(false)
@@ -1237,7 +1237,7 @@ function openCreateModal() {
   if (needsPrimarySelection.value) {
     limitModalKind.value = 'primary'
     limitMessage.value =
-      'Tens mais do que uma conta no plano Free. Vai a Contas e escolhe qual fica ativa para movimentos antes de continuar.'
+      'Tem mais do que uma conta no plano Free. Vá a Contas e escolha qual fica ativa para movimentos antes de continuar.'
     limitModalOpen.value = true
     return
   }
@@ -1276,7 +1276,7 @@ function openEditModal(tx: Transaction) {
   if (needsPrimarySelection.value) {
     limitModalKind.value = 'primary'
     limitMessage.value =
-      'Tens mais do que uma conta no plano Free. Vai a Contas e escolhe a conta principal antes de editar movimentos.'
+      'Tem mais do que uma conta no plano Free. Vá a Contas e escolha a conta principal antes de editar movimentos.'
     limitModalOpen.value = true
     return
   }
@@ -1284,7 +1284,7 @@ function openEditModal(tx: Transaction) {
   if (acc && acc.isActiveForPlan === false) {
     limitModalKind.value = 'primary'
     limitMessage.value =
-      'Esta transação está numa conta que não é a principal no plano Free. Só podes editar movimentos na conta principal, ou altera a conta principal em Contas.'
+      'Esta transação está numa conta que não é a principal no plano Free. Só pode editar movimentos na conta principal, ou altere a conta principal em Contas.'
     limitModalOpen.value = true
     return
   }
@@ -1331,22 +1331,22 @@ async function handleCreate(payload: CreateTransactionRequest) {
     if (err.response?.status === 403 && code === 'PLAN_LIMIT') {
       closeCreateModal()
       planUpsellText.value = payload.type === TransactionType.Income
-        ? 'Atingiste o limite de receitas do plano Free: só podes registar 1 receita por mês.'
-        : 'Atingiste o limite de despesas do plano Free: só podes registar 5 despesas por mês.'
+        ? 'Atingiu o limite de receitas do plano Free: só pode registar 1 receita por mês.'
+        : 'Atingiu o limite de despesas do plano Free: só pode registar 5 despesas por mês.'
       planUpsellOpen.value = true
     } else if (err.response?.status === 403 && code === 'FREE_PRIMARY_REQUIRED') {
       closeCreateModal()
       limitModalKind.value = 'primary'
       limitMessage.value =
         err.response?.data?.message ??
-        'Tens mais do que uma conta no plano Free. Escolhe a conta principal em Contas antes de adicionar movimentos.'
+        'Tem mais do que uma conta no plano Free. Escolha a conta principal em Contas antes de adicionar movimentos.'
       limitModalOpen.value = true
     } else if (err.response?.status === 403 && code === 'FREE_ACCOUNT_LOCKED') {
       closeCreateModal()
       limitModalKind.value = 'primary'
       limitMessage.value =
         err.response?.data?.message ??
-        'No plano Free só podes usar a conta principal para movimentos. Altera a conta principal em Contas.'
+        'No plano Free só pode usara conta principal para movimentos. Altere a conta principal em Contas.'
       limitModalOpen.value = true
     }
   } finally {
@@ -1385,14 +1385,14 @@ async function handleEdit(payload: CreateTransactionRequest) {
       limitModalKind.value = 'primary'
       limitMessage.value =
         err.response?.data?.message ??
-        'Escolhe a conta principal em Contas antes de editar movimentos.'
+        'Escolha a conta principal em Contas antes de editar movimentos.'
       limitModalOpen.value = true
     } else if (err.response?.status === 403 && code === 'FREE_ACCOUNT_LOCKED') {
       closeEditModal()
       limitModalKind.value = 'primary'
       limitMessage.value =
         err.response?.data?.message ??
-        'No plano Free só podes alterar movimentos na conta principal.'
+        'No plano Free só pode alterar movimentos na conta principal.'
       limitModalOpen.value = true
     }
   } finally {
@@ -1468,7 +1468,7 @@ function openRecurringCreateModal() {
   if (needsPrimarySelection.value) {
     limitModalKind.value = 'primary'
     limitMessage.value =
-      'Tens mais do que uma conta no plano Free. Vai a Contas e escolhe a conta principal antes de criar recorrentes.'
+      'Tem mais do que uma conta no plano Free. Vá a Contas e escolha a conta principal antes de criar recorrentes.'
     limitModalOpen.value = true
     return
   }
@@ -1492,7 +1492,7 @@ function openRecurringEditModal(r: RecurringTransaction) {
   if (needsPrimarySelection.value) {
     limitModalKind.value = 'primary'
     limitMessage.value =
-      'Tens mais do que uma conta no plano Free. Vai a Contas e escolhe a conta principal antes de editar recorrentes.'
+      'Tem mais do que uma conta no plano Free. Vá a Contas e escolha a conta principal antes de editar recorrentes.'
     limitModalOpen.value = true
     return
   }
@@ -1500,7 +1500,7 @@ function openRecurringEditModal(r: RecurringTransaction) {
   if (acc && acc.isActiveForPlan === false) {
     limitModalKind.value = 'primary'
     limitMessage.value =
-      'Esta recorrente está numa conta que não é a principal no plano Free. Só podes editar na conta principal, ou altera a conta principal em Contas.'
+      'Esta recorrente está numa conta que não é a principal no plano Free. Só pode editar na conta principal, ou altere a conta principal em Contas.'
     limitModalOpen.value = true
     return
   }
@@ -1540,8 +1540,8 @@ async function handleRecurringCreate(payload: CreateRecurringTransactionRequest)
       planUpsellText.value = code === 'RECURRING_LOCKED'
         ? 'As transações recorrentes estão disponíveis nos planos Pro e Couple.'
         : payload.type === TransactionType.Income
-          ? 'Atingiste o limite de receitas do plano Free: só podes registar 1 receita por mês.'
-          : 'Atingiste o limite de despesas do plano Free: só podes registar 5 despesas por mês.'
+          ? 'Atingiu o limite de receitas do plano Free: só pode registar 1 receita por mês.'
+          : 'Atingiu o limite de despesas do plano Free: só pode registar 5 despesas por mês.'
       planUpsellOpen.value = true
       return
     }
@@ -1550,7 +1550,7 @@ async function handleRecurringCreate(payload: CreateRecurringTransactionRequest)
       limitModalKind.value = 'primary'
       limitMessage.value =
         err.response?.data?.message ??
-        'Escolhe a conta principal em Contas antes de adicionar recorrentes.'
+        'Escolha a conta principal em Contas antes de adicionar recorrentes.'
       limitModalOpen.value = true
       return
     }
@@ -1559,7 +1559,7 @@ async function handleRecurringCreate(payload: CreateRecurringTransactionRequest)
       limitModalKind.value = 'primary'
       limitMessage.value =
         err.response?.data?.message ??
-        'No plano Free só podes usar recorrentes na conta principal.'
+        'No plano Free só pode usarrecorrentes na conta principal.'
       limitModalOpen.value = true
       return
     }
@@ -1583,14 +1583,14 @@ async function handleRecurringEdit(payload: CreateRecurringTransactionRequest) {
       limitModalKind.value = 'primary'
       limitMessage.value =
         err.response?.data?.message ??
-        'Escolhe a conta principal em Contas antes de editar recorrentes.'
+        'Escolha a conta principal em Contas antes de editar recorrentes.'
       limitModalOpen.value = true
     } else if (err.response?.status === 403 && code === 'FREE_ACCOUNT_LOCKED') {
       closeRecurringEditModal()
       limitModalKind.value = 'primary'
       limitMessage.value =
         err.response?.data?.message ??
-        'No plano Free só podes editar recorrentes na conta principal.'
+        'No plano Free só pode editar recorrentes na conta principal.'
       limitModalOpen.value = true
     }
   } finally {
@@ -1655,7 +1655,7 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
     </div>
 
     <div v-if="!householdStore.household && !householdStore.loading" class="empty-state">
-      <p>Configura primeiro o teu household.</p>
+      <p>Configure primeiro o seu household.</p>
       <router-link to="/overview" class="link">Ir para o painel</router-link>
     </div>
 
@@ -1959,8 +1959,8 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
       <!-- ═══ TRANSACTIONS TAB ═══ -->
       <div v-show="activeTab === 'movements'" class="tab-content">
       <div v-if="needsPrimarySelection" class="primary-inline-hint">
-        <router-link :to="{ name: 'contas' }" class="primary-inline-link">Escolhe a conta principal em Contas</router-link>
-        <span> para poderes adicionar ou editar transações no plano Free com várias contas.</span>
+        <router-link :to="{ name: 'contas' }" class="primary-inline-link">Escolha a conta principal em Contas</router-link>
+        <span> para poder adicionar ou editar transações no plano Free com várias contas.</span>
       </div>
       <div class="toolbar" style="align-items:flex-start">
         <div class="tx-totals">
@@ -2096,7 +2096,7 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
       </div>
 
       <div v-else-if="transactionsStore.transactions.length === 0" class="empty-state">
-        <p>Nenhum movimento ainda. Cria o teu primeiro movimento.</p>
+        <p>Nenhum movimento ainda. Crie o seu primeiro movimento.</p>
         <button type="button" class="btn-add" @click="openCreateModal">
           + Novo movimento
         </button>
@@ -2193,8 +2193,8 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
         </PlanUpsellCard>
         <template v-else>
         <div v-if="needsPrimarySelection" class="primary-inline-hint">
-          <router-link :to="{ name: 'contas' }" class="primary-inline-link">Escolhe a conta principal em Contas</router-link>
-          <span> para gerires recorrentes no plano Free com várias contas.</span>
+          <router-link :to="{ name: 'contas' }" class="primary-inline-link">Escolha a conta principal em Contas</router-link>
+          <span> para gerir recorrentes no plano Free com várias contas.</span>
         </div>
         <div class="toolbar" style="align-items:flex-start">
           <div class="tx-totals">
@@ -2328,7 +2328,7 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
           <p>A carregar contas recorrentes...</p>
         </div>
         <div v-else-if="activeRecurring.length === 0" class="empty-state">
-          <p>Nenhuma conta recorrente. Adiciona uma receita ou despesa mensal.</p>
+          <p>Nenhuma conta recorrente. Adicione uma receita ou despesa mensal.</p>
           <button type="button" class="btn-add" @click="openRecurringCreateModal">
             + Nova transação recorrente
           </button>

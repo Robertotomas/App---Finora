@@ -22,7 +22,7 @@ function handleClose() {
     @close="handleClose"
   >
     <div class="selection-body">
-      <p class="selection-hint">Que tipo de movimento queres criar?</p>
+      <p class="selection-hint">Que tipo de movimento quer criar?</p>
       <div class="selection-options">
         <button type="button" class="selection-card" @click="emit('select', 'income-expense')">
           <span class="selection-icon">
@@ -40,7 +40,7 @@ function handleClose() {
             </svg>
           </span>
           <span class="selection-label">Transferência interna</span>
-          <span class="selection-desc">Mover dinheiro entre as tuas contas</span>
+          <span class="selection-desc">Mover dinheiro entre as suas contas</span>
         </button>
       </div>
     </div>

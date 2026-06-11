@@ -44,8 +44,8 @@ const categories = [
   <aside class="auth-right" aria-hidden="true">
     <div class="auth-showcase">
       <div class="auth-showcase-copy">
-        <p class="auth-showcase-title">As tuas finanças, sob controlo.</p>
-        <p class="auth-showcase-sub">Acompanha o teu património, movimentos e objetivos num só lugar.</p>
+        <p class="auth-showcase-title">As suas finanças, sob controlo.</p>
+        <p class="auth-showcase-sub">Acompanhe o seu património, movimentos e objetivos num só lugar.</p>
       </div>
 
       <!-- Cartão único: Património Total -->

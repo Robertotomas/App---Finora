@@ -78,7 +78,7 @@ function formatBalance(balance: number, currency: string): string {
             v-model="targetAccountId"
             class="input"
           >
-            <option value="" disabled>Seleciona uma conta</option>
+            <option value="" disabled>Selecione uma conta</option>
             <option v-for="a in availableTargets" :key="a.id" :value="a.id">
               {{ a.name }} ({{ formatBalance(a.balance, a.currency) }})
             </option>
@@ -100,7 +100,7 @@ function formatBalance(balance: number, currency: string): string {
 
       <div class="archive-hint">
         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
-        <span>Podes reativar a conta a qualquer momento.</span>
+        <span>Pode reativar a conta a qualquer momento.</span>
       </div>
 
       <div class="modal-actions">

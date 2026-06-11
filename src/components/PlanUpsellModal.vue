@@ -11,7 +11,7 @@ withDefaults(
   }>(),
   {
     title: 'Fazer upgrade do plano',
-    description: 'Atingiste o limite do plano Free. Faz upgrade para dados históricos alargados.',
+    description: 'Atingiu o limite do plano Free. Faça upgrade para dados históricos alargados.',
     featuresTitle: 'Incluído no Pro:',
     features: () => [
       'Histórico do património até 5 anos',

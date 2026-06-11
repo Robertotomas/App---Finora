@@ -229,7 +229,7 @@ onUnmounted(() => {
 
     <!-- No household -->
     <div v-else-if="!householdStore.household" class="empty-state">
-      <p>Configura primeiro o teu household.</p>
+      <p>Configure primeiro o seu household.</p>
       <router-link to="/overview" class="link">Ir para o painel</router-link>
     </div>
 
@@ -245,7 +245,7 @@ onUnmounted(() => {
       <PlanUpsellCard
         v-if="reportsLocked"
         title="Receba relatórios mensais automáticos"
-        description="Um resumo claro das tuas finanças, gerado automaticamente ao fim de cada mês."
+        description="Um resumo claro das suas finanças, gerado automaticamente ao fim de cada mês."
         :features="[
           'Resumo de receitas, despesas e saldo do mês',
           'Gráficos de evolução e repartição por categoria',
@@ -356,7 +356,7 @@ onUnmounted(() => {
 
                 <!-- Footer: refresh row -->
                 <div class="report-card__footer">
-                  <p class="card-hint">Alteraste transações? Atualiza o PDF.</p>
+                  <p class="card-hint">Alterou transações? Atualize o PDF.</p>
                   <button
                     type="button"
                     class="action-btn action-btn--refresh"

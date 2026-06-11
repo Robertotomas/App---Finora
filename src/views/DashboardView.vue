@@ -389,7 +389,7 @@ onMounted(async () => {
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Erro desconhecido'
     if (msg === 'Timeout') {
-      loadError.value = 'O pedido demorou demasiado. Verifica se a API está a correr em http://localhost:5000'
+      loadError.value = 'O pedido demorou demasiado. Verifique se a API está a correr em http://localhost:5000'
     } else {
       const dashErr = dashboard.error.value
       const houseErr = householdStore.error && typeof householdStore.error === 'object' && 'value' in householdStore.error
@@ -905,11 +905,11 @@ const showContent = computed(() =>
 
     <div v-if="loadError" class="error-state">
       <p>{{ loadError }}</p>
-      <p class="error-hint">Abre a consola do browser (F12) e o separador Network para verificar os pedidos à API.</p>
+      <p class="error-hint">Abra a consola do browser (F12) e o separador Network para verificar os pedidos à API.</p>
     </div>
 
     <div v-else-if="!householdStore.household && !householdStore.loading && mounted" class="empty-state">
-      <p>Configura primeiro o teu household.</p>
+      <p>Configure primeiro o seu household.</p>
       <router-link to="/household" class="link">Ir para Household</router-link>
     </div>
 
@@ -1028,11 +1028,14 @@ const showContent = computed(() =>
               class="account-row"
             >
               <div class="account-row-info">
-                <span v-if="isCreditCard(account.type)" class="account-row-icon" aria-hidden="true">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/>
-                  </svg>
-                </span>
+                <BrandLogo :name="account.name" :domain="account.logoDomain" :size="30" class="account-row-logo">
+                  <template #fallback>
+                    <span class="account-row-fallback" aria-hidden="true">
+                      <svg v-if="isCreditCard(account.type)" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
+                      <svg v-else xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" x2="21" y1="22" y2="22"/><line x1="6" x2="6" y1="18" y2="11"/><line x1="10" x2="10" y1="18" y2="11"/><line x1="14" x2="14" y1="18" y2="11"/><line x1="18" x2="18" y1="18" y2="11"/><polygon points="12 2 20 7 4 7"/></svg>
+                    </span>
+                  </template>
+                </BrandLogo>
                 <div>
                   <p class="account-row-name">{{ account.name }}</p>
                   <span class="account-row-type">{{ accountTypeLabel(account.type) }}</span>
@@ -1045,7 +1048,7 @@ const showContent = computed(() =>
           </div>
           <div v-else class="static-card-empty">
             <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="static-card-empty-icon"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 10h20"/><circle cx="17" cy="15" r="1.5"/></svg>
-            <p>Vê o saldo das tuas contas num só lugar</p>
+            <p>Veja o saldo das suas contas num só lugar</p>
             <router-link to="/accounts?action=new" class="static-card-action">Adicionar</router-link>
           </div>
         </div>
@@ -1111,7 +1114,7 @@ const showContent = computed(() =>
               </div>
               <div v-else-if="objectivesLoaded" class="static-card-empty">
                 <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="static-card-empty-icon"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/><line x1="22" x2="12" y1="2" y2="12"/></svg>
-                <p>Define objetivos de poupança para acompanhar o teu progresso</p>
+                <p>Defina objetivos de poupança para acompanhar o seu progresso</p>
                 <router-link
                   v-if="subscriptionStore.canAccessObjectives"
                   :to="{ name: 'objetivos', query: { action: 'new' } }"
@@ -1418,7 +1421,7 @@ const showContent = computed(() =>
             </div>
           </div>
           <div v-else class="section-empty">
-            <p class="section-empty-text">Ainda não definiste o teu plano mensal</p>
+            <p class="section-empty-text">Ainda não definiu o seu plano mensal</p>
             <router-link to="/monthly-plan" class="btn-section-add">Adicionar plano mensal</router-link>
           </div>
         </div>
@@ -1478,7 +1481,7 @@ const showContent = computed(() =>
 
   <PlanUpsellModal
     :open="periodUpsellOpen"
-    description="Atingiste o limite do plano Free. Faz upgrade para acederes ao histórico alargado do teu património."
+    description="Atingiu o limite do plano Free. Faça upgrade para aceder ao histórico alargado do seu património."
     :features="[
       'Evolução do património até 5 anos',
       'Objetivos de poupança e relatórios mensais',
@@ -2514,6 +2517,26 @@ html.dark .static-card-link:hover {
   height: 18px;
   flex-shrink: 0;
   color: var(--color-text-muted);
+}
+
+.account-row-logo {
+  flex-shrink: 0;
+}
+
+.account-row-fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: #ecfdf5;
+  color: #166534;
+}
+
+html.dark .account-row-fallback {
+  background: rgba(22, 101, 52, 0.2);
+  color: #4ade80;
 }
 
 .account-row-name {

@@ -336,7 +336,7 @@ function accountIcon(type: AccountType): string {
 
     <!-- No household -->
     <div v-else-if="!householdStore.household && !householdStore.loading" class="empty-state">
-      <p>Configura primeiro o teu household.</p>
+      <p>Configure primeiro o seu household.</p>
       <router-link to="/household" class="link">Ir para Household</router-link>
     </div>
 
@@ -351,7 +351,7 @@ function accountIcon(type: AccountType): string {
       <div class="page-header">
         <div class="page-header-text">
           <h1 class="page-title">Contas</h1>
-          <p class="page-subtitle">Gere as tuas contas financeiras</p>
+          <p class="page-subtitle">Faça a gestão das suas contas financeiras</p>
         </div>
         <button
           v-if="accountsStore.activeAccounts.length > 0"
@@ -413,7 +413,7 @@ function accountIcon(type: AccountType): string {
         class="banner banner--warning"
       >
         <div class="banner-content">
-          <p class="banner-title">Escolhe a conta principal</p>
+          <p class="banner-title">Escolha a conta principal</p>
           <p class="banner-text">
             No plano Free só uma conta pode estar ativa para movimentos e edições.
           </p>
@@ -440,7 +440,7 @@ function accountIcon(type: AccountType): string {
         <div class="banner-content banner-row">
           <div>
             <p class="banner-title">Contas bloqueadas</p>
-            <p class="banner-text">Atualiza para Pro ou Couple para desbloquear todas as contas.</p>
+            <p class="banner-text">Atualize para Pro ou Couple para desbloquear todas as contas.</p>
           </div>
           <router-link :to="{ name: 'subscricao' }" class="btn-confirm">
             Ver planos
@@ -457,8 +457,8 @@ function accountIcon(type: AccountType): string {
       <!-- Empty state -->
       <div v-else-if="accountsStore.activeAccounts.length === 0 && accountsStore.archivedAccounts.length === 0" class="empty-card">
         <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="empty-icon"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 10h20"/><circle cx="17" cy="15" r="1.5"/></svg>
-        <p class="empty-text">Ainda não tens contas</p>
-        <p class="empty-hint">Adiciona a tua primeira conta para começar a controlar as finanças.</p>
+        <p class="empty-text">Ainda não tem contas</p>
+        <p class="empty-hint">Adicione a sua primeira conta para começar a controlar as finanças.</p>
         <button type="button" class="btn-confirm" @click="openCreateModal">
           Adicionar conta
         </button>
@@ -540,7 +540,7 @@ function accountIcon(type: AccountType): string {
       >
         <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="empty-icon"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></svg>
         <p class="empty-text">Sem contas arquivadas</p>
-        <p class="empty-hint">As contas que arquivares aparecem aqui, sem perderes o histórico.</p>
+        <p class="empty-hint">As contas que arquivar aparecem aqui, sem perder o histórico.</p>
       </div>
 
       <!-- Archived accounts -->
@@ -625,7 +625,7 @@ function accountIcon(type: AccountType): string {
     >
       <div class="blocked-body">
         <p class="blocked-msg">{{ accountDeleteBlockedMessage }}</p>
-        <p class="blocked-question">O que queres fazer?</p>
+        <p class="blocked-question">O que quer fazer?</p>
         <div class="blocked-options">
           <button type="button" class="blocked-option" @click="handleArchiveFromBlocked" :disabled="actionLoading">
             <div class="blocked-option-icon">
@@ -673,10 +673,10 @@ function accountIcon(type: AccountType): string {
     <PlanUpsellModal
       :open="accountLimitModalOpen"
       title="Adicione todas as suas contas"
-      description="No plano Free só podes ter 1 conta. Atualiza para Pro ou Couple para juntares todas as que precisares."
+      description="No plano Free só pode ter 1 conta. Atualize para Pro ou Couple para juntar todas as que precisar."
       :features="[
         'Contas ilimitadas',
-        'Vê o teu património completo num só sítio',
+        'Veja o seu património completo num só sítio',
         'Objetivos de poupança e relatórios mensais',
       ]"
       @close="accountLimitModalOpen = false"

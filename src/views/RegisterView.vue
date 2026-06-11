@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { RouterLink } from 'vue-router'
 import iconFinoraFlow from '@/assets/images/finoraflow-icon.png'
 import AuthShowcase from '@/components/AuthShowcase.vue'
+import TermsModal from '@/components/TermsModal.vue'
+import PrivacyModal from '@/components/PrivacyModal.vue'
 import { coupleInvitationsApi } from '@/api/coupleInvitations'
 import { authApi } from '@/api/auth'
 
@@ -23,7 +25,7 @@ const lastName = ref('')
 const error = ref('')
 const loading = ref(false)
 
-// Ecrã "confirma o teu email" depois de registar (fluxo normal).
+// Ecrã "confirme o seu email" depois de registar (fluxo normal).
 const pendingEmail = ref('')
 const resending = ref(false)
 const resendNotice = ref('')
@@ -37,6 +39,33 @@ const passwordRules = computed(() => ({
 const passwordValid = computed(() =>
   passwordRules.value.minLength && passwordRules.value.hasUpper && passwordRules.value.hasLower && passwordRules.value.hasNumber
 )
+
+// Termos + Política: a checkbox só é pressionável depois de ler AMBOS até ao fim.
+const termsModalOpen = ref(false)
+const privacyModalOpen = ref(false)
+const termsRead = ref(false)
+const privacyRead = ref(false)
+const acceptedTerms = ref(false)
+
+const bothRead = computed(() => termsRead.value && privacyRead.value)
+
+// Assim que os dois documentos são lidos até ao fim, marca a checkbox automaticamente.
+watch(bothRead, (read) => {
+  if (read) acceptedTerms.value = true
+})
+
+function onTermsCheckboxClick() {
+  // Enquanto faltar ler algum documento, clicar na checkbox abre o que falta.
+  if (!termsRead.value) {
+    termsModalOpen.value = true
+    return
+  }
+  if (!privacyRead.value) {
+    privacyModalOpen.value = true
+    return
+  }
+  acceptedTerms.value = !acceptedTerms.value
+}
 
 onMounted(async () => {
   const t = route.query.invite
@@ -128,10 +157,10 @@ async function resendConfirmation() {
           <div class="confirm-pending-icon">
             <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
           </div>
-          <p class="confirm-pending-title">Confirma o teu email</p>
+          <p class="confirm-pending-title">Confirme o seu email</p>
           <p class="confirm-pending-text">
             Enviámos um link de confirmação para <strong>{{ pendingEmail }}</strong>.
-            Abre-o para ativar a conta e poder iniciar sessão.
+            Abra-o para ativar a conta e poder iniciar sessão.
           </p>
         </div>
         <button type="button" class="auth-btn" :disabled="resending" @click="resendConfirmation">
@@ -179,16 +208,48 @@ async function resendConfirmation() {
               <li :class="{ ok: passwordRules.hasNumber }">Um número</li>
             </ul>
           </div>
-          <button type="submit" class="auth-btn" :disabled="loading || !passwordValid">
+          <div class="terms-row">
+            <button
+              type="button"
+              class="terms-check"
+              :class="{ checked: acceptedTerms }"
+              role="checkbox"
+              :aria-checked="acceptedTerms"
+              aria-label="Li e aceito os Termos e Condições"
+              @click="onTermsCheckboxClick"
+            >
+              <svg v-if="acceptedTerms" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+            </button>
+            <span class="terms-text">
+              Li e aceito os
+              <button type="button" class="terms-link" @click="termsModalOpen = true">Termos e Condições</button>
+              e a
+              <button type="button" class="terms-link" @click="privacyModalOpen = true">Política de Privacidade</button>
+            </span>
+          </div>
+          <p v-if="!bothRead" class="terms-help">Abra e leia os dois documentos até ao fim para poder aceitar.</p>
+          <button type="submit" class="auth-btn" :disabled="loading || !passwordValid || !acceptedTerms">
             {{ loading ? 'A registar...' : 'Registar' }}
           </button>
         </form>
         <p class="auth-footer">
-          Já tens conta? <RouterLink to="/login">Entrar</RouterLink>
+          Já tem conta? <RouterLink to="/login">Entrar</RouterLink>
         </p>
       </div>
     </div>
     <AuthShowcase />
+
+    <TermsModal
+      v-if="termsModalOpen"
+      @close="termsModalOpen = false"
+      @read="termsRead = true"
+    />
+
+    <PrivacyModal
+      v-if="privacyModalOpen"
+      @close="privacyModalOpen = false"
+      @read="privacyRead = true"
+    />
   </div>
 </template>
 
@@ -217,6 +278,80 @@ async function resendConfirmation() {
 .pw-rules li.ok::before {
   content: '✓ ';
 }
+.terms-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0 0 1.25rem;
+}
+.terms-check {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #ffffff;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.terms-check.checked {
+  background: #166534;
+  border-color: #166534;
+}
+.terms-check:hover {
+  border-color: #166534;
+}
+.terms-text {
+  font-size: 0.8125rem;
+  color: #334155;
+  line-height: 1.4;
+}
+.terms-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: inherit;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: #166534;
+  cursor: pointer;
+  text-decoration: underline;
+}
+.terms-link:hover {
+  color: #14532d;
+}
+.terms-help {
+  margin: -0.75rem 0 1.25rem;
+  font-size: 0.75rem;
+  color: #94a3b8;
+  line-height: 1.4;
+}
+:global(html.dark) .terms-help {
+  color: #737373;
+}
+:global(html.dark) .terms-check {
+  background: #1f1f1f;
+  border-color: #3a3a3a;
+}
+:global(html.dark) .terms-check.checked {
+  background: #166534;
+  border-color: #166534;
+}
+:global(html.dark) .terms-text {
+  color: #d4d4d4;
+}
+:global(html.dark) .terms-link {
+  color: #4ade80;
+}
+:global(html.dark) .terms-link:hover {
+  color: #86efac;
+}
+
 .auth-invite-banner {
   margin-top: 0.75rem;
   font-size: 0.9rem;
@@ -228,7 +363,7 @@ async function resendConfirmation() {
   color: #94a3b8;
 }
 
-/* Ecrã "confirma o teu email" */
+/* Ecrã "confirme o seu email" */
 .confirm-pending {
   display: flex;
   flex-direction: column;

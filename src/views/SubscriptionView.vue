@@ -189,7 +189,7 @@ onMounted(async () => {
 
     <!-- Hero -->
     <div class="hero">
-      <h1 class="hero-title">Planos que crescem contigo</h1>
+      <h1 class="hero-title">Planos que crescem consigo</h1>
     </div>
 
     <div v-if="subscriptionStore.error" class="banner banner--error">{{ subscriptionStore.error }}</div>
@@ -202,7 +202,7 @@ onMounted(async () => {
         </div>
         <div>
           <h2 class="otp-title">Aceitar convite</h2>
-          <p class="otp-text">Já tinhas conta e recebeste um código por email? Introduz-o para te juntares ao agregado.</p>
+          <p class="otp-text">Já tinha conta e recebeu um código por email? Introduza-o para se juntar ao agregado.</p>
         </div>
       </div>
       <div class="otp-right">
@@ -241,7 +241,7 @@ onMounted(async () => {
       <div class="modal-card">
         <h2 class="modal-title">Enviar convite para Couple</h2>
         <p class="modal-text">
-          Introduz o email da pessoa que queres convidar. O plano <strong>Couple</strong> só é ativado depois de o
+          Introduza o email da pessoa que quer convidar. O plano <strong>Couple</strong> só é ativado depois de o
           convite ser enviado com sucesso.
         </p>
         <label class="field">

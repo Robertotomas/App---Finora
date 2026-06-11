@@ -132,14 +132,14 @@ watch(type, () => {
 
 function validate(): boolean {
   const e: Record<string, string> = {}
-  if (!accountId.value) e.accountId = 'Seleciona uma conta'
+  if (!accountId.value) e.accountId = 'Selecione uma conta'
   if (!amount.value || amount.value === 0) e.amount = 'Indica o montante'
   if (isTransferMode.value) {
-    if (!destinationAccountId.value) e.destinationAccountId = 'Seleciona a conta de destino'
+    if (!destinationAccountId.value) e.destinationAccountId = 'Selecione a conta de destino'
     if (destinationAccountId.value === accountId.value) e.destinationAccountId = 'A conta de destino deve ser diferente'
   }
   if (showResponsible.value && !responsibleUserId.value) {
-    e.responsible = 'Seleciona o responsável'
+    e.responsible = 'Selecione o responsável'
   }
   errors.value = e
   return Object.keys(e).length === 0
@@ -290,7 +290,7 @@ const modalTitle = computed(() => {
           <BaseSelect
             :model-value="accountId"
             :options="accountOptions"
-            placeholder="Seleciona uma conta"
+            placeholder="Selecione uma conta"
             :error="!!errors.accountId"
             @update:model-value="(v) => (accountId = String(v))"
           />
@@ -302,7 +302,7 @@ const modalTitle = computed(() => {
           <BaseSelect
             :model-value="destinationAccountId"
             :options="destinationAccountOptions"
-            placeholder="Seleciona uma conta"
+            placeholder="Selecione uma conta"
             :error="!!errors.destinationAccountId"
             @update:model-value="(v) => (destinationAccountId = String(v))"
           />
@@ -347,7 +347,7 @@ const modalTitle = computed(() => {
           <BaseSelect
             :model-value="accountId"
             :options="accountOptions"
-            placeholder="Seleciona uma conta"
+            placeholder="Selecione uma conta"
             :error="!!errors.accountId"
             @update:model-value="(v) => (accountId = String(v))"
           />
@@ -454,7 +454,7 @@ const modalTitle = computed(() => {
         <BaseSelect
           :model-value="responsibleUserId"
           :options="memberOptions"
-          placeholder="Seleciona o responsável"
+          placeholder="Selecione o responsável"
           :error="!!errors.responsible"
           @update:model-value="(v) => (responsibleUserId = String(v))"
         />

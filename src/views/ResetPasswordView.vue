@@ -75,12 +75,12 @@ function goToLogin() {
       <div class="auth-left-inner">
         <div class="auth-intro">
           <p class="auth-intro-title">Nova palavra-passe</p>
-          <p class="auth-intro-welcome">Define uma nova palavra-passe para a tua conta.</p>
+          <p class="auth-intro-welcome">Defina uma nova palavra-passe para a sua conta.</p>
         </div>
 
         <!-- Sem token -->
         <div v-if="!token" class="auth-error">
-          Link inválido. Abre o link mais recente que recebeste por email ou pede um novo no
+          Link inválido. Abra o link mais recente que recebeu por email ou peça um novo no
           <RouterLink to="/login">início de sessão</RouterLink>.
         </div>
 
@@ -91,7 +91,7 @@ function goToLogin() {
               <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
             </div>
             <p class="reset-success-title">Palavra-passe alterada</p>
-            <p class="reset-success-text">Já podes iniciar sessão com a nova palavra-passe.</p>
+            <p class="reset-success-text">Já pode iniciar sessão com a nova palavra-passe.</p>
           </div>
           <button type="button" class="auth-btn" @click="goToLogin">Iniciar sessão</button>
         </template>
@@ -120,7 +120,7 @@ function goToLogin() {
         </form>
 
         <p class="auth-footer">
-          Lembraste-te? <RouterLink to="/login">Iniciar sessão</RouterLink>
+          Lembrou-se? <RouterLink to="/login">Iniciar sessão</RouterLink>
         </p>
       </div>
     </div>
