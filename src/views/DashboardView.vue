@@ -8,6 +8,7 @@ import type { SavingsObjectiveActive, SavingsObjectiveHistory } from '@/types/ob
 import { objectivesApi } from '@/api/objectives'
 import { useHouseholdStore } from '@/stores/household'
 import { useAccountsStore } from '@/stores/accounts'
+import { useAssetsStore } from '@/stores/assets'
 import { useSubscriptionStore } from '@/stores/subscription'
 import { useTransactionsStore } from '@/stores/transactions'
 import { TransactionType, TRANSACTION_CATEGORY_LABELS } from '@/types/transaction'
@@ -33,6 +34,7 @@ import BrandLogo from '@/components/BrandLogo.vue'
 const router = useRouter()
 const householdStore = useHouseholdStore()
 const accountsStore = useAccountsStore()
+const assetsStore = useAssetsStore()
 const subscriptionStore = useSubscriptionStore()
 const transactionsStore = useTransactionsStore()
 const dashboard = useDashboard()
@@ -377,6 +379,7 @@ onMounted(async () => {
               trendChartData.value = fillMissingMonths(trend, trendChartMonths.value)
             }),
             accountsStore.fetchAccounts(),
+            assetsStore.fetchAssets().catch(() => {}),
             loadObjectivesPreview(),
             subscriptionStore.fetchSubscription(),
             transactionsStore.fetchTransactions({ limit: 5 }),
@@ -442,7 +445,7 @@ const accountsToShow = computed(() =>
 )
 
 const currentTotalBalance = computed(() =>
-  accountsStore.accounts.reduce((sum, a) => sum + a.balance, 0)
+  accountsStore.accounts.reduce((sum, a) => sum + a.balance, 0) + assetsStore.totalCurrentValue
 )
 
 const hasChartData = computed(
@@ -530,7 +533,8 @@ const dailyAverage = computed(() => {
 /* ── Património Total: account category groups ── */
 const accountCategoryGroups = computed(() => {
   const accs = accountsToShow.value
-  const total = accs.reduce((s, a) => s + Math.abs(a.balance), 0)
+  const assetsTotal = assetsStore.totalCurrentValue
+  const total = accs.reduce((s, a) => s + Math.abs(a.balance), 0) + Math.abs(assetsTotal)
 
   const groups = [
     {
@@ -556,7 +560,11 @@ const accountCategoryGroups = computed(() => {
     else groups[2].sum += acc.balance
   }
 
-  return groups.map((g) => ({
+  const rows = groups.map((g) => ({ label: g.label, sum: g.sum }))
+  // Bens e valores entram no Património Total como categoria própria.
+  if (assetsTotal !== 0) rows.push({ label: 'Bens e valores', sum: assetsTotal })
+
+  return rows.map((g) => ({
     label: g.label,
     value: g.sum,
     percent: total > 0 ? (Math.abs(g.sum) / total) * 100 : 0,

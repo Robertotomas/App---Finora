@@ -122,7 +122,7 @@ const movimentsSubItems = [
 const patrimonioItems = [
   { to: '/accounts', label: 'Contas', icon: 'wallet', comingSoon: false },
   { to: '', label: 'Investimentos', icon: 'trending', comingSoon: true },
-  { to: '', label: 'Bens e Valores', icon: 'gem', comingSoon: true },
+  { to: '/assets', label: 'Bens e Valores', icon: 'gem', comingSoon: false },
 ]
 
 const toolsItems = [
@@ -343,6 +343,16 @@ function isActive(path: string) {
               </span>
               <span class="sidebar-label">Plano Mensal</span>
             </RouterLink>
+            <RouterLink
+              to="/goals"
+              class="sidebar-link"
+              :class="{ active: isActive('/goals') }"
+            >
+              <span class="sidebar-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/><line x1="22" x2="12" y1="2" y2="12"/></svg>
+              </span>
+              <span class="sidebar-label">Objetivos</span>
+            </RouterLink>
           </div>
 
           <!-- Section: Movimentos -->
@@ -376,6 +386,7 @@ function isActive(path: string) {
               >
                 <span class="sidebar-icon">
                   <svg v-if="item.icon === 'wallet'" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 10h20"/><circle cx="17" cy="15" r="1.5"/></svg>
+                  <svg v-else-if="item.icon === 'gem'" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12l4 6-10 13L2 9z"/><path d="M2 9h20"/><path d="m10 3 2 6"/><path d="m14 3-2 6"/><path d="m6.5 9 5.5 13"/><path d="m17.5 9-5.5 13"/></svg>
                 </span>
                 <span class="sidebar-label">{{ item.label }}</span>
               </RouterLink>
@@ -388,21 +399,6 @@ function isActive(path: string) {
                 <span class="coming-soon-badge">Em breve</span>
               </span>
             </template>
-          </div>
-
-          <!-- Section: Objetivos -->
-          <div class="sidebar-section">
-            <span class="sidebar-section-title">Objetivos</span>
-            <RouterLink
-              to="/goals"
-              class="sidebar-link"
-              :class="{ active: isActive('/goals') }"
-            >
-              <span class="sidebar-icon">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/><line x1="22" x2="12" y1="2" y2="12"/></svg>
-              </span>
-              <span class="sidebar-label">Objetivos</span>
-            </RouterLink>
           </div>
 
           <!-- Section: Ferramentas -->

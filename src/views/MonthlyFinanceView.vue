@@ -681,6 +681,7 @@ onMounted(async () => {
   display: flex;
   justify-content: flex-end;
   gap: 0.625rem;
+  margin-top: 1rem;
 }
 
 /* ── Stat cards (overview) ── */
@@ -745,7 +746,7 @@ onMounted(async () => {
   align-items: center;
   gap: 0.375rem;
   padding: 0.625rem 1.5rem;
-  background: var(--color-success);
+  background: #166534;
   color: #fff;
   border: none;
   border-radius: 10px;
@@ -753,10 +754,10 @@ onMounted(async () => {
   font-weight: 600;
   font-family: inherit;
   cursor: pointer;
-  transition: opacity 0.15s ease;
+  transition: background 0.15s ease;
 }
 
-.btn-primary:hover { opacity: 0.9; }
+.btn-primary:hover { background: #15803d; }
 
 .btn-secondary {
   display: inline-flex;

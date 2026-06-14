@@ -63,6 +63,18 @@ const router = createRouter({
           meta: { requiresAuth: true },
         },
         {
+          path: 'assets',
+          name: 'bens-valores',
+          component: () => import('@/views/AssetsView.vue'),
+          meta: { requiresAuth: true },
+        },
+        {
+          path: 'assets/:id',
+          name: 'bem-detalhe',
+          component: () => import('@/views/AssetDetailView.vue'),
+          meta: { requiresAuth: true },
+        },
+        {
           path: 'transactions',
           name: 'movimentos',
           component: () => import('@/views/TransactionsView.vue'),
@@ -127,6 +139,8 @@ const ROUTE_TITLES: Record<string, string> = {
   'plano-mensal': 'Plano Mensal',
   agregado: 'Agregado',
   contas: 'Contas',
+  'bens-valores': 'Bens e Valores',
+  'bem-detalhe': 'Bens e Valores',
   movimentos: 'Movimentos',
   objetivos: 'Objetivos',
   relatorios: 'Relatórios',

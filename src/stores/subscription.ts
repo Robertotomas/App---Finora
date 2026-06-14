@@ -106,6 +106,7 @@ export const useSubscriptionStore = defineStore('subscription', () => {
     objectivesEnabled: false,
     monthlyReportsEnabled: false,
     recurringEnabled: false,
+    assetsEnabled: false,
     canInvite: false,
     needsPrimaryAccountSelection: false,
     primaryAccountId: null,
@@ -137,6 +138,9 @@ export const useSubscriptionStore = defineStore('subscription', () => {
   const canAccessRecurring = computed(
     () => limits.value.recurringEnabled ?? limits.value.objectivesEnabled,
   )
+  const canAccessAssets = computed(
+    () => limits.value.assetsEnabled ?? limits.value.objectivesEnabled,
+  )
   const canInvite = computed(() => limits.value.canInvite)
 
   return {
@@ -153,6 +157,7 @@ export const useSubscriptionStore = defineStore('subscription', () => {
     canAccessObjectives,
     canAccessMonthlyReports,
     canAccessRecurring,
+    canAccessAssets,
     canInvite,
     fetchSubscription,
     upgrade,
