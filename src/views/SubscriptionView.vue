@@ -1,20 +1,26 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useSubscriptionStore } from '@/stores/subscription'
-import type { SubscriptionPlan } from '@/types/subscription'
+import type { BillingInterval, PaidPlan, SubscriptionPlan } from '@/types/subscription'
 import { coupleInvitationsApi } from '@/api/coupleInvitations'
 import { useAuthStore } from '@/stores/auth'
 import { userFromProfileResponse } from '@/types/auth'
 import { useHouseholdStore } from '@/stores/household'
 import { useNotificationStore } from '@/stores/notifications'
 
+const route = useRoute()
 const router = useRouter()
 const subscriptionStore = useSubscriptionStore()
 const authStore = useAuthStore()
 const householdStore = useHouseholdStore()
 const notificationStore = useNotificationStore()
-const upgrading = ref<SubscriptionPlan | null>(null)
+
+const interval = ref<BillingInterval>('monthly')
+const redirecting = ref<SubscriptionPlan | null>(null)
+const portalLoading = ref(false)
+const checkoutNotice = ref('')
+const checkoutNoticeKind = ref<'info' | 'error'>('info')
 
 const coupleInviteOpen = ref(false)
 const coupleInviteEmail = ref('')
@@ -31,11 +37,15 @@ interface PlanCard {
   plan: SubscriptionPlan
   title: string
   subtitle: string
-  price: string
-  period: string
   preamble?: string
   features: string[]
   highlight?: boolean
+}
+
+// Fallback prices (cents) used until /plans loads — kept in sync with server defaults.
+const FALLBACK_PRICES: Record<PaidPlan, { monthly: number; annual: number }> = {
+  Pro: { monthly: 799, annual: 7990 },
+  Couple: { monthly: 1299, annual: 12990 },
 }
 
 const planCards: PlanCard[] = [
@@ -43,8 +53,6 @@ const planCards: PlanCard[] = [
     plan: 'Free',
     title: 'Free',
     subtitle: 'Para começar',
-    price: '0€',
-    period: '/mês',
     features: [
       '1 conta',
       '1 receita por mês',
@@ -58,8 +66,6 @@ const planCards: PlanCard[] = [
     plan: 'Pro',
     title: 'Pro',
     subtitle: 'Gestão individual completa',
-    price: '7,99€',
-    period: '/mês',
     preamble: 'Tudo do Free, mais:',
     features: [
       'Contas ilimitadas',
@@ -74,8 +80,6 @@ const planCards: PlanCard[] = [
     plan: 'Couple',
     title: 'Couple',
     subtitle: 'Finanças a dois, juntos',
-    price: '12,99€',
-    period: '/mês',
     preamble: 'Tudo do Pro, mais:',
     features: [
       'Convidar 1 pessoa para o agregado',
@@ -89,33 +93,73 @@ const planCards: PlanCard[] = [
 
 const currentPlan = computed(() => subscriptionStore.plan)
 
-function buttonLabel(plan: SubscriptionPlan): string {
-  if (plan === currentPlan.value) return 'Plano atual'
-  return `Fazer upgrade para ${plan}`
+function pricesFor(plan: PaidPlan): { monthly: number; annual: number } {
+  const p = subscriptionStore.plans
+  if (!p) return FALLBACK_PRICES[plan]
+  return plan === 'Pro' ? p.pro : p.couple
 }
 
-async function choosePlan(plan: SubscriptionPlan) {
-  if (plan === currentPlan.value || upgrading.value) return
-  if (plan === 'Couple') {
-    coupleInviteError.value = ''
-    coupleInviteEmail.value = ''
-    coupleInviteOpen.value = true
+function formatEuro(cents: number): string {
+  return (cents / 100).toLocaleString('pt-PT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '€'
+}
+
+/** Big headline price = per-month figure (annual shows the monthly-equivalent of the yearly charge). */
+function displayPrice(plan: SubscriptionPlan): string {
+  if (plan === 'Free') return '0€'
+  const prices = pricesFor(plan as PaidPlan)
+  const cents = interval.value === 'annual' ? Math.round(prices.annual / 12) : prices.monthly
+  return formatEuro(cents)
+}
+
+/** Sub-line shown under annual prices: total billed per year. */
+function annualNote(plan: SubscriptionPlan): string | null {
+  if (plan === 'Free' || interval.value !== 'annual') return null
+  return `Faturação anual de ${formatEuro(pricesFor(plan as PaidPlan).annual)}`
+}
+
+function isCurrent(plan: SubscriptionPlan): boolean {
+  return plan === currentPlan.value
+}
+
+function buttonLabel(plan: SubscriptionPlan): string {
+  if (redirecting.value === plan) return 'A redirecionar…'
+  if (isCurrent(plan)) return plan === 'Free' ? 'Plano atual' : 'Gerir subscrição'
+  if (plan === 'Free') return 'Gerir subscrição'
+  return `Escolher ${plan}`
+}
+
+function buttonDisabled(plan: SubscriptionPlan): boolean {
+  if (redirecting.value !== null || portalLoading.value) return true
+  return isCurrent(plan) && plan === 'Free'
+}
+
+async function selectPlan(plan: SubscriptionPlan) {
+  if (buttonDisabled(plan)) return
+
+  // Current paid plan, or downgrading to Free → manage/cancel in the Stripe portal.
+  if (isCurrent(plan) || plan === 'Free') {
+    portalLoading.value = true
+    try {
+      await subscriptionStore.openPortal()
+    } finally {
+      portalLoading.value = false
+    }
     return
   }
-  const wasCouple = currentPlan.value === 'Couple'
-  upgrading.value = plan
+
+  // New paid plan → hosted Stripe Checkout.
+  redirecting.value = plan
   try {
-    await subscriptionStore.upgrade(plan)
-    await subscriptionStore.fetchSubscription()
-    if (wasCouple && (plan === 'Free' || plan === 'Pro')) {
-      try {
-        await householdStore.fetchHousehold()
-      } catch { /* */ }
-      await router.push({ name: 'agregado' })
-    }
-  } finally {
-    upgrading.value = null
+    await subscriptionStore.startCheckout(plan as PaidPlan, interval.value)
+  } catch {
+    redirecting.value = null
   }
+}
+
+function openInvite() {
+  coupleInviteError.value = ''
+  coupleInviteEmail.value = ''
+  coupleInviteOpen.value = true
 }
 
 function isValidEmail(email: string): boolean {
@@ -172,8 +216,35 @@ function cancelCoupleInvite() {
 }
 
 onMounted(async () => {
+  subscriptionStore.fetchPlans()
+
   if (!subscriptionStore.subscription) {
     try { await subscriptionStore.fetchSubscription() } catch { /* */ }
+  }
+
+  // Returning from Stripe Checkout: reconcile the plan from Stripe's truth (not the URL).
+  const checkout = route.query.checkout
+  if (checkout === 'success') {
+    checkoutNoticeKind.value = 'info'
+    checkoutNotice.value = 'Pagamento concluído. A ativar o seu plano…'
+    await subscriptionStore.syncFromStripe()
+    try { await householdStore.fetchHousehold() } catch { /* */ }
+    if (subscriptionStore.plan !== 'Free') {
+      checkoutNoticeKind.value = 'info'
+      checkoutNotice.value = 'Plano ativado com sucesso!'
+    } else {
+      // Pagou mas o plano ainda não confirmou (subscrição incompleta/em processamento).
+      checkoutNoticeKind.value = 'error'
+      checkoutNotice.value = 'Não foi possível confirmar a subscrição. Se o pagamento foi efetuado, aguarde um momento e atualize a página.'
+    }
+  } else if (checkout === 'cancel') {
+    checkoutNoticeKind.value = 'error'
+    checkoutNotice.value = 'Subscrição não concluída. Não foi efetuada nenhuma cobrança.'
+  }
+
+  if (checkout) {
+    // Clean the query so a refresh doesn't re-trigger the notice.
+    router.replace({ query: {} })
   }
 })
 </script>
@@ -193,6 +264,35 @@ onMounted(async () => {
     </div>
 
     <div v-if="subscriptionStore.error" class="banner banner--error">{{ subscriptionStore.error }}</div>
+    <div v-if="checkoutNotice" class="banner" :class="checkoutNoticeKind === 'error' ? 'banner--error' : 'banner--info'">{{ checkoutNotice }}</div>
+
+    <!-- Billing interval toggle -->
+    <div class="interval-toggle" role="group" aria-label="Periodicidade">
+      <button
+        type="button"
+        class="interval-btn"
+        :class="{ 'interval-btn--active': interval === 'monthly' }"
+        @click="interval = 'monthly'"
+      >Mensal</button>
+      <button
+        type="button"
+        class="interval-btn"
+        :class="{ 'interval-btn--active': interval === 'annual' }"
+        @click="interval = 'annual'"
+      >
+        Anual
+        <span class="interval-save">2 meses grátis</span>
+      </button>
+    </div>
+
+    <!-- Invite partner (only when already on a paid Couple plan) -->
+    <section v-if="subscriptionStore.canInvite" class="invite-cta">
+      <div>
+        <h2 class="invite-cta-title">Tem o plano Couple</h2>
+        <p class="invite-cta-text">Convide o seu parceiro para partilharem contas, movimentos e orçamento.</p>
+      </div>
+      <button type="button" class="btn-primary" @click="openInvite">Convidar parceiro</button>
+    </section>
 
     <!-- Partner OTP section -->
     <section class="otp-card">
@@ -239,10 +339,10 @@ onMounted(async () => {
       @click.self="cancelCoupleInvite"
     >
       <div class="modal-card">
-        <h2 class="modal-title">Enviar convite para Couple</h2>
+        <h2 class="modal-title">Convidar parceiro</h2>
         <p class="modal-text">
-          Introduza o email da pessoa que quer convidar. O plano <strong>Couple</strong> só é ativado depois de o
-          convite ser enviado com sucesso.
+          Introduza o email da pessoa que quer convidar para o seu agregado <strong>Couple</strong>.
+          Ela recebe um convite por email para se juntar.
         </p>
         <label class="field">
           <span class="field-label">Email do convidado</span>
@@ -278,9 +378,10 @@ onMounted(async () => {
           <h2 class="plan-name">{{ card.title }}</h2>
           <p class="plan-subtitle">{{ card.subtitle }}</p>
           <p class="plan-price">
-            <span class="plan-price-value">{{ card.price }}</span>
-            <span class="plan-price-period">{{ card.period }}</span>
+            <span class="plan-price-value">{{ displayPrice(card.plan) }}</span>
+            <span class="plan-price-period">/mês</span>
           </p>
+          <p v-if="annualNote(card.plan)" class="plan-annual-note">{{ annualNote(card.plan) }}</p>
           <p v-if="card.preamble" class="plan-preamble">{{ card.preamble }}</p>
           <ul class="plan-features">
             <li v-for="feature in card.features" :key="feature">
@@ -292,11 +393,11 @@ onMounted(async () => {
         <button
           type="button"
           class="btn-plan"
-          :class="{ 'btn-plan--current': currentPlan === card.plan, 'btn-plan--upgrade': currentPlan !== card.plan }"
-          :disabled="currentPlan === card.plan || upgrading !== null || coupleInviteOpen"
-          @click="choosePlan(card.plan)"
+          :class="{ 'btn-plan--current': isCurrent(card.plan), 'btn-plan--upgrade': !isCurrent(card.plan) }"
+          :disabled="buttonDisabled(card.plan)"
+          @click="selectPlan(card.plan)"
         >
-          {{ upgrading === card.plan ? 'A atualizar...' : buttonLabel(card.plan) }}
+          {{ buttonLabel(card.plan) }}
         </button>
       </article>
     </div>
@@ -368,6 +469,119 @@ onMounted(async () => {
   background: #fef2f2;
   color: #dc2626;
   border: 1px solid #fecaca;
+}
+
+html.dark .banner--error {
+  background: rgba(220, 38, 38, 0.12);
+  color: #f87171;
+  border-color: rgba(248, 113, 113, 0.3);
+}
+
+.banner--info {
+  background: #ecfdf5;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+}
+
+html.dark .banner--info {
+  background: rgba(22, 101, 52, 0.18);
+  color: #4ade80;
+  border-color: rgba(74, 222, 128, 0.3);
+}
+
+/* ── Interval toggle ── */
+.interval-toggle {
+  display: inline-flex;
+  gap: 0.25rem;
+  margin: 0 auto 1.75rem;
+  padding: 0.25rem;
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  /* center the inline-flex within the page */
+}
+
+.sub-page > .interval-toggle {
+  display: flex;
+  width: max-content;
+}
+
+.interval-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1.1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  font-family: inherit;
+  color: var(--color-text-muted);
+  background: transparent;
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.interval-btn--active {
+  background: #166534;
+  color: #fff;
+}
+
+html.dark .interval-btn--active {
+  background: #15803d;
+}
+
+.interval-save {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  background: rgba(22, 101, 52, 0.12);
+  color: #166534;
+}
+
+.interval-btn--active .interval-save {
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+
+html.dark .interval-save {
+  background: rgba(74, 222, 128, 0.18);
+  color: #4ade80;
+}
+
+/* ── Invite CTA ── */
+.invite-cta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  max-width: 960px;
+  margin: 0 auto 1.5rem;
+  padding: 1rem 1.25rem;
+  background: var(--color-bg-card);
+  border: 1px solid #166534;
+  border-radius: 14px;
+}
+
+.invite-cta-title {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.invite-cta-text {
+  margin: 0.2rem 0 0;
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+}
+
+.plan-annual-note {
+  margin: 0.35rem 0 0;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
 }
 
 /* ── Plans grid ── */

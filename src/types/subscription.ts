@@ -1,5 +1,10 @@
 export type SubscriptionPlan = 'Free' | 'Pro' | 'Couple'
 
+export type BillingInterval = 'monthly' | 'annual'
+
+/** Paid plans only — checkout/portal apply to these. */
+export type PaidPlan = Exclude<SubscriptionPlan, 'Free'>
+
 export interface SubscriptionLimits {
   accountsRemaining: number | null
   incomeRemainingThisMonth: number | null
@@ -23,5 +28,26 @@ export interface SubscriptionMe {
 
 export interface UpgradeSubscriptionRequest {
   plan: SubscriptionPlan
+}
+
+export interface CheckoutRequest {
+  plan: PaidPlan
+  interval: BillingInterval
+}
+
+export interface CheckoutUrlResponse {
+  url: string
+}
+
+/** Amounts are in cents (minor unit), as configured server-side. */
+export interface PlanPrice {
+  monthly: number
+  annual: number
+}
+
+export interface PlansResponse {
+  currency: string
+  pro: PlanPrice
+  couple: PlanPrice
 }
 

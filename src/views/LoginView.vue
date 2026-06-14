@@ -113,7 +113,7 @@ async function resendConfirmation() {
           Ao entrar, aceita os
           <button type="button" class="auth-legal-link" @click="termsModalOpen = true">Termos e Condições</button>
           e a
-          <button type="button" class="auth-legal-link" @click="privacyModalOpen = true">Política de Privacidade</button>.
+          <button type="button" class="auth-legal-link" @click="privacyModalOpen = true">Política de Privacidade</button>
         </p>
       </div>
     </div>
