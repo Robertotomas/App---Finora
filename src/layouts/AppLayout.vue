@@ -8,14 +8,28 @@ import { useSubscriptionStore } from '@/stores/subscription'
 import iconMale from '@/assets/images/icon-male.png'
 import iconFinoraFlow from '@/assets/images/finoraflow-icon.png'
 import PartnerLeftModal from '@/components/PartnerLeftModal.vue'
+import NotificationBell from '@/components/NotificationBell.vue'
+import GlobalSearch from '@/components/GlobalSearch.vue'
+import { useNotificationStore } from '@/stores/notifications'
 
 const authStore = useAuthStore()
 const themeStore = useThemeStore()
 const householdStore = useHouseholdStore()
 const subscriptionStore = useSubscriptionStore()
+const notificationStore = useNotificationStore()
 const route = useRoute()
 const router = useRouter()
 const userMenuOpen = ref(false)
+const quickActionOpen = ref(false)
+
+function toggleQuickAction() {
+  quickActionOpen.value = !quickActionOpen.value
+}
+
+function quickAction(path: string) {
+  quickActionOpen.value = false
+  router.push(path)
+}
 
 const SIDEBAR_KEY = 'finora-sidebar-collapsed'
 const sidebarCollapsed = ref(localStorage.getItem(SIDEBAR_KEY) === 'true')
@@ -25,25 +39,11 @@ function toggleSidebar() {
   localStorage.setItem(SIDEBAR_KEY, String(sidebarCollapsed.value))
 }
 
-function openMoviments() {
-  if (sidebarCollapsed.value) {
-    sidebarCollapsed.value = false
-    localStorage.setItem(SIDEBAR_KEY, 'false')
-  }
-  objectivesOpen.value = false
-  movimentsOpen.value = true
-}
 
 function logout() {
   userMenuOpen.value = false
   authStore.logout()
-  router.replace({ name: 'login' })
-}
-
-function setTheme(dark: boolean) {
-  if (themeStore.isDark !== dark) {
-    themeStore.toggle()
-  }
+  router.replace({ name: 'entrar' })
 }
 
 function toggleMenu() {
@@ -66,9 +66,20 @@ onMounted(async () => {
     if (userMenuOpen.value && !target.closest('.user-menu')) {
       userMenuOpen.value = false
     }
+    if (quickActionOpen.value && !target.closest('.quick-action-menu')) {
+      quickActionOpen.value = false
+    }
   }
   document.addEventListener('click', handleClickOutside)
-  onUnmounted(() => document.removeEventListener('click', handleClickOutside))
+
+  if (authStore.isAuthenticated) {
+    notificationStore.startPolling()
+  }
+
+  onUnmounted(() => {
+    document.removeEventListener('click', handleClickOutside)
+    notificationStore.stopPolling()
+  })
 })
 
 const planLabel = computed(() => {
@@ -81,17 +92,17 @@ const planManageLabel = computed(() =>
 
 function goToSubscription() {
   userMenuOpen.value = false
-  router.push({ name: 'subscription' })
+  router.push({ name: 'subscricao' })
 }
 
 function goToProfile() {
   userMenuOpen.value = false
-  router.push({ name: 'profile' })
+  router.push({ name: 'perfil' })
 }
 
 function goToHousehold() {
   userMenuOpen.value = false
-  router.push({ name: 'household-settings' })
+  router.push({ name: 'agregado' })
 }
 
 /** Household: plano Couple OU agregado ainda tipo casal (ex.: após mudar para Free/Pro — precisas disto para sair do casal). */
@@ -102,55 +113,31 @@ const showHouseholdInUserMenu = computed(
     householdStore.hasPartnerLeftNotice,
 )
 
-const navItems = [
-  { to: '/dashboard', label: 'Dashboard' },
-  { to: '/monthly', label: 'Plano Mensal' },
-  { to: '/accounts', label: 'Contas' },
-  { to: '/reports', label: 'Relatórios' },
-]
-
-const movimentsOpen = ref(false)
-const isMovimentsActive = computed(() => route.path.startsWith('/transactions'))
-
 const movimentsSubItems = [
-  { to: '/transactions?tab=summary', label: 'Resumo', tabKey: 'summary' },
-  { to: '/transactions?tab=transactions', label: 'Transações', tabKey: 'transactions' },
+  { to: '/transactions?tab=dashboard', label: 'Dashboard', tabKey: 'dashboard' },
+  { to: '/transactions?tab=movements', label: 'Movimentos', tabKey: 'movements' },
   { to: '/transactions?tab=recurring', label: 'Recorrentes', tabKey: 'recurring' },
 ]
 
-const objectivesOpen = ref(false)
-const isObjectivesActive = computed(() => route.path.startsWith('/objectives'))
-
-const objectivesSubItems = [
-  { to: '/objectives?tab=active', label: 'Ativos', tabKey: 'active' },
-  { to: '/objectives?tab=history', label: 'Concluídos', tabKey: 'history' },
+const patrimonioItems = [
+  { to: '/accounts', label: 'Contas', icon: 'wallet', comingSoon: false },
+  { to: '', label: 'Investimentos', icon: 'trending', comingSoon: true },
+  { to: '/assets', label: 'Bens e Valores', icon: 'gem', comingSoon: false },
 ]
 
-function openObjectives() {
-  if (sidebarCollapsed.value) {
-    sidebarCollapsed.value = false
-    localStorage.setItem(SIDEBAR_KEY, 'false')
-  }
-  movimentsOpen.value = false
-  objectivesOpen.value = true
-}
-
-function isObjectivesSubActive(tabKey: string) {
-  if (!route.path.startsWith('/objectives')) return false
-  const tab = route.query.tab as string | undefined
-  if (tabKey === 'active') return !tab || tab === 'active'
-  return tab === tabKey
-}
+const toolsItems = [
+  { to: '/reports', label: 'Relatórios' },
+]
 
 function isMovimentsSubActive(tabKey: string) {
   if (!route.path.startsWith('/transactions')) return false
   const tab = route.query.tab as string | undefined
-  if (tabKey === 'summary') return !tab || tab === 'summary'
+  if (tabKey === 'dashboard') return !tab || tab === 'dashboard'
   return tab === tabKey
 }
 
 function isActive(path: string) {
-  if (path === '/dashboard') return route.path === '/dashboard'
+  if (path === '/overview') return route.path === '/overview'
   return route.path.startsWith(path)
 }
 
@@ -163,7 +150,7 @@ function isActive(path: string) {
       <button v-if="sidebarCollapsed && authStore.isAuthenticated" type="button" class="sidebar-expand-btn" @click="toggleSidebar" title="Expandir">
         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" x2="21" y1="6" y2="6"/><line x1="3" x2="21" y1="12" y2="12"/><line x1="3" x2="21" y1="18" y2="18"/></svg>
       </button>
-      <RouterLink to="/dashboard" class="header-brand" aria-label="FinoraFlow — ir para o painel">
+      <RouterLink to="/overview" class="header-brand" aria-label="FinoraFlow — ir para o painel">
         <img
           :src="iconFinoraFlow"
           alt="FinoraFlow"
@@ -173,9 +160,42 @@ function isActive(path: string) {
         />
       </RouterLink>
       <div class="header-actions">
-        <div class="header-search">
-          <input type="text" placeholder="Pesquisar..." class="search-input" />
-        </div>
+          <!-- Quick action + button -->
+          <div v-if="authStore.isAuthenticated" class="quick-action-menu">
+            <button type="button" class="quick-action-btn" title="Ação rápida" @click.stop="toggleQuickAction">
+              <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="5" y2="19"/><line x1="5" x2="19" y1="12" y2="12"/></svg>
+            </button>
+            <Transition name="dropdown">
+              <div v-show="quickActionOpen" class="quick-action-dropdown">
+                <button type="button" class="quick-action-item" @click="quickAction('/transactions?tab=movements&action=new')">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="7" x2="7" y1="18" y2="6"/><polyline points="3 10 7 6 11 10"/><line x1="17" x2="17" y1="6" y2="18"/><polyline points="13 14 17 18 21 14"/></svg>
+                  Movimento
+                </button>
+                <button type="button" class="quick-action-item" @click="quickAction('/transactions?tab=recurring&action=new')">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                  Recorrente
+                </button>
+                <button type="button" class="quick-action-item" @click="quickAction('/accounts?action=new')">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 10h20"/><circle cx="17" cy="15" r="1.5"/></svg>
+                  Conta
+                </button>
+                <button type="button" class="quick-action-item" @click="quickAction('/goals?tab=active&action=new')">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/><line x1="22" x2="12" y1="2" y2="12"/></svg>
+                  Objetivo
+                </button>
+                <button type="button" class="quick-action-item" @click="quickAction('/monthly-plan')">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/><path d="m9 16 2 2 4-4"/></svg>
+                  Plano Mensal
+                </button>
+              </div>
+            </Transition>
+          </div>
+
+          <!-- Notification bell -->
+          <NotificationBell v-if="authStore.isAuthenticated" />
+
+        <GlobalSearch v-if="authStore.isAuthenticated" class="header-search" />
+
           <div class="user-menu">
             <button
               type="button"
@@ -195,59 +215,82 @@ function isActive(path: string) {
             </button>
             <Transition name="dropdown">
               <div v-show="userMenuOpen" class="user-dropdown">
-                <div class="dropdown-section">
-                  <span class="dropdown-label">Tema</span>
-                  <div class="theme-options">
-                    <button
-                      type="button"
-                      class="theme-btn"
-                      :class="{ active: !themeStore.isDark }"
-                      title="Modo claro"
-                      @click="setTheme(false)"
-                    >
-                      ☀️
-                    </button>
-                    <button
-                      type="button"
-                      class="theme-btn"
-                      :class="{ active: themeStore.isDark }"
-                      title="Modo escuro"
-                      @click="setTheme(true)"
-                    >
-                      🌙
-                    </button>
+                <!-- Cabeçalho de perfil -->
+                <div v-if="authStore.isAuthenticated" class="dropdown-profile">
+                  <img :src="iconMale" alt="" class="dropdown-profile-avatar" />
+                  <div class="dropdown-profile-info">
+                    <span class="dropdown-profile-name">{{ authStore.user?.firstName }} {{ authStore.user?.lastName }}</span>
+                    <span class="dropdown-profile-email">{{ authStore.user?.email }}</span>
                   </div>
                 </div>
+
                 <template v-if="authStore.isAuthenticated">
                   <div class="dropdown-divider" />
-                  <button
-                    type="button"
-                    class="dropdown-item"
-                    @click="goToProfile"
-                  >
-                    Perfil
+
+                  <!-- Gerir / atualizar plano -->
+                  <button type="button" class="dropdown-item" @click="goToSubscription">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m16 12-4-4-4 4"/><path d="M12 16V8"/></svg>
+                    <span class="dropdown-item-label">{{ planManageLabel }}</span>
                   </button>
-                  <button
-                    v-if="showHouseholdInUserMenu"
-                    type="button"
-                    class="dropdown-item"
-                    @click="goToHousehold"
-                  >
-                    Household
+
+                  <!-- Perfil -->
+                  <button type="button" class="dropdown-item" @click="goToProfile">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                    <span class="dropdown-item-label">Perfil</span>
                   </button>
-                  <button
-                    type="button"
-                    class="dropdown-item"
-                    @click="goToSubscription"
-                  >
-                    {{ planManageLabel }}
+
+                  <!-- Agregado -->
+                  <button v-if="showHouseholdInUserMenu" type="button" class="dropdown-item" @click="goToHousehold">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                    <span class="dropdown-item-label">Agregado</span>
                   </button>
-                  <button
-                    type="button"
-                    class="dropdown-item dropdown-logout"
-                    @click="logout"
-                  >
-                    Sair
+
+                  <div class="dropdown-divider" />
+
+                  <!-- Aparência (tema sempre visível) -->
+                  <span class="dropdown-section-label">Aparência</span>
+                  <button type="button" class="dropdown-item" :class="{ active: themeStore.mode === 'light' }" @click="themeStore.setMode('light')">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
+                    <span class="dropdown-item-label">Claro</span>
+                    <svg v-if="themeStore.mode === 'light'" class="dropdown-check" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                  </button>
+                  <button type="button" class="dropdown-item" :class="{ active: themeStore.mode === 'dark' }" @click="themeStore.setMode('dark')">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+                    <span class="dropdown-item-label">Escuro</span>
+                    <svg v-if="themeStore.mode === 'dark'" class="dropdown-check" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                  </button>
+                  <button type="button" class="dropdown-item" :class="{ active: themeStore.mode === 'system' }" @click="themeStore.setMode('system')">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/></svg>
+                    <span class="dropdown-item-label">Sistema</span>
+                    <svg v-if="themeStore.mode === 'system'" class="dropdown-check" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                  </button>
+
+                  <div class="dropdown-divider" />
+
+                  <!-- Terminar sessão -->
+                  <button type="button" class="dropdown-item dropdown-logout" @click="logout">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>
+                    <span class="dropdown-item-label">Terminar sessão</span>
+                  </button>
+                </template>
+
+                <!-- Visitante: apenas tema -->
+                <template v-else>
+                  <span class="dropdown-section-label">Aparência</span>
+                  <button type="button" class="dropdown-item" :class="{ active: themeStore.mode === 'light' }" @click="themeStore.setMode('light')">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
+                    <span class="dropdown-item-label">Claro</span>
+                    <svg v-if="themeStore.mode === 'light'" class="dropdown-check" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                  </button>
+                  <button type="button" class="dropdown-item" :class="{ active: themeStore.mode === 'dark' }" @click="themeStore.setMode('dark')">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+                    <span class="dropdown-item-label">Escuro</span>
+                    <svg v-if="themeStore.mode === 'dark'" class="dropdown-check" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                  </button>
+                  <button type="button" class="dropdown-item" :class="{ active: themeStore.mode === 'system' }" @click="themeStore.setMode('system')">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/></svg>
+                    <span class="dropdown-item-label">Sistema</span>
+                    <svg v-if="themeStore.mode === 'system'" class="dropdown-check" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
                   </button>
                 </template>
               </div>
@@ -261,129 +304,120 @@ function isActive(path: string) {
       <aside class="sidebar" :class="{ collapsed: sidebarCollapsed }">
         <div v-if="authStore.isAuthenticated" class="sidebar-plan">
           <RouterLink
-            :to="{ name: 'subscription' }"
+            :to="{ name: 'subscricao' }"
             class="sidebar-plan-link"
             aria-label="Ver planos e subscrição"
           >
             {{ planLabel }}
           </RouterLink>
+          <span v-if="!sidebarCollapsed && subscriptionStore.plan === 'Couple' && householdStore.household?.name" class="sidebar-household-name">
+            {{ householdStore.household.name }}
+          </span>
           <button v-if="!sidebarCollapsed" type="button" class="sidebar-collapse-btn" @click="toggleSidebar" title="Minimizar">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="11 17 6 12 11 7"/><polyline points="18 17 13 12 18 7"/></svg>
           </button>
         </div>
         <nav v-if="authStore.isAuthenticated" class="sidebar-nav">
-          <!-- Main nav panel -->
-          <div class="sidebar-panel" :class="{ 'sidebar-panel--hidden': movimentsOpen || objectivesOpen }">
-            <template v-for="item in navItems" :key="item.to">
+          <!-- Top items (Dashboard, Plano Mensal) -->
+          <RouterLink
+            to="/overview"
+            class="sidebar-link"
+            :class="{ active: isActive('/overview') }"
+          >
+            <span class="sidebar-icon">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+            </span>
+            <span class="sidebar-label">Início</span>
+          </RouterLink>
+
+          <!-- Section: Planeamento -->
+          <div class="sidebar-section">
+            <span class="sidebar-section-title">Planeamento</span>
+            <RouterLink
+              to="/monthly-plan"
+              class="sidebar-link"
+              :class="{ active: isActive('/monthly-plan') }"
+            >
+              <span class="sidebar-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/><path d="m9 16 2 2 4-4"/></svg>
+              </span>
+              <span class="sidebar-label">Plano Mensal</span>
+            </RouterLink>
+            <RouterLink
+              to="/goals"
+              class="sidebar-link"
+              :class="{ active: isActive('/goals') }"
+            >
+              <span class="sidebar-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/><line x1="22" x2="12" y1="2" y2="12"/></svg>
+              </span>
+              <span class="sidebar-label">Objetivos</span>
+            </RouterLink>
+          </div>
+
+          <!-- Section: Movimentos -->
+          <div class="sidebar-section">
+            <span class="sidebar-section-title">Atividade</span>
+            <RouterLink
+              v-for="sub in movimentsSubItems"
+              :key="sub.tabKey"
+              :to="sub.to"
+              class="sidebar-link"
+              :class="{ active: isMovimentsSubActive(sub.tabKey) }"
+            >
+              <span class="sidebar-icon">
+                <svg v-if="sub.tabKey === 'dashboard'" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
+                <svg v-else-if="sub.tabKey === 'movements'" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="7" x2="7" y1="18" y2="6"/><polyline points="3 10 7 6 11 10"/><line x1="17" x2="17" y1="6" y2="18"/><polyline points="13 14 17 18 21 14"/></svg>
+                <svg v-else xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              </span>
+              <span class="sidebar-label">{{ sub.label }}</span>
+            </RouterLink>
+          </div>
+
+          <!-- Section: Património -->
+          <div class="sidebar-section">
+            <span class="sidebar-section-title">Património</span>
+            <template v-for="item in patrimonioItems" :key="item.label">
               <RouterLink
+                v-if="!item.comingSoon"
                 :to="item.to"
                 class="sidebar-link"
                 :class="{ active: isActive(item.to) }"
               >
                 <span class="sidebar-icon">
-                  <!-- Dashboard -->
-                  <svg v-if="item.to === '/dashboard'" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
-                  <!-- Plano Mensal -->
-                  <svg v-else-if="item.to === '/monthly'" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/><path d="m9 16 2 2 4-4"/></svg>
-                  <!-- Contas -->
-                  <svg v-else-if="item.to === '/accounts'" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 10h20"/><circle cx="17" cy="15" r="1.5"/></svg>
-                  <!-- Relatórios -->
-                  <svg v-else xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" x2="8" y1="13" y2="13"/><line x1="16" x2="8" y1="17" y2="17"/><line x1="10" x2="8" y1="9" y2="9"/></svg>
+                  <svg v-if="item.icon === 'wallet'" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 10h20"/><circle cx="17" cy="15" r="1.5"/></svg>
+                  <svg v-else-if="item.icon === 'gem'" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12l4 6-10 13L2 9z"/><path d="M2 9h20"/><path d="m10 3 2 6"/><path d="m14 3-2 6"/><path d="m6.5 9 5.5 13"/><path d="m17.5 9-5.5 13"/></svg>
                 </span>
                 <span class="sidebar-label">{{ item.label }}</span>
               </RouterLink>
-
-              <!-- Movimentos expandable (after Contas) -->
-              <template v-if="item.to === '/accounts'">
-                <button
-                  type="button"
-                  class="sidebar-link sidebar-link-expandable"
-                  :class="{ active: isMovimentsActive }"
-                  @click="openMoviments"
-                >
-                  <span class="sidebar-icon">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/><polyline points="21 3 21 9 15 9"/></svg>
-                  </span>
-                  <span class="sidebar-label">Movimentos</span>
-                  <svg class="sidebar-expand-arrow" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-                </button>
-
-                <!-- Objetivos expandable (after Movimentos) -->
-                <button
-                  type="button"
-                  class="sidebar-link sidebar-link-expandable"
-                  :class="{ active: isObjectivesActive }"
-                  @click="openObjectives"
-                >
-                  <span class="sidebar-icon">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/><line x1="22" x2="12" y1="2" y2="12"/></svg>
-                  </span>
-                  <span class="sidebar-label">Objetivos</span>
-                  <svg class="sidebar-expand-arrow" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-                </button>
-              </template>
+              <span v-else class="sidebar-link sidebar-link--disabled">
+                <span class="sidebar-icon">
+                  <svg v-if="item.icon === 'trending'" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+                  <svg v-else-if="item.icon === 'gem'" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12l4 6-10 13L2 9z"/><path d="M2 9h20"/><path d="m10 3 2 6"/><path d="m14 3-2 6"/><path d="m6.5 9 5.5 13"/><path d="m17.5 9-5.5 13"/></svg>
+                </span>
+                <span class="sidebar-label">{{ item.label }}</span>
+                <span class="coming-soon-badge">Em breve</span>
+              </span>
             </template>
           </div>
 
-          <!-- Movimentos sub-panel (slides in) -->
-          <div class="sidebar-panel sidebar-panel-sub" :class="{ 'sidebar-panel-sub--visible': movimentsOpen }">
-            <button type="button" class="sidebar-back-btn" @click="movimentsOpen = false">
-              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-              <span>Movimentos</span>
-            </button>
-            <div class="sidebar-sub-items">
-              <RouterLink
-                v-for="sub in movimentsSubItems"
-                :key="sub.tabKey"
-                :to="sub.to"
-                class="sidebar-link sidebar-sub-item"
-                :class="{ active: isMovimentsSubActive(sub.tabKey) }"
-              >
-                <span v-if="sub.tabKey === 'summary'" class="sidebar-icon">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="8" x2="21" y1="6" y2="6"/><line x1="8" x2="21" y1="12" y2="12"/><line x1="8" x2="21" y1="18" y2="18"/><line x1="3" x2="3.01" y1="6" y2="6"/><line x1="3" x2="3.01" y1="12" y2="12"/><line x1="3" x2="3.01" y1="18" y2="18"/></svg>
-                </span>
-                <span v-if="sub.tabKey === 'transactions'" class="sidebar-icon">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="7 7 17 7"/><polyline points="4 12 20 12"/><polyline points="7 17 17 17"/><polyline points="3 7 5 5 3 3"/><polyline points="21 17 19 19 21 21"/></svg>
-                </span>
-                <span v-if="sub.tabKey === 'recurring'" class="sidebar-icon">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                </span>
-                <span class="sidebar-label">{{ sub.label }}</span>
-              </RouterLink>
-            </div>
-          </div>
-
-          <!-- Objetivos sub-panel (slides in) -->
-          <div class="sidebar-panel sidebar-panel-sub" :class="{ 'sidebar-panel-sub--visible': objectivesOpen }">
-            <button type="button" class="sidebar-back-btn" @click="objectivesOpen = false">
-              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-              <span>Objetivos</span>
-            </button>
-            <div class="sidebar-sub-items">
-              <RouterLink
-                v-for="sub in objectivesSubItems"
-                :key="sub.tabKey"
-                :to="sub.to"
-                class="sidebar-link sidebar-sub-item"
-                :class="{ active: isObjectivesSubActive(sub.tabKey) }"
-              >
-                <span v-if="sub.tabKey === 'active'" class="sidebar-icon">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/><line x1="22" x2="12" y1="2" y2="12"/></svg>
-                </span>
-                <span v-if="sub.tabKey === 'history'" class="sidebar-icon">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                </span>
-                <span class="sidebar-label">{{ sub.label }}</span>
-              </RouterLink>
-            </div>
+          <!-- Section: Ferramentas -->
+          <div class="sidebar-section">
+            <span class="sidebar-section-title">Ferramentas</span>
+            <RouterLink
+              v-for="item in toolsItems"
+              :key="item.to"
+              :to="item.to"
+              class="sidebar-link"
+              :class="{ active: isActive(item.to) }"
+            >
+              <span class="sidebar-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" x2="8" y1="13" y2="13"/><line x1="16" x2="8" y1="17" y2="17"/><line x1="10" x2="8" y1="9" y2="9"/></svg>
+              </span>
+              <span class="sidebar-label">{{ item.label }}</span>
+            </RouterLink>
           </div>
         </nav>
-        <div v-if="authStore.isAuthenticated" class="sidebar-footer">
-          <button type="button" class="btn-sidebar btn-logout" @click="logout">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>
-            <span class="sidebar-label">Sair</span>
-          </button>
-        </div>
         <div v-else class="sidebar-guest">
           <RouterLink to="/login" class="sidebar-link">Entrar</RouterLink>
           <RouterLink to="/register" class="sidebar-link btn-register">Registar</RouterLink>
@@ -403,7 +437,8 @@ function isActive(path: string) {
 .app-layout {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
   background: var(--color-bg);
 }
 
@@ -417,7 +452,7 @@ function isActive(path: string) {
 .sidebar {
   width: 240px;
   min-width: 240px;
-  background: linear-gradient(180deg, #14532d 0%, #166534 40%, #15803d 100%);
+  background: #166534;
   color: var(--color-sidebar-text);
   display: flex;
   flex-direction: column;
@@ -428,14 +463,14 @@ function isActive(path: string) {
 }
 
 html.dark .sidebar {
-  background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
+  background: linear-gradient(180deg, #161616 0%, #0d0d0d 100%);
 }
 
 .sidebar-plan {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 1.125rem 0.875rem 0.875rem;
+  padding: 1rem 0.875rem 0.875rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.12);
 }
 
@@ -462,6 +497,18 @@ html.dark .sidebar {
   text-decoration: none;
 }
 
+.sidebar-household-name {
+  font-size: 0.6875rem;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.45);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: 0.02em;
+  flex: 1;
+  min-width: 0;
+}
+
 .sidebar-nav {
   flex: 1;
   padding: 1rem 0.75rem 0.5rem;
@@ -481,7 +528,7 @@ html.dark .sidebar {
   border-radius: 10px;
   color: rgba(255, 255, 255, 0.75);
   text-decoration: none;
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
   font-weight: 500;
   transition: background 0.15s ease, color 0.15s ease;
   letter-spacing: 0.01em;
@@ -505,97 +552,61 @@ html.dark .sidebar-link.active {
   color: #ffffff;
 }
 
-.sidebar-link-expandable {
-  border: none;
-  cursor: pointer;
-  font-family: inherit;
-  width: 100%;
-  text-align: left;
-  background: transparent;
+.sidebar-link--disabled {
+  opacity: 0.5;
+  cursor: default;
+  pointer-events: none;
 }
 
-.sidebar-expand-arrow {
+.sidebar-link--disabled .sidebar-label {
+  white-space: nowrap;
+}
+
+.coming-soon-badge {
   margin-left: auto;
-  opacity: 0.4;
+  font-size: 0.5rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  background: rgba(255, 255, 255, 0.15);
+  color: rgba(255, 255, 255, 0.7);
+  padding: 1px 4px;
+  border-radius: 3px;
+  line-height: 1.3;
   flex-shrink: 0;
 }
 
-/* Sliding panels */
-.sidebar-panel {
+.sidebar-section {
   display: flex;
   flex-direction: column;
   gap: 0.125rem;
-  transition: transform 0.25s ease, opacity 0.25s ease;
+  margin-top: 0.75rem;
 }
 
-.sidebar-panel--hidden {
-  transform: translateX(-100%);
-  opacity: 0;
-  pointer-events: none;
-  position: absolute;
-  inset: 0;
-}
-
-.sidebar-panel-sub {
-  position: absolute;
-  inset: 0;
-  transform: translateX(100%);
-  opacity: 0;
-  pointer-events: none;
-  padding: 0;
-}
-
-.sidebar-panel-sub--visible {
-  transform: translateX(0);
-  opacity: 1;
-  pointer-events: auto;
-  position: relative;
-}
-
-.sidebar-back-btn {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.6rem 0.875rem;
-  margin-bottom: 0.5rem;
-  border: none;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 0;
-  background: transparent;
-  color: rgba(255, 255, 255, 0.7);
-  font-size: 0.8125rem;
+.sidebar-section-title {
+  display: block;
+  padding: 0.25rem 0.875rem 0.375rem;
+  font-size: 0.6875rem;
   font-weight: 600;
-  font-family: inherit;
-  cursor: pointer;
-  width: 100%;
-  text-align: left;
-  padding-bottom: 0.75rem;
-  transition: color 0.15s ease;
-}
-
-.sidebar-back-btn:hover {
-  color: #ffffff;
-}
-
-.sidebar-sub-items {
-  display: flex;
-  flex-direction: column;
-  gap: 0.125rem;
-}
-
-.sidebar-sub-item {
-  padding: 0.7rem 1rem;
-  font-size: 0.9375rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.4);
+  user-select: none;
 }
 
 .sidebar-icon {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 26px;
+  height: 26px;
   flex-shrink: 0;
-  font-size: 1.125rem;
+  font-size: 1rem;
+}
+
+.sidebar-icon svg {
+  width: 17px;
+  height: 17px;
 }
 
 .sidebar-nav-icon {
@@ -708,7 +719,7 @@ html.dark .sidebar-nav-icon-reports {
   text-decoration: none;
   cursor: pointer;
   background: transparent;
-  margin-left: 1rem;
+  margin-left: 0.375rem;
 }
 
 .header-brand:hover {
@@ -719,17 +730,17 @@ html.dark .sidebar-nav-icon-reports {
   display: block;
   width: auto;
   height: auto;
-  /* Logo completo (ícone + FinoraFlow) — PNG verde, mesmo ficheiro claro/escuro */
-  max-height: 30px;
-  max-width: min(158px, 54vw);
+  /* Logo completo (ícone + FinoraFlow) */
+  max-height: 44px;
+  max-width: min(210px, 54vw);
   object-fit: contain;
   object-position: left center;
   background: transparent;
 }
 
-/* Modo escuro: texto verde escuro → branco; ícones FF em verde repostos após invert */
+/* Modo escuro: wordmark a branco sólido — limpo e legível no preto */
 html.dark .header-brand-img {
-  filter: invert(1) hue-rotate(156deg) saturate(1.2) brightness(1.07);
+  filter: brightness(0) invert(1);
 }
 
 .header-search {
@@ -795,6 +806,69 @@ html.dark .header-brand-img {
   width: 100%;
 }
 
+/* ── Quick action button ── */
+.quick-action-menu {
+  position: relative;
+}
+
+.quick-action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 28px;
+  padding: 0 8px;
+  border: none;
+  border-radius: 6px;
+  background: #166534;
+  color: #fff;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.15s;
+}
+
+.quick-action-btn:hover {
+  background: #15803d;
+  transform: scale(1.05);
+}
+
+.quick-action-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 200px;
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  padding: 0.5rem;
+  z-index: 200;
+}
+
+.quick-action-item {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--color-text);
+  background: none;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.12s;
+}
+
+.quick-action-item:hover {
+  background: var(--color-table-row-hover);
+}
+
+.quick-action-item svg {
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+}
+
 .user-menu {
   position: relative;
 }
@@ -831,7 +905,8 @@ html.dark .header-brand-img {
   position: absolute;
   top: calc(100% + 0.5rem);
   right: 0;
-  min-width: 220px;
+  min-width: 244px;
+  max-width: 280px;
   padding: 0.375rem;
   background: var(--color-bg-card);
   border: 1px solid var(--color-border);
@@ -840,50 +915,68 @@ html.dark .header-brand-img {
   z-index: 100;
 }
 
-.dropdown-section {
-  padding: 0.5rem 1rem;
-}
-
-.dropdown-label {
-  display: block;
-  font-size: 0.6875rem;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  color: var(--color-text-muted);
-  margin-bottom: 0.5rem;
-}
-
-.theme-options {
-  display: flex;
-  gap: 0.5rem;
-}
-
-.theme-btn {
-  width: 36px;
-  height: 36px;
+/* Cabeçalho de perfil */
+.dropdown-profile {
   display: flex;
   align-items: center;
-  justify-content: center;
-  font-size: 1.125rem;
-  background: transparent;
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
+  gap: 0.625rem;
+  padding: 0.625rem 0.75rem 0.5rem;
 }
 
-.theme-btn:hover {
-  background: var(--color-btn-secondary-hover);
+.dropdown-profile-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: contain;
+  flex-shrink: 0;
 }
 
-.theme-btn.active {
-  background: rgba(22, 101, 52, 0.14);
-  border-color: #166534;
+html.dark .dropdown-profile-avatar {
+  filter: invert(1);
 }
 
-html.dark .theme-btn.active {
-  background: rgba(74, 222, 128, 0.12);
-  border-color: #4ade80;
+.dropdown-profile-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.dropdown-profile-name {
+  font-size: 0.8125rem;
+  font-weight: 650;
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dropdown-profile-email {
+  font-size: 0.6875rem;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Título de secção (Aparência) */
+.dropdown-section-label {
+  display: block;
+  padding: 0.375rem 0.75rem 0.25rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+/* Check da opção ativa */
+.dropdown-check {
+  flex-shrink: 0;
+  color: #166534;
+}
+
+html.dark .dropdown-check {
+  color: #4ade80;
 }
 
 .dropdown-divider {
@@ -895,7 +988,7 @@ html.dark .theme-btn.active {
 .dropdown-item {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.625rem;
   width: 100%;
   padding: 0.5rem 0.75rem;
   font-size: 0.8125rem;
@@ -904,17 +997,50 @@ html.dark .theme-btn.active {
   border: none;
   border-radius: 8px;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: background 0.15s, color 0.15s;
   text-align: left;
   font-weight: 500;
+  font-family: inherit;
+}
+
+.dropdown-item > svg {
+  flex-shrink: 0;
+  color: var(--color-text-muted);
+  transition: color 0.15s;
+}
+
+.dropdown-item-label {
+  flex: 1;
 }
 
 .dropdown-item:hover {
   background: var(--color-table-row-hover);
 }
 
+.dropdown-item:hover > svg {
+  color: var(--color-text);
+}
+
+.dropdown-item.active {
+  color: #166534;
+  font-weight: 650;
+}
+
+.dropdown-item.active > svg {
+  color: #166534;
+}
+
+html.dark .dropdown-item.active,
+html.dark .dropdown-item.active > svg {
+  color: #4ade80;
+}
+
 .dropdown-logout:hover {
   background: rgba(220, 38, 38, 0.06);
+  color: var(--color-expense);
+}
+
+.dropdown-logout:hover > svg {
   color: var(--color-expense);
 }
 
@@ -941,6 +1067,11 @@ html.dark .theme-btn.active {
   flex: 1;
   min-width: 0;
   overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.main-content::-webkit-scrollbar {
+  display: none;
 }
 
 /* ─── Sidebar collapse toggle ─── */
@@ -1004,13 +1135,21 @@ html.dark .sidebar-expand-btn:hover {
   display: none;
 }
 
-.sidebar.collapsed .sidebar-expand-arrow {
+.sidebar.collapsed .sidebar-section-title {
   display: none;
 }
 
 .sidebar.collapsed .sidebar-plan {
   padding: 0.75rem 0.5rem;
   justify-content: center;
+}
+
+.sidebar.collapsed .coming-soon-badge {
+  display: none;
+}
+
+.sidebar.collapsed .sidebar-household-name {
+  display: none;
 }
 
 .sidebar.collapsed .sidebar-plan-link {
@@ -1044,19 +1183,8 @@ html.dark .sidebar-expand-btn:hover {
   justify-content: center;
 }
 
-.sidebar.collapsed .sidebar-back-btn {
-  justify-content: center;
-  font-size: 0;
-  padding: 0.6rem;
-}
-
-.sidebar.collapsed .sidebar-back-btn svg {
-  font-size: initial;
-}
-
-.sidebar.collapsed .sidebar-sub-item {
-  justify-content: center;
-  padding: 0.6rem;
+.sidebar.collapsed .sidebar-section {
+  margin-top: 0.25rem;
 }
 
 /* ─── Mobile: sidebar collapses ─── */
@@ -1094,6 +1222,15 @@ html.dark .sidebar-expand-btn:hover {
     display: inline;
   }
 
+  .sidebar-section {
+    flex-direction: row;
+    margin-top: 0;
+  }
+
+  .sidebar-section-title {
+    display: none;
+  }
+
   .sidebar-nav {
     flex-direction: row;
     padding: 0.5rem 0.75rem;
@@ -1102,6 +1239,7 @@ html.dark .sidebar-expand-btn:hover {
     flex: unset;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
+    flex-wrap: nowrap;
   }
 
   .sidebar-nav::-webkit-scrollbar {
@@ -1156,8 +1294,8 @@ html.dark .sidebar-expand-btn:hover {
   }
 
   .header-brand-img {
-    max-height: 26px;
-    max-width: min(130px, 40vw);
+    max-height: 38px;
+    max-width: min(175px, 40vw);
   }
 
   .header-search {
@@ -1183,7 +1321,7 @@ html.dark .sidebar-expand-btn:hover {
 
   .sidebar-link {
     padding: 0.5rem 1.125rem;
-    font-size: 0.875rem;
+    font-size: 0.8125rem;
   }
 }
 </style>

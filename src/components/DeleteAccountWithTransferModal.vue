@@ -80,7 +80,7 @@ function formatBalance(balance: number, currency: string): string {
           v-model="targetAccountId"
           class="input"
         >
-          <option value="" disabled>Seleciona uma conta</option>
+          <option value="" disabled>Selecione uma conta</option>
           <option v-for="a in availableTargets" :key="a.id" :value="a.id">
             {{ a.name }} ({{ formatBalance(a.balance, a.currency) }})
           </option>

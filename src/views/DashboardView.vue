@@ -2,10 +2,13 @@
 import { onMounted, onUnmounted, computed, ref, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import type { ExpenseByCategory, IncomeByCategory, MonthlyTrend } from '@/types/dashboard'
+import { dashboardApi } from '@/api/dashboard'
+import type { DailyBalancePoint } from '@/api/dashboard'
 import type { SavingsObjectiveActive, SavingsObjectiveHistory } from '@/types/objective'
 import { objectivesApi } from '@/api/objectives'
 import { useHouseholdStore } from '@/stores/household'
 import { useAccountsStore } from '@/stores/accounts'
+import { useAssetsStore } from '@/stores/assets'
 import { useSubscriptionStore } from '@/stores/subscription'
 import { useTransactionsStore } from '@/stores/transactions'
 import { TransactionType, TRANSACTION_CATEGORY_LABELS } from '@/types/transaction'
@@ -25,10 +28,13 @@ import IncomePieChart from '@/components/charts/IncomePieChart.vue'
 import MonthlyLineChart from '@/components/charts/MonthlyLineChart.vue'
 import NetWorthChart from '@/components/charts/NetWorthChart.vue'
 import IncomeVsExpensesBarChart from '@/components/charts/IncomeVsExpensesBarChart.vue'
+import PlanUpsellModal from '@/components/PlanUpsellModal.vue'
+import BrandLogo from '@/components/BrandLogo.vue'
 
 const router = useRouter()
 const householdStore = useHouseholdStore()
 const accountsStore = useAccountsStore()
+const assetsStore = useAssetsStore()
 const subscriptionStore = useSubscriptionStore()
 const transactionsStore = useTransactionsStore()
 const dashboard = useDashboard()
@@ -98,9 +104,10 @@ async function loadObjectivesPreview() {
     objectivesReserved.value = Number(pick('reservedByCompletedObjectives')) || 0
     objectivesTotalSavings.value = Number(pick('totalSavings')) || 0
 
-    // totalSavings is already the remaining after completed objectives were "spent"
-    // Distribute it across active objectives by sortOrder priority
-    const available = Math.max(0, objectivesTotalSavings.value)
+    // Pool disponível = já vem calculado pelo backend (poupança menos o que está
+    // reservado por objetivos concluídos ainda não liquidados). Distribuímos esse
+    // valor pelos objetivos ativos por ordem de prioridade.
+    const available = Math.max(0, Number(pick('availableForActiveObjectives')) || 0)
     if (available > 0 && all.length > 0) {
       for (const goal of all) {
         const allocated = Math.min(available, goal.targetAmount)
@@ -120,6 +127,10 @@ async function loadObjectivesPreview() {
       targetDate: parseTargetDateOnly(h.targetDate ?? h.TargetDate),
       sortOrder: Number(h.sortOrder ?? h.SortOrder ?? 0),
       completedAt: String(h.completedAt ?? h.CompletedAt ?? ''),
+      liquidatedAt: (() => {
+        const v = h.liquidatedAt ?? h.LiquidatedAt
+        return v ? String(v) : null
+      })(),
     })) : []
   } catch {
     objectivesPreview.value = []
@@ -363,13 +374,16 @@ onMounted(async () => {
           dashboard.setPeriod(selectedYear.value, selectedMonth.value)
           dashboard.invalidateCache()
           await Promise.all([
-            dashboard.fetch(true),
+            dashboard.fetch(true).then(() => {
+              const trend = dashboard.monthlyTrend.value
+              trendChartData.value = fillMissingMonths(trend, trendChartMonths.value)
+            }),
             accountsStore.fetchAccounts(),
+            assetsStore.fetchAssets().catch(() => {}),
             loadObjectivesPreview(),
             subscriptionStore.fetchSubscription(),
-            fetchChartTrend(),
-            fetchTrendChartData(),
-            transactionsStore.fetchTransactions(),
+            transactionsStore.fetchTransactions({ limit: 5 }),
+            fetchDailyBalance(),
           ])
         }
       })(),
@@ -378,7 +392,7 @@ onMounted(async () => {
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Erro desconhecido'
     if (msg === 'Timeout') {
-      loadError.value = 'O pedido demorou demasiado. Verifica se a API está a correr em http://localhost:5000'
+      loadError.value = 'O pedido demorou demasiado. Verifique se a API está a correr em http://localhost:5000'
     } else {
       const dashErr = dashboard.error.value
       const houseErr = householdStore.error && typeof householdStore.error === 'object' && 'value' in householdStore.error
@@ -403,11 +417,7 @@ const formattedIncome = computed(() => formatCurrency(dashboard.monthlyIncome.va
 const formattedExpenses = computed(() => formatCurrency(dashboard.monthlyExpenses.value, dashboard.currency.value))
 const formattedSavings = computed(() => formatCurrency(dashboard.monthlySavings.value, dashboard.currency.value))
 
-const recentTransactions = computed(() => {
-  const txs = [...transactionsStore.transactions]
-  txs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-  return txs.slice(0, 5)
-})
+const recentTransactions = computed(() => transactionsStore.transactions.slice(0, 5))
 
 const expensesForChart = computed<ExpenseByCategory[]>(() => dashboard.expensesForChart?.value ?? [])
 const incomeForChart = computed<IncomeByCategory[]>(() => dashboard.incomeForChart?.value ?? [])
@@ -430,13 +440,12 @@ const isSingleMonth = computed(() => {
 })
 
 /* Contas e património: sempre dados atuais (não afetados pelo filtro) */
-const accountsToShow = computed(() => accountsStore.accounts)
+const accountsToShow = computed(() =>
+  [...accountsStore.accounts].sort((a, b) => b.balance - a.balance)
+)
 
 const currentTotalBalance = computed(() =>
-  accountsStore.accounts.reduce((sum, a) => sum + a.balance, 0)
-)
-const formattedCurrentBalance = computed(() =>
-  formatCurrency(currentTotalBalance.value, dashboard.currency.value)
+  accountsStore.accounts.reduce((sum, a) => sum + a.balance, 0) + assetsStore.totalCurrentValue
 )
 
 const hasChartData = computed(
@@ -444,6 +453,7 @@ const hasChartData = computed(
 )
 const hasExpensesForChart = computed(() => dashboard.monthlyExpenses.value > 0)
 const hasIncomeForChart = computed(() => dashboard.monthlyIncome.value > 0)
+
 
 const budgetForPeriod = computed(() => {
   budget.budgetStore.value // reactive dependency
@@ -523,7 +533,8 @@ const dailyAverage = computed(() => {
 /* ── Património Total: account category groups ── */
 const accountCategoryGroups = computed(() => {
   const accs = accountsToShow.value
-  const total = accs.reduce((s, a) => s + Math.abs(a.balance), 0)
+  const assetsTotal = assetsStore.totalCurrentValue
+  const total = accs.reduce((s, a) => s + Math.abs(a.balance), 0) + Math.abs(assetsTotal)
 
   const groups = [
     {
@@ -549,7 +560,11 @@ const accountCategoryGroups = computed(() => {
     else groups[2].sum += acc.balance
   }
 
-  return groups.map((g) => ({
+  const rows = groups.map((g) => ({ label: g.label, sum: g.sum }))
+  // Bens e valores entram no Património Total como categoria própria.
+  if (assetsTotal !== 0) rows.push({ label: 'Bens e valores', sum: assetsTotal })
+
+  return rows.map((g) => ({
     label: g.label,
     value: g.sum,
     percent: total > 0 ? (Math.abs(g.sum) / total) * 100 : 0,
@@ -557,6 +572,10 @@ const accountCategoryGroups = computed(() => {
 })
 
 const totalAllocatedToObjectives = computed(() => objectivesReserved.value)
+
+// Apenas os objetivos concluídos que ainda não foram liquidados aparecem no
+// modal "por liquidar". Os já liquidados ficam no histórico mas saem daqui.
+const unliquidatedHistory = computed(() => objectivesHistory.value.filter((h) => !h.liquidatedAt))
 
 function openSettleModal() { settleModalOpen.value = true; settleConfirmId.value = null }
 function closeSettleModal() { settleModalOpen.value = false; settleConfirmId.value = null }
@@ -569,10 +588,10 @@ async function onSettleConfirmYes() {
   if (!settleConfirmId.value) return
   settleLoading.value = true
   try {
-    await objectivesApi.delete(settleConfirmId.value)
+    await objectivesApi.liquidate(settleConfirmId.value)
     await loadObjectivesPreview()
     settleConfirmId.value = null
-    if (objectivesHistory.value.length === 0) closeSettleModal()
+    if (unliquidatedHistory.value.length === 0) closeSettleModal()
   } catch {
     // handled
   } finally {
@@ -582,7 +601,7 @@ async function onSettleConfirmYes() {
 
 function onSettleConfirmNo() {
   closeSettleModal()
-  router.push({ name: 'transactions', query: { tab: 'transactions' } })
+  router.push({ name: 'movimentos', query: { tab: 'movements' } })
 }
 
 function onSettleCancelConfirm() {
@@ -701,45 +720,36 @@ loadCardOrder()
 
 const hideValues = ref(false)
 
-const todayLabel = computed(() => {
-  const d = new Date()
-  return d.toLocaleDateString('pt-PT', { day: 'numeric', month: 'long', year: 'numeric' })
-})
 
 /* ── Net worth chart period filter ── */
 type ChartPeriod = 'YTD' | '3M' | '6M' | '1A' | '5A'
 const chartPeriod = ref<ChartPeriod>('6M')
 const chartPeriods: ChartPeriod[] = ['YTD', '3M', '6M', '1A', '5A']
 
-const chartTrendMonths = computed(() => {
-  if (chartPeriod.value === 'YTD') {
-    // January = month 1, so current month number = months since start of year (including current)
-    return new Date().getMonth() + 1
-  }
-  const map: Record<ChartPeriod, number> = { YTD: 0, '3M': 3, '6M': 6, '1A': 12, '5A': 60 }
-  return map[chartPeriod.value]
-})
-
-const chartTrendData = ref<MonthlyTrend[]>([])
+const dailyBalancePoints = ref<DailyBalancePoint[]>([])
 const chartLoading = ref(false)
 
-async function fetchChartTrend() {
+const chartDays = computed(() => {
+  if (chartPeriod.value === 'YTD') {
+    const now = new Date()
+    const start = new Date(now.getFullYear(), 0, 1)
+    return Math.ceil((now.getTime() - start.getTime()) / 86400000)
+  }
+  const map: Record<string, number> = { '3M': 90, '6M': 180, '1A': 365, '5A': 1825 }
+  return map[chartPeriod.value] ?? 180
+})
+
+async function fetchDailyBalance() {
   chartLoading.value = true
   try {
-    const response = await import('@/api/dashboard').then((m) =>
-      m.dashboardApi.get({ trendMonths: chartTrendMonths.value })
-    )
+    const response = await dashboardApi.getDailyBalance(chartDays.value)
     const res = (response.data ?? response) as unknown as Record<string, unknown>
     const get = (key: string) => res[key] ?? res[key.charAt(0).toUpperCase() + key.slice(1)]
-    const arr = get('monthlyTrend')
-    if (Array.isArray(arr)) {
-      chartTrendData.value = arr.map((x: Record<string, unknown>) => ({
-        year: Number(x.year ?? x.Year) || 0,
-        month: Number(x.month ?? x.Month) || 0,
-        label: String(x.label ?? x.Label ?? ''),
-        income: Number(x.income ?? x.Income) || 0,
-        expenses: Number(x.expenses ?? x.Expenses) || 0,
-        savings: Number(x.savings ?? x.Savings) || 0,
+    const pts = get('points')
+    if (Array.isArray(pts)) {
+      dailyBalancePoints.value = pts.map((x: Record<string, unknown>) => ({
+        date: String(x.date ?? x.Date ?? ''),
+        balance: Number(x.balance ?? x.Balance) || 0,
       }))
     }
   } catch {
@@ -749,7 +759,52 @@ async function fetchChartTrend() {
   }
 }
 
-watch(chartPeriod, () => fetchChartTrend())
+watch(chartPeriod, () => fetchDailyBalance())
+
+const chartHoverPoint = ref<{ date: string; balance: number } | null>(null)
+
+function onChartHover(point: { date: string; balance: number } | null) {
+  chartHoverPoint.value = point
+}
+
+const heroDisplayBalance = computed(() => {
+  if (chartHoverPoint.value) return chartHoverPoint.value.balance
+  return currentTotalBalance.value
+})
+
+const heroDisplayDate = computed(() => {
+  if (chartHoverPoint.value) {
+    const today = new Date()
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+    if (chartHoverPoint.value.date === todayStr) return 'Hoje'
+    const d = new Date(chartHoverPoint.value.date + 'T00:00:00')
+    return d.toLocaleDateString('pt-PT', { day: 'numeric', month: 'long', year: 'numeric' })
+  }
+  return 'Hoje'
+})
+
+/* ── Variação do património vs. fim do mês anterior ── */
+const monthChange = computed<{ pct: number; positive: boolean } | null>(() => {
+  const pts = dailyBalancePoints.value
+  if (pts.length === 0) return null
+  const now = new Date()
+  // Último dia do mês anterior = dia 0 do mês atual
+  const endPrev = new Date(now.getFullYear(), now.getMonth(), 0)
+  const target = `${endPrev.getFullYear()}-${String(endPrev.getMonth() + 1).padStart(2, '0')}-${String(endPrev.getDate()).padStart(2, '0')}`
+  // Saldo no fim do mês anterior = último ponto (série ascendente) com data <= alvo
+  let prevBalance: number | null = null
+  for (const p of pts) {
+    if (p.date <= target) prevBalance = p.balance
+    else break
+  }
+  if (prevBalance === null || prevBalance === 0) return null
+  const pct = ((currentTotalBalance.value - prevBalance) / Math.abs(prevBalance)) * 100
+  return { pct, positive: pct >= 0 }
+})
+
+function formatPct(pct: number): string {
+  return Math.abs(pct).toFixed(1).replace('.', ',') + '%'
+}
 
 /* ── Seletor de período para gráficos de tendência (line + bar) ── */
 type TrendChartPeriod = 'YTD' | '3M' | '6M' | '1A' | '5A'
@@ -764,6 +819,40 @@ const trendChartMonths = computed(() => {
   return map[trendChartPeriod.value]
 })
 
+const MONTH_SHORT = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
+
+function fillMissingMonths(data: MonthlyTrend[], totalMonths: number): MonthlyTrend[] {
+  const now = new Date()
+  const endYear = now.getFullYear()
+  const endMonth = now.getMonth() + 1
+  const allMonths: MonthlyTrend[] = []
+  const dataMap = new Map<string, MonthlyTrend>()
+  for (const d of data) {
+    dataMap.set(`${d.year}-${d.month}`, d)
+  }
+  for (let i = totalMonths - 1; i >= 0; i--) {
+    let y = endYear
+    let m = endMonth - i
+    while (m <= 0) { m += 12; y-- }
+    while (m > 12) { m -= 12; y++ }
+    const key = `${y}-${m}`
+    const existing = dataMap.get(key)
+    if (existing) {
+      allMonths.push(existing)
+    } else {
+      allMonths.push({
+        year: y,
+        month: m,
+        label: `${MONTH_SHORT[m - 1]} ${y}`,
+        income: 0,
+        expenses: 0,
+        savings: 0,
+      })
+    }
+  }
+  return allMonths
+}
+
 async function fetchTrendChartData() {
   trendChartLoading.value = true
   try {
@@ -774,7 +863,7 @@ async function fetchTrendChartData() {
     const get = (key: string) => res[key] ?? res[key.charAt(0).toUpperCase() + key.slice(1)]
     const arr = get('monthlyTrend')
     if (Array.isArray(arr)) {
-      trendChartData.value = arr.map((x: Record<string, unknown>) => ({
+      const parsed = arr.map((x: Record<string, unknown>) => ({
         year: Number(x.year ?? x.Year) || 0,
         month: Number(x.month ?? x.Month) || 0,
         label: String(x.label ?? x.Label ?? ''),
@@ -782,12 +871,27 @@ async function fetchTrendChartData() {
         expenses: Number(x.expenses ?? x.Expenses) || 0,
         savings: Number(x.savings ?? x.Savings) || 0,
       }))
+      trendChartData.value = fillMissingMonths(parsed, trendChartMonths.value)
     }
   } catch { /* keep existing */ }
   finally { trendChartLoading.value = false }
 }
 
 watch(trendChartPeriod, () => fetchTrendChartData())
+
+/* ── Períodos longos (1A/5A) são exclusivos dos planos Pro/Couple ── */
+const periodUpsellOpen = ref(false)
+function isPeriodLocked(p: string): boolean {
+  return subscriptionStore.isFree && (p === '1A' || p === '5A')
+}
+function selectChartPeriod(p: ChartPeriod) {
+  if (isPeriodLocked(p)) { periodUpsellOpen.value = true; return }
+  chartPeriod.value = p
+}
+function selectTrendPeriod(p: TrendChartPeriod) {
+  if (isPeriodLocked(p)) { periodUpsellOpen.value = true; return }
+  trendChartPeriod.value = p
+}
 
 const showContent = computed(() =>
   mounted.value &&
@@ -809,11 +913,11 @@ const showContent = computed(() =>
 
     <div v-if="loadError" class="error-state">
       <p>{{ loadError }}</p>
-      <p class="error-hint">Abre a consola do browser (F12) e o separador Network para verificar os pedidos à API.</p>
+      <p class="error-hint">Abra a consola do browser (F12) e o separador Network para verificar os pedidos à API.</p>
     </div>
 
     <div v-else-if="!householdStore.household && !householdStore.loading && mounted" class="empty-state">
-      <p>Configura primeiro o teu household.</p>
+      <p>Configure primeiro o seu household.</p>
       <router-link to="/household" class="link">Ir para Household</router-link>
     </div>
 
@@ -829,13 +933,19 @@ const showContent = computed(() =>
           <div class="patrimonio-info">
             <span class="patrimonio-label-row">
               <span class="patrimonio-label">PATRIMÔNIO TOTAL</span>
+              <span class="card-info card-info--inline card-info--right" tabindex="0" role="button" aria-label="O que inclui o património total?"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="16" y2="12"/><line x1="12" x2="12.01" y1="8" y2="8"/></svg><span class="card-tooltip" role="tooltip">Soma dos saldos atuais de todas as contas. O valor reservado para objetivos está incluído (não é descontado). Investimentos e Bens e Valores serão somados em breve.</span></span>
               <button class="patrimonio-eye-btn" @click="hideValues = !hideValues" :title="hideValues ? 'Mostrar valores' : 'Esconder valores'">
                 <svg v-if="!hideValues" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>
                 <svg v-else xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/></svg>
               </button>
             </span>
-            <p class="patrimonio-value">{{ hideValues ? '••••••' : formattedCurrentBalance }}</p>
-            <span class="patrimonio-date">{{ todayLabel }}</span>
+            <p class="patrimonio-value">{{ hideValues ? '••••••' : formatCurrency(heroDisplayBalance, dashboard.currency.value) }}</p>
+            <span
+              v-if="monthChange && !hideValues"
+              class="patrimonio-trend"
+              :class="{ 'patrimonio-trend--down': !monthChange.positive }"
+            >{{ monthChange.positive ? '▲' : '▼' }} {{ formatPct(monthChange.pct) }} este mês</span>
+            <span class="patrimonio-date">{{ heroDisplayDate }}</span>
             <span v-if="totalAllocatedToObjectives > 0" class="patrimonio-reserved">
               {{ hideValues ? '•••••' : formatCurrency(totalAllocatedToObjectives, dashboard.currency.value) }} reservado para objetivos
               <button type="button" class="settle-btn" @click="openSettleModal" title="Liquidar objetivos concluídos">
@@ -849,7 +959,7 @@ const showContent = computed(() =>
               :key="p"
               class="patrimonio-period-btn"
               :class="{ active: chartPeriod === p }"
-              @click="chartPeriod = p"
+              @click="selectChartPeriod(p)"
             >{{ p }}</button>
           </div>
         </div>
@@ -873,14 +983,16 @@ const showContent = computed(() =>
               <div class="spinner"></div>
             </div>
             <NetWorthChart
-              v-else-if="chartTrendData.length > 0"
-              :trend-data="chartTrendData"
-              :current-balance="currentTotalBalance"
+              v-else-if="dailyBalancePoints.length > 0"
+              :points="dailyBalancePoints"
               :currency="dashboard.currency.value"
+              :hide-values="hideValues"
+              :period="chartPeriod"
+              @hover="onChartHover"
             />
             <div v-else class="patrimonio-chart-empty">
               <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="patrimonio-chart-empty-icon"><line x1="3" x2="3" y1="3" y2="21"/><line x1="3" x2="21" y1="21" y2="21"/><line x1="7" x2="7" y1="17" y2="13"/><line x1="12" x2="12" y1="17" y2="8"/><line x1="17" x2="17" y1="17" y2="11"/></svg>
-              <p>Sem dados de evolução disponíveis</p>
+              <p>Sem dados de evolução disponíveis para mostrar</p>
             </div>
           </div>
         </div>
@@ -913,22 +1025,25 @@ const showContent = computed(() =>
               <span v-if="cardEditMode" class="card-drag-handle" title="Arrastar para reordenar">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="5" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="19" r="1"/></svg>
               </span>
-              <router-link v-else :to="{ name: 'accounts' }" class="static-card-link" title="Ver todas"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></router-link>
+              <router-link v-else :to="{ name: 'contas' }" class="static-card-link" title="Ver todas"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></router-link>
             </div>
           </div>
           <div v-if="accountsToShow.length > 0" class="accounts-list">
             <router-link
               v-for="account in accountsToShow.slice(0, 4)"
               :key="account.id"
-              :to="{ name: 'accounts' }"
+              :to="{ name: 'contas' }"
               class="account-row"
             >
               <div class="account-row-info">
-                <span v-if="isCreditCard(account.type)" class="account-row-icon" aria-hidden="true">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/>
-                  </svg>
-                </span>
+                <BrandLogo :name="account.name" :domain="account.logoDomain" :size="30" class="account-row-logo">
+                  <template #fallback>
+                    <span class="account-row-fallback" aria-hidden="true">
+                      <svg v-if="isCreditCard(account.type)" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
+                      <svg v-else xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" x2="21" y1="22" y2="22"/><line x1="6" x2="6" y1="18" y2="11"/><line x1="10" x2="10" y1="18" y2="11"/><line x1="14" x2="14" y1="18" y2="11"/><line x1="18" x2="18" y1="18" y2="11"/><polygon points="12 2 20 7 4 7"/></svg>
+                    </span>
+                  </template>
+                </BrandLogo>
                 <div>
                   <p class="account-row-name">{{ account.name }}</p>
                   <span class="account-row-type">{{ accountTypeLabel(account.type) }}</span>
@@ -940,9 +1055,9 @@ const showContent = computed(() =>
             </router-link>
           </div>
           <div v-else class="static-card-empty">
-            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="static-card-empty-icon"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
+            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="static-card-empty-icon"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 10h20"/><circle cx="17" cy="15" r="1.5"/></svg>
             <p>Veja o saldo das suas contas num só lugar</p>
-            <router-link to="/accounts" class="static-card-action">Adicionar</router-link>
+            <router-link to="/accounts?action=new" class="static-card-action">Adicionar</router-link>
           </div>
         </div>
 
@@ -959,7 +1074,7 @@ const showContent = computed(() =>
               <span v-if="cardEditMode" class="card-drag-handle" title="Arrastar para reordenar">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="5" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="19" r="1"/></svg>
               </span>
-              <router-link v-else :to="{ name: 'objectives' }" class="static-card-link" title="Ver todos"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></router-link>
+              <router-link v-else :to="{ name: 'objetivos' }" class="static-card-link" title="Ver todos"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></router-link>
             </div>
           </div>
           <div
@@ -978,7 +1093,7 @@ const showContent = computed(() =>
                   <router-link
                     v-for="goal in objectivesPreview"
                     :key="goal.id"
-                    :to="{ name: 'objectives' }"
+                    :to="{ name: 'objetivos' }"
                     class="objective-row"
                   >
                     <div class="objective-row-top">
@@ -1006,20 +1121,20 @@ const showContent = computed(() =>
                 </div>
               </div>
               <div v-else-if="objectivesLoaded" class="static-card-empty">
-                <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="static-card-empty-icon"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
-                <p>Defina objetivos de poupança para acompanhar o progresso</p>
+                <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="static-card-empty-icon"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/><line x1="22" x2="12" y1="2" y2="12"/></svg>
+                <p>Defina objetivos de poupança para acompanhar o seu progresso</p>
                 <router-link
                   v-if="subscriptionStore.canAccessObjectives"
-                  :to="{ name: 'objectives' }"
+                  :to="{ name: 'objetivos', query: { action: 'new' } }"
                   class="static-card-action"
                 >Criar objetivo</router-link>
-                <router-link v-else :to="{ name: 'subscription' }" class="static-card-action">Ver planos</router-link>
+                <router-link v-else :to="{ name: 'subscricao' }" class="static-card-action">Ver planos</router-link>
               </div>
             </div>
             <div v-if="!subscriptionStore.canAccessObjectives && objectivesPreview.length > 0" class="dashboard-objectives-lock-overlay">
               <div class="dashboard-objectives-lock-panel">
                 <p class="dashboard-objectives-lock-text">Atualize o plano para visualização completa</p>
-                <router-link :to="{ name: 'subscription' }" class="btn-add-objective dashboard-objectives-lock-cta">Ver planos</router-link>
+                <router-link :to="{ name: 'subscricao' }" class="btn-add-objective dashboard-objectives-lock-cta">Ver planos</router-link>
               </div>
             </div>
           </div>
@@ -1038,21 +1153,25 @@ const showContent = computed(() =>
               <span v-if="cardEditMode" class="card-drag-handle" title="Arrastar para reordenar">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="5" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="19" r="1"/></svg>
               </span>
-              <router-link v-else :to="{ name: 'transactions' }" class="static-card-link" title="Ver todos"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></router-link>
+              <router-link v-else :to="{ name: 'movimentos' }" class="static-card-link" title="Ver todos"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></router-link>
             </div>
           </div>
           <div v-if="recentTransactions.length > 0" class="movements-list">
             <router-link
               v-for="tx in recentTransactions"
               :key="tx.id"
-              :to="{ name: 'transactions' }"
+              :to="{ name: 'movimentos' }"
               class="movement-row"
             >
               <div class="movement-row-left">
-                <span class="movement-row-icon" :class="tx.type === TransactionType.Income ? 'income' : 'expense'">
-                  <svg v-if="tx.type === TransactionType.Income" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 11 12 6 7 11"/><line x1="12" x2="12" y1="6" y2="18"/></svg>
-                  <svg v-else xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="7 13 12 18 17 13"/><line x1="12" x2="12" y1="18" y2="6"/></svg>
-                </span>
+                <BrandLogo :name="tx.entityName || tx.description" :size="28">
+                  <template #fallback>
+                    <span class="movement-row-icon" :class="tx.type === TransactionType.Income ? 'income' : 'expense'">
+                      <svg v-if="tx.type === TransactionType.Income" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 11 12 6 7 11"/><line x1="12" x2="12" y1="6" y2="18"/></svg>
+                      <svg v-else xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="7 13 12 18 17 13"/><line x1="12" x2="12" y1="18" y2="6"/></svg>
+                    </span>
+                  </template>
+                </BrandLogo>
                 <div>
                   <p class="movement-row-desc">{{ tx.description || TRANSACTION_CATEGORY_LABELS[tx.category] || 'Transação' }}</p>
                   <span class="movement-row-date">{{ new Date(tx.date).toLocaleDateString('pt-PT', { day: '2-digit', month: 'short' }) }}</span>
@@ -1064,9 +1183,9 @@ const showContent = computed(() =>
             </router-link>
           </div>
           <div v-else class="static-card-empty">
-            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="static-card-empty-icon"><circle cx="12" cy="12" r="10"/><path d="M15 9.354a4 4 0 1 0 0 5.292M9 12h7"/></svg>
+            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="static-card-empty-icon"><line x1="7" x2="7" y1="18" y2="6"/><polyline points="3 10 7 6 11 10"/><line x1="17" x2="17" y1="6" y2="18"/><polyline points="13 14 17 18 21 14"/></svg>
             <p>Nenhum movimento registado</p>
-            <router-link to="/transactions" class="static-card-action">Adicionar</router-link>
+            <router-link to="/transactions?tab=movements&action=new" class="static-card-action">Adicionar</router-link>
           </div>
         </div>
         </template>
@@ -1082,26 +1201,22 @@ const showContent = computed(() =>
               :key="p"
               class="patrimonio-period-btn"
               :class="{ active: trendChartPeriod === p }"
-              @click="trendChartPeriod = p"
+              @click="selectTrendPeriod(p)"
             >{{ p }}</button>
           </div>
         </div>
         <div v-if="trendChartLoading" class="trend-loading"><div class="spinner"></div></div>
-        <div v-else class="trend-card-charts">
+        <div v-else class="trend-card-charts" :class="{ 'trend-card-charts--stacked': trendChartData.length > 8 }">
           <div class="chart-card">
             <h3 class="chart-title">Evolução mensal</h3>
-            <div class="trend-charts-scroll" :class="{ 'trend-charts-scroll--wide': trendChartData.length > 8 }">
-              <div class="trend-charts-inner" :style="trendChartData.length > 8 ? { minWidth: (trendChartData.length * 80) + 'px' } : {}">
-                <MonthlyLineChart :data="trendChartData" />
-              </div>
+            <div class="trend-charts-inner">
+              <MonthlyLineChart :data="trendChartData" :period="trendChartPeriod" />
             </div>
           </div>
-          <div v-if="trendChartData.length > 1" class="chart-card">
+          <div class="chart-card">
             <h3 class="chart-title">Receitas vs Despesas</h3>
-            <div class="trend-charts-scroll" :class="{ 'trend-charts-scroll--wide': trendChartData.length > 8 }">
-              <div class="trend-charts-inner" :style="trendChartData.length > 8 ? { minWidth: (trendChartData.length * 80) + 'px' } : {}">
-                <IncomeVsExpensesBarChart :data="trendChartData" />
-              </div>
+            <div class="trend-charts-inner">
+              <IncomeVsExpensesBarChart :data="trendChartData" :period="trendChartPeriod" />
             </div>
           </div>
         </div>
@@ -1201,22 +1316,22 @@ const showContent = computed(() =>
         <template v-else>
         <div class="summary-cards summary-cards-fallback">
           <div class="card card-income">
-            <p class="card-title card-title--with-arrow">Receitas <svg class="card-arrow card-arrow--income" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 11 12 6 7 11"/><line x1="12" x2="12" y1="6" y2="18"/></svg></p>
+            <p class="card-title card-title--with-arrow">Receitas <svg class="card-arrow card-arrow--income" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 11 12 6 7 11"/><line x1="12" x2="12" y1="6" y2="18"/></svg><span class="card-info" tabindex="0" role="button" aria-label="O que são as receitas?"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="16" y2="12"/><line x1="12" x2="12.01" y1="8" y2="8"/></svg><span class="card-tooltip" role="tooltip">Total de receitas do período selecionado.</span></span></p>
             <p class="card-value">{{ hideValues ? '••••• €' : formattedIncome }}</p>
             <p class="card-subtitle">{{ periodLabel }}</p>
           </div>
           <div class="card card-expense">
-            <p class="card-title card-title--with-arrow">Despesas <svg class="card-arrow card-arrow--expense" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="7 13 12 18 17 13"/><line x1="12" x2="12" y1="18" y2="6"/></svg></p>
+            <p class="card-title card-title--with-arrow">Despesas <svg class="card-arrow card-arrow--expense" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="7 13 12 18 17 13"/><line x1="12" x2="12" y1="18" y2="6"/></svg><span class="card-info" tabindex="0" role="button" aria-label="O que são as despesas?"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="16" y2="12"/><line x1="12" x2="12.01" y1="8" y2="8"/></svg><span class="card-tooltip" role="tooltip">Total de despesas do período selecionado.</span></span></p>
             <p class="card-value">{{ hideValues ? '••••• €' : formattedExpenses }}</p>
             <p class="card-subtitle">{{ periodLabel }}</p>
           </div>
           <div class="card card-savings">
-            <p class="card-title card-title--with-arrow">Poupança <svg class="card-arrow card-arrow--savings" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 5c-1.5 0-2.8 1.4-3 2-3.5-1.5-11-.3-11 5 0 1.8 0 3 2 4.5V20h4v-2h3v2h4v-4c1-.5 1.7-1 2-2h2v-4h-2c0-1-.5-1.5-1-2"/><path d="M2 9.1C1.7 11 2 12 2 12"/><circle cx="15.5" cy="9.5" r=".5" fill="currentColor"/></svg></p>
+            <p class="card-title card-title--with-arrow">Poupança <svg class="card-arrow card-arrow--savings" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 5c-1.5 0-2.8 1.4-3 2-3.5-1.5-11-.3-11 5 0 1.8 0 3 2 4.5V20h4v-2h3v2h4v-4c1-.5 1.7-1 2-2h2v-4h-2c0-1-.5-1.5-1-2"/><path d="M2 9.1C1.7 11 2 12 2 12"/><circle cx="15.5" cy="9.5" r=".5" fill="currentColor"/></svg><span class="card-info" tabindex="0" role="button" aria-label="O que é a poupança?"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="16" y2="12"/><line x1="12" x2="12.01" y1="8" y2="8"/></svg><span class="card-tooltip" role="tooltip">Receitas − Despesas do período selecionado.</span></span></p>
             <p class="card-value">{{ hideValues ? '••••• €' : formattedSavings }}</p>
             <p class="card-subtitle">{{ periodLabel }}</p>
           </div>
           <div class="card card-savings">
-            <p class="card-title card-title--with-arrow">Taxa de poupança <svg class="card-arrow card-arrow--rate" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" x2="9" y1="9" y2="15"/><line x1="9" x2="9.01" y1="9" y2="9"/><line x1="15" x2="15.01" y1="15" y2="15"/></svg></p>
+            <p class="card-title card-title--with-arrow">Taxa de poupança <svg class="card-arrow card-arrow--rate" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" x2="9" y1="9" y2="15"/><line x1="9" x2="9.01" y1="9" y2="9"/><line x1="15" x2="15.01" y1="15" y2="15"/></svg><span class="card-info" tabindex="0" role="button" aria-label="O que é a taxa de poupança?"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="16" y2="12"/><line x1="12" x2="12.01" y1="8" y2="8"/></svg><span class="card-tooltip" role="tooltip">Percentagem das receitas que foi poupada (Poupança ÷ Receitas).</span></span></p>
             <p class="card-value">{{ hideValues ? '•••' : formatPercent(savingsRate) }}</p>
             <p class="card-subtitle">% da receita real poupada</p>
           </div>
@@ -1227,6 +1342,7 @@ const showContent = computed(() =>
               <span class="daily-avg-banner-title">
                 <svg class="daily-avg-banner-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
                 Média diária de gastos
+                <span class="card-info card-info--inline" tabindex="0" role="button" aria-label="O que é a média diária de gastos?"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="16" y2="12"/><line x1="12" x2="12.01" y1="8" y2="8"/></svg><span class="card-tooltip" role="tooltip">Despesas do período ÷ número de dias. No mês atual, a projeção estima o total ao manter este ritmo até ao fim do mês.</span></span>
               </span>
               <span class="daily-avg-banner-value-row">
                 <span class="daily-avg-banner-value">{{ hideValues ? '••••• €' : formatCurrency(dailyAverage.avg, dashboard.currency.value) }}</span>
@@ -1246,13 +1362,17 @@ const showContent = computed(() =>
         </div>
         <!-- Gráficos de movimentos (dentro do mesmo card) -->
         <div v-if="hasChartData" class="charts-section-inner">
-          <div v-if="hasExpensesForChart" class="chart-card">
-            <h3 class="chart-title">Despesas por categoria</h3>
-            <ExpensesPieChart :data="expensesForChart" />
-          </div>
-          <div v-if="hasIncomeForChart" class="chart-card">
-            <h3 class="chart-title">Receitas por categoria</h3>
-            <IncomePieChart :data="incomeForChart" />
+          <div class="charts-side-by-side">
+            <div class="chart-card">
+              <h3 class="chart-title">Despesas por categoria</h3>
+              <ExpensesPieChart v-if="hasExpensesForChart" :data="expensesForChart" />
+              <p v-else class="chart-empty-text">Sem despesas neste período</p>
+            </div>
+            <div class="chart-card">
+              <h3 class="chart-title">Receitas por categoria</h3>
+              <IncomePieChart v-if="hasIncomeForChart" :data="incomeForChart" />
+              <p v-else class="chart-empty-text">Sem receitas neste período</p>
+            </div>
           </div>
         </div>
         <!-- Plano mensal (dentro do card filtrado) -->
@@ -1269,7 +1389,7 @@ const showContent = computed(() =>
                 <span class="comparison-label">Real</span>
                 <span class="comparison-value">{{ hideValues ? '••••• €' : formattedIncome }}</span>
               </div>
-              <div v-if="budgetForPeriod.expectedIncome > 0 && !hideValues" class="comparison-diff">
+              <div v-if="budgetForPeriod.expectedIncome > 0 && !hideValues" class="comparison-diff" :class="dashboard.monthlyIncome.value >= budgetForPeriod.expectedIncome ? 'comparison-diff--good' : 'comparison-diff--over'">
                 {{ dashboard.monthlyIncome.value >= budgetForPeriod.expectedIncome ? '✓' : '' }}
                 {{ formatCurrency(dashboard.monthlyIncome.value - budgetForPeriod.expectedIncome, dashboard.currency.value) }}
                 {{ dashboard.monthlyIncome.value >= budgetForPeriod.expectedIncome ? 'acima' : 'abaixo' }}
@@ -1285,7 +1405,7 @@ const showContent = computed(() =>
                 <span class="comparison-label">Real</span>
                 <span class="comparison-value">{{ hideValues ? '••••• €' : formattedExpenses }}</span>
               </div>
-              <div v-if="budgetForPeriod.expectedExpenses > 0 && !hideValues" class="comparison-diff" :class="{ 'comparison-diff--over': dashboard.monthlyExpenses.value > budgetForPeriod.expectedExpenses }">
+              <div v-if="budgetForPeriod.expectedExpenses > 0 && !hideValues" class="comparison-diff" :class="dashboard.monthlyExpenses.value <= budgetForPeriod.expectedExpenses ? 'comparison-diff--good' : 'comparison-diff--over'">
                 {{ dashboard.monthlyExpenses.value <= budgetForPeriod.expectedExpenses ? '✓' : '' }}
                 {{ formatCurrency(dashboard.monthlyExpenses.value - budgetForPeriod.expectedExpenses, dashboard.currency.value) }}
                 {{ dashboard.monthlyExpenses.value <= budgetForPeriod.expectedExpenses ? 'abaixo do orçamento' : 'acima do orçamento' }}
@@ -1301,7 +1421,7 @@ const showContent = computed(() =>
                 <span class="comparison-label">Real</span>
                 <span class="comparison-value">{{ hideValues ? '••••• €' : formattedSavings }}</span>
               </div>
-              <div v-if="(budgetForPeriod.expectedIncome - budgetForPeriod.expectedExpenses) > 0 && !hideValues" class="comparison-diff" :class="{ 'comparison-diff--over': dashboard.monthlySavings.value < (budgetForPeriod.expectedIncome - budgetForPeriod.expectedExpenses) }">
+              <div v-if="(budgetForPeriod.expectedIncome - budgetForPeriod.expectedExpenses) > 0 && !hideValues" class="comparison-diff" :class="dashboard.monthlySavings.value >= (budgetForPeriod.expectedIncome - budgetForPeriod.expectedExpenses) ? 'comparison-diff--good' : 'comparison-diff--over'">
                 {{ dashboard.monthlySavings.value >= (budgetForPeriod.expectedIncome - budgetForPeriod.expectedExpenses) ? '✓' : '' }}
                 {{ formatCurrency(dashboard.monthlySavings.value - (budgetForPeriod.expectedIncome - budgetForPeriod.expectedExpenses), dashboard.currency.value) }}
                 {{ dashboard.monthlySavings.value >= (budgetForPeriod.expectedIncome - budgetForPeriod.expectedExpenses) ? 'acima do esperado' : 'abaixo do esperado' }}
@@ -1309,8 +1429,8 @@ const showContent = computed(() =>
             </div>
           </div>
           <div v-else class="section-empty">
-            <p class="section-empty-text">Ainda não definiste o teu plano mensal.</p>
-            <router-link to="/monthly" class="btn-section-add">Adicionar o seu plano mensal</router-link>
+            <p class="section-empty-text">Ainda não definiu o seu plano mensal</p>
+            <router-link to="/monthly-plan" class="btn-section-add">Adicionar plano mensal</router-link>
           </div>
         </div>
         </template>
@@ -1348,10 +1468,10 @@ const showContent = computed(() =>
           </div>
 
           <div v-else class="settle-list">
-            <div v-if="objectivesHistory.length === 0" class="settle-empty">
-              <p>Nenhum objetivo concluído por liquidar.</p>
+            <div v-if="unliquidatedHistory.length === 0" class="settle-empty">
+              <p>Nenhum objetivo concluído por liquidar</p>
             </div>
-            <div v-for="h in objectivesHistory" :key="h.id" class="settle-item">
+            <div v-for="h in unliquidatedHistory" :key="h.id" class="settle-item">
               <div class="settle-item-info">
                 <span class="settle-item-name">{{ h.name }}</span>
                 <span class="settle-item-amount">{{ formatCurrency(h.targetAmount, dashboard.currency.value) }}</span>
@@ -1366,6 +1486,17 @@ const showContent = computed(() =>
       </div>
     </Transition>
   </Teleport>
+
+  <PlanUpsellModal
+    :open="periodUpsellOpen"
+    description="Atingiu o limite do plano Free. Faça upgrade para aceder ao histórico alargado do seu património."
+    :features="[
+      'Evolução do património até 5 anos',
+      'Objetivos de poupança e relatórios mensais',
+      'Transações recorrentes ilimitadas',
+    ]"
+    @close="periodUpsellOpen = false"
+  />
 </template>
 
 <style scoped>
@@ -1771,6 +1902,7 @@ html.dark .objectives-completed-badge {
 }
 
 .summary-cards-fallback .card {
+  position: relative;
   background: var(--color-bg-card);
   border-radius: 14px;
   padding: 1.125rem 1.25rem;
@@ -1788,6 +1920,121 @@ html.dark .objectives-completed-badge {
   display: inline-flex;
   align-items: center;
   gap: 0.375rem;
+}
+
+/* ── Info tooltip (i) no canto superior direito dos cards do dashboard ── */
+.card-info {
+  position: absolute;
+  top: 0.875rem;
+  right: 1rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-muted);
+  cursor: help;
+  outline: none;
+  flex-shrink: 0;
+  z-index: 2;
+  transition: color 0.15s ease;
+}
+
+.card-info:hover,
+.card-info:focus-visible {
+  color: var(--color-success);
+}
+
+.card-tooltip {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  right: -0.25rem;
+  transform: translateY(4px);
+  width: max-content;
+  max-width: 220px;
+  padding: 0.625rem 0.75rem;
+  background: var(--color-bg-card);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.4;
+  text-transform: none;
+  letter-spacing: normal;
+  text-align: left;
+  z-index: 30;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.15s ease, transform 0.15s ease, visibility 0.15s;
+}
+
+.card-tooltip::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  right: 0.5rem;
+  border: 6px solid transparent;
+  border-top-color: var(--color-border);
+}
+
+.card-info:hover .card-tooltip,
+.card-info:focus-visible .card-tooltip {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+/* Variante inline (ex.: banner da média diária) — fica junto ao título e o
+   tooltip abre centrado sobre o ícone, em vez de no canto do card. */
+.card-info--inline {
+  position: relative;
+  top: auto;
+  right: auto;
+  vertical-align: middle;
+  margin-left: 0.25rem;
+}
+
+.card-info--inline .card-tooltip {
+  right: auto;
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+}
+
+.card-info--inline:hover .card-tooltip,
+.card-info--inline:focus-visible .card-tooltip {
+  transform: translateX(-50%) translateY(0);
+}
+
+.card-info--inline .card-tooltip::after {
+  right: auto;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+/* Variante que abre para a DIREITA, ao lado do ícone (evita o corte em cima
+   quando está no topo da página). Usar com --inline. */
+.card-info--right .card-tooltip {
+  bottom: auto;
+  top: 50%;
+  left: calc(100% + 8px);
+  right: auto;
+  transform: translateY(calc(-50% - 8px)) translateX(-4px);
+}
+
+.card-info--right:hover .card-tooltip,
+.card-info--right:focus-visible .card-tooltip {
+  transform: translateY(calc(-50% - 8px)) translateX(0);
+}
+
+.card-info--right .card-tooltip::after {
+  top: calc(50% + 8px);
+  left: auto;
+  right: 100%;
+  bottom: auto;
+  transform: translateY(-50%);
+  border-top-color: transparent;
+  border-right-color: var(--color-border);
 }
 
 .summary-cards-fallback .card-arrow {
@@ -1955,6 +2202,14 @@ html.dark .comparison-icon--savings {
   border-top: 1px dashed var(--color-border);
 }
 
+.comparison-diff--good {
+  color: #16a34a;
+}
+
+html.dark .comparison-diff--good {
+  color: #4ade80;
+}
+
 .comparison-diff--over {
   color: #dc2626;
 }
@@ -2082,18 +2337,36 @@ html.dark .daily-avg-banner-progress-bar {
     flex-direction: column;
     align-items: flex-start;
   }
+
+  .charts-side-by-side {
+    grid-template-columns: 1fr;
+  }
 }
 
 .charts-section-inner {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  display: flex;
+  flex-direction: column;
   gap: 1.25rem;
   margin-top: 1.5rem;
   padding-top: 1.25rem;
   border-top: 1px solid var(--color-border);
 }
 
+.charts-side-by-side {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.chart-empty-text {
+  text-align: center;
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
+  padding: 2rem 0;
+}
+
 .chart-card {
+  width: 100%;
   background: var(--color-bg-card);
   border-radius: 14px;
   padding: 1.375rem;
@@ -2135,34 +2408,15 @@ html.dark .daily-avg-banner-progress-bar {
   gap: 1.25rem;
 }
 
+.trend-card-charts--stacked {
+  grid-template-columns: 1fr;
+}
+
 .trend-loading {
   display: flex;
   justify-content: center;
   align-items: center;
   height: 280px;
-}
-
-.trend-charts-scroll {
-  position: relative;
-}
-
-.trend-charts-scroll--wide {
-  overflow-x: auto;
-  overflow-y: hidden;
-  -webkit-overflow-scrolling: touch;
-}
-
-.trend-charts-scroll--wide::-webkit-scrollbar {
-  height: 6px;
-}
-
-.trend-charts-scroll--wide::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.trend-charts-scroll--wide::-webkit-scrollbar-thumb {
-  background: var(--color-border);
-  border-radius: 3px;
 }
 
 .trend-charts-inner {
@@ -2271,6 +2525,26 @@ html.dark .static-card-link:hover {
   height: 18px;
   flex-shrink: 0;
   color: var(--color-text-muted);
+}
+
+.account-row-logo {
+  flex-shrink: 0;
+}
+
+.account-row-fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: #ecfdf5;
+  color: #166534;
+}
+
+html.dark .account-row-fallback {
+  background: rgba(22, 101, 52, 0.2);
+  color: #4ade80;
 }
 
 .account-row-name {
@@ -2571,6 +2845,27 @@ html.dark .patrimonio-label {
   line-height: 1.15;
 }
 
+.patrimonio-trend {
+  display: block;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: #16a34a;
+  margin-top: 0.375rem;
+  letter-spacing: -0.01em;
+}
+
+.patrimonio-trend--down {
+  color: #dc2626;
+}
+
+html.dark .patrimonio-trend {
+  color: #4ade80;
+}
+
+html.dark .patrimonio-trend--down {
+  color: #f87171;
+}
+
 .patrimonio-date {
   font-size: 0.8125rem;
   color: var(--color-text-muted);
@@ -2632,8 +2927,8 @@ html.dark .patrimonio-reserved {
 }
 
 html.dark .patrimonio-period-btn.active {
-  background: #e2e8f0;
-  color: #0f172a;
+  background: #f5f5f5;
+  color: #0a0a0a;
 }
 
 .patrimonio-body {

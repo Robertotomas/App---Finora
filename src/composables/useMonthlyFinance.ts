@@ -1,28 +1,7 @@
 import { ref, computed, watch } from 'vue'
 import { dashboardApi } from '@/api/dashboard'
+import { budgetsApi } from '@/api/budgets'
 import type { Dashboard } from '@/types/dashboard'
-
-const STORAGE_KEY = 'finora-monthly-budget'
-
-type BudgetStore = Record<string, { expectedIncome: number; expectedExpenses: number }>
-
-function loadFromStorage(): BudgetStore {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return {}
-    return JSON.parse(raw) as BudgetStore
-  } catch {
-    return {}
-  }
-}
-
-function saveToStorage(store: BudgetStore) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(store))
-}
-
-function storageKey(householdId: string, year: number, month: number): string {
-  return `${householdId}-${year}-${month}`
-}
 
 export interface MonthlyFinanceData {
   realIncome: number
@@ -46,8 +25,6 @@ export function useMonthlyFinance(getHouseholdId: () => string | undefined) {
   const loading = ref(false)
   const error = ref<string | null>(null)
 
-  const budgetStore = ref<BudgetStore>(loadFromStorage())
-
   const expectedIncome = ref(0)
   const expectedExpenses = ref(0)
 
@@ -56,34 +33,41 @@ export function useMonthlyFinance(getHouseholdId: () => string | undefined) {
     return `${names[month.value]} ${year.value}`
   })
 
-  function getBudgetForPeriod() {
-    const hid = getHouseholdId()
-    if (!hid) return { expectedIncome: 0, expectedExpenses: 0 }
-    const key = storageKey(hid, year.value, month.value)
-    return budgetStore.value[key] ?? { expectedIncome: 0, expectedExpenses: 0 }
-  }
-
-  function setExpectedIncome(value: number) {
-    expectedIncome.value = value
-    const hid = getHouseholdId()
-    if (hid) {
-      const key = storageKey(hid, year.value, month.value)
-      const store = { ...budgetStore.value }
-      store[key] = { ...getBudgetForPeriod(), expectedIncome: value }
-      budgetStore.value = store
-      saveToStorage(store)
+  async function getBudgetForPeriod(): Promise<{ expectedIncome: number; expectedExpenses: number }> {
+    try {
+      const { data: budgets } = await budgetsApi.list(year.value)
+      const match = budgets.find(b => b.month === month.value)
+      return match
+        ? { expectedIncome: match.expectedIncome, expectedExpenses: match.expectedExpenses }
+        : { expectedIncome: 0, expectedExpenses: 0 }
+    } catch {
+      return { expectedIncome: 0, expectedExpenses: 0 }
     }
   }
 
-  function setExpectedExpenses(value: number) {
+  async function setExpectedIncome(value: number) {
+    expectedIncome.value = value
+    const hid = getHouseholdId()
+    if (hid) {
+      await budgetsApi.upsert({
+        year: year.value,
+        month: month.value,
+        expectedIncome: value,
+        expectedExpenses: expectedExpenses.value,
+      })
+    }
+  }
+
+  async function setExpectedExpenses(value: number) {
     expectedExpenses.value = value
     const hid = getHouseholdId()
     if (hid) {
-      const key = storageKey(hid, year.value, month.value)
-      const store = { ...budgetStore.value }
-      store[key] = { ...getBudgetForPeriod(), expectedExpenses: value }
-      budgetStore.value = store
-      saveToStorage(store)
+      await budgetsApi.upsert({
+        year: year.value,
+        month: month.value,
+        expectedIncome: expectedIncome.value,
+        expectedExpenses: value,
+      })
     }
   }
 
@@ -149,7 +133,7 @@ export function useMonthlyFinance(getHouseholdId: () => string | undefined) {
         accountBalancesAtPeriod: [],
       }
 
-      const budget = getBudgetForPeriod()
+      const budget = await getBudgetForPeriod()
       expectedIncome.value = budget.expectedIncome
       expectedExpenses.value = budget.expectedExpenses
     } catch (e: unknown) {
@@ -167,8 +151,8 @@ export function useMonthlyFinance(getHouseholdId: () => string | undefined) {
     }
   }
 
-  watch([year, month], () => {
-    const budget = getBudgetForPeriod()
+  watch([year, month], async () => {
+    const budget = await getBudgetForPeriod()
     expectedIncome.value = budget.expectedIncome
     expectedExpenses.value = budget.expectedExpenses
   })

@@ -17,6 +17,8 @@ export interface SavingsObjectiveHistory {
   targetDate: string | null
   sortOrder: number
   completedAt: string
+  /** ISO datetime; null se ainda não foi liquidado */
+  liquidatedAt: string | null
 }
 
 export interface SavingsObjectivesOverview {

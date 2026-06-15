@@ -18,16 +18,16 @@ function handleClose() {
 <template>
   <BaseModal
     v-if="open"
-    title="Nova transação"
+    title="Novo movimento"
     @close="handleClose"
   >
     <div class="selection-body">
-      <p class="selection-hint">Que tipo de transação queres criar?</p>
+      <p class="selection-hint">Que tipo de movimento quer criar?</p>
       <div class="selection-options">
         <button type="button" class="selection-card" @click="emit('select', 'income-expense')">
           <span class="selection-icon">
             <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="12" x2="12" y1="2" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+              <path d="m3 16 4 4 4-4"/><path d="M7 20V4"/><path d="m21 8-4-4-4 4"/><path d="M17 4v16"/>
             </svg>
           </span>
           <span class="selection-label">Receita ou Despesa</span>
@@ -36,11 +36,11 @@ function handleClose() {
         <button type="button" class="selection-card" @click="emit('select', 'transfer')">
           <span class="selection-icon selection-icon--transfer">
             <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M18 8L22 12L18 16"/><path d="M2 12H22"/><path d="M6 16L2 12L6 8"/>
+              <path d="m16 3 4 4-4 4"/><path d="M20 7H4"/><path d="m8 21-4-4 4-4"/><path d="M4 17h16"/>
             </svg>
           </span>
           <span class="selection-label">Transferência interna</span>
-          <span class="selection-desc">Mover dinheiro entre as tuas contas</span>
+          <span class="selection-desc">Mover dinheiro entre as suas contas</span>
         </button>
       </div>
     </div>

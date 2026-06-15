@@ -8,21 +8,26 @@ import { useHouseholdStore } from '@/stores/household'
 import { useAuthStore } from '@/stores/auth'
 import { useSubscriptionStore } from '@/stores/subscription'
 import { householdApi } from '@/api/household'
+import { transactionsApi } from '@/api/transactions'
 import TransactionFormModal from '@/components/TransactionFormModal.vue'
 import RecurringFormModal from '@/components/RecurringFormModal.vue'
 import TransactionTypeSelectionModal from '@/components/TransactionTypeSelectionModal.vue'
 import RemoveRecurringModal from '@/components/RemoveRecurringModal.vue'
 import ConfirmDeleteModal from '@/components/ConfirmDeleteModal.vue'
 import BaseModal from '@/components/BaseModal.vue'
+import PlanUpsellCard from '@/components/PlanUpsellCard.vue'
+import PlanUpsellModal from '@/components/PlanUpsellModal.vue'
+import BrandLogo from '@/components/BrandLogo.vue'
 import type { Transaction, CreateTransactionRequest } from '@/types/transaction'
 import type { RecurringTransaction, CreateRecurringTransactionRequest } from '@/types/recurringTransaction'
-import { RecurringFrequency, RECURRING_FREQUENCY_LABELS } from '@/types/recurringTransaction'
+import { recurringAmountForMonth, recurringFrequencyDescription } from '@/types/recurringTransaction'
 import {
   TRANSACTION_TYPE_LABELS,
   TRANSACTION_CATEGORY_LABELS,
   TransactionType,
   TransactionCategory
 } from '@/types/transaction'
+import { INCOME_CATEGORIES, EXPENSE_CATEGORIES, CATEGORY_COLORS } from '@/types/categoryMeta'
 import type { HouseholdMember } from '@/types/household'
 
 const transactionsStore = useTransactionsStore()
@@ -35,13 +40,22 @@ const router = useRouter()
 const routeRef = useRoute()
 
 const tabFromQuery = routeRef.query.tab as string | undefined
-const initialTab = tabFromQuery === 'recurring' ? 'recurring' : tabFromQuery === 'transactions' ? 'transactions' : 'summary'
-const activeTab = ref<'summary' | 'transactions' | 'recurring'>(initialTab)
+const initialTab = tabFromQuery === 'recurring' ? 'recurring' : tabFromQuery === 'movements' ? 'movements' : 'dashboard'
+const activeTab = ref<'dashboard' | 'movements' | 'recurring'>(initialTab)
 
 watch(() => routeRef.query.tab, (tab) => {
   if (tab === 'recurring') activeTab.value = 'recurring'
-  else if (tab === 'transactions') activeTab.value = 'transactions'
-  else activeTab.value = 'summary'
+  else if (tab === 'movements') activeTab.value = 'movements'
+  else activeTab.value = 'dashboard'
+})
+
+watch(() => routeRef.query.action, (action) => {
+  if (action === 'new') {
+    if (activeTab.value === 'recurring') {
+      if (!recurringLocked.value) openRecurringCreateModal()
+    } else openCreateModal()
+    router.replace({ query: { ...routeRef.query, action: undefined } })
+  }
 })
 
 const typeSelectionModalOpen = ref(false)
@@ -63,6 +77,13 @@ const recurringToRemove = ref<RecurringTransaction | null>(null)
 
 const members = ref<HouseholdMember[]>([])
 const membersLoading = ref(false)
+const membersLoaded = ref(false)
+
+const membersMap = computed(() => {
+  const map = new Map<string, HouseholdMember>()
+  for (const m of members.value) map.set(m.id, m)
+  return map
+})
 
 const filterAccountId = ref<string>('')
 const _txInitToday = new Date()
@@ -73,27 +94,18 @@ const filterTo = ref(_txInitTodayStr)
 const filterType = ref<'' | 'income' | 'expense' | 'transfer'>('')
 const filterCategory = ref<string>('')
 
-const typeDropOpen = ref(false)
 const catDropOpen = ref(false)
 const accDropOpen = ref(false)
-const typeDropRef = ref<HTMLElement | null>(null)
 const catDropRef = ref<HTMLElement | null>(null)
 const accDropRef = ref<HTMLElement | null>(null)
 
-function toggleTypeDrop() { typeDropOpen.value = !typeDropOpen.value; catDropOpen.value = false; accDropOpen.value = false }
-function toggleCatDrop() { catDropOpen.value = !catDropOpen.value; typeDropOpen.value = false; accDropOpen.value = false }
-function toggleAccDrop() { accDropOpen.value = !accDropOpen.value; typeDropOpen.value = false; catDropOpen.value = false }
+function toggleCatDrop() { catDropOpen.value = !catDropOpen.value; accDropOpen.value = false }
+function toggleAccDrop() { accDropOpen.value = !accDropOpen.value; catDropOpen.value = false }
 
-function pickType(val: '' | 'income' | 'expense' | 'transfer') { filterType.value = val; typeDropOpen.value = false }
+function pickType(val: '' | 'income' | 'expense' | 'transfer') { filterType.value = val }
 function pickCategory(val: string) { filterCategory.value = val; catDropOpen.value = false }
 function pickAccount(val: string) { filterAccountId.value = val; accDropOpen.value = false }
 
-const typeLabel = computed(() => {
-  if (filterType.value === 'income') return 'Receita'
-  if (filterType.value === 'expense') return 'Despesa'
-  if (filterType.value === 'transfer') return 'Transferência'
-  return 'Todos os tipos'
-})
 const categoryLabel = computed(() => {
   if (filterCategory.value) return TRANSACTION_CATEGORY_LABELS[Number(filterCategory.value) as TransactionCategory] || 'Categoria'
   return 'Todas as categorias'
@@ -103,13 +115,14 @@ const accountLabel = computed(() => {
   return 'Todas as contas'
 })
 
-const incomeCategories = [TransactionCategory.Salary, TransactionCategory.Freelance, TransactionCategory.Investment, TransactionCategory.Gift, TransactionCategory.Refund]
-const expenseCategories = [TransactionCategory.Food, TransactionCategory.Transport, TransactionCategory.Housing, TransactionCategory.Utilities, TransactionCategory.Health, TransactionCategory.Entertainment, TransactionCategory.Shopping, TransactionCategory.Education, TransactionCategory.Other]
+const incomeCategories = INCOME_CATEGORIES
+const expenseCategories = EXPENSE_CATEGORIES
 
 const availableCategories = computed(() => {
   let cats: TransactionCategory[]
-  if (filterType.value === 'income') cats = incomeCategories
-  else if (filterType.value === 'expense') cats = expenseCategories
+  if (filterType.value === 'income') cats = [...incomeCategories]
+  else if (filterType.value === 'expense') cats = [...expenseCategories]
+  else if (filterType.value === 'transfer') cats = [TransactionCategory.Transfer]
   else cats = [...incomeCategories, ...expenseCategories]
   const result: Record<number, string> = {}
   for (const c of cats) result[c] = TRANSACTION_CATEGORY_LABELS[c]
@@ -123,6 +136,21 @@ watch(filterType, () => {
 const MONTH_NAMES = ['', 'Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 const now = new Date()
 
+/**
+ * Último mês (inclusivo) em que a recorrente ainda conta. O fim é **exclusivo**
+ * (alinha com o backend: conta se `fim > mês`), por isso o último mês ativo é o anterior ao fim.
+ * Sem fim definido → mês atual (recorrente em curso).
+ */
+function recurringActiveEnd(r: RecurringTransaction): { endY: number; endM: number } {
+  if (r.endYear != null && r.endMonth != null) {
+    let endY = r.endYear
+    let endM = r.endMonth - 1
+    if (endM < 1) { endM = 12; endY -= 1 }
+    return { endY, endM }
+  }
+  return { endY: now.getFullYear(), endM: now.getMonth() + 1 }
+}
+
 /** 1.º dia do mês do filtro: o limite Free aplica-se ao mês da data da transação, não ao mês do calendário “hoje”. */
 const defaultDateForNewTransaction = computed(() => {
   if (filterFrom.value) return filterFrom.value
@@ -130,17 +158,24 @@ const defaultDateForNewTransaction = computed(() => {
 })
 
 const page = ref(1)
-const pageSize = 20
+const pageSize = 10
 
 const actionLoading = ref(false)
 
 const limitModalOpen = ref(false)
 const limitModalKind = ref<'plan' | 'primary'>('plan')
-const limitMessage = ref('Atualiza o teu plano para continuar.')
+const limitMessage = ref('Atualize o seu plano para continuar.')
+
+/* Upsell de plano (limite mensal Free atingido) */
+const planUpsellOpen = ref(false)
+const planUpsellText = ref('')
 
 const needsPrimarySelection = computed(
   () => subscriptionStore.limits.needsPrimaryAccountSelection === true
 )
+
+/** Recorrentes são exclusivas dos planos Pro/Couple (bloqueadas no Free). */
+const recurringLocked = computed(() => !subscriptionStore.canAccessRecurring)
 
 const accountsForCreateModal = computed(() =>
   accountsStore.accounts.filter((a) => a.isActiveForPlan !== false && !a.isArchived)
@@ -482,13 +517,11 @@ function onTxDatePickerOutsideClick(e: MouseEvent) {
 
 function onDropdownOutsideClick(e: MouseEvent) {
   const t = e.target as Node
-  if (typeDropOpen.value && typeDropRef.value && !typeDropRef.value.contains(t)) typeDropOpen.value = false
   if (catDropOpen.value && catDropRef.value && !catDropRef.value.contains(t)) catDropOpen.value = false
   if (accDropOpen.value && accDropRef.value && !accDropRef.value.contains(t)) accDropOpen.value = false
   if (sumTypeDropOpen.value && sumTypeDropRef.value && !sumTypeDropRef.value.contains(t)) sumTypeDropOpen.value = false
   if (sumCatDropOpen.value && sumCatDropRef.value && !sumCatDropRef.value.contains(t)) sumCatDropOpen.value = false
   if (sumAccDropOpen.value && sumAccDropRef.value && !sumAccDropRef.value.contains(t)) sumAccDropOpen.value = false
-  if (recTypeDropOpen.value && recTypeDropRef.value && !recTypeDropRef.value.contains(t)) recTypeDropOpen.value = false
   if (recCatDropOpen.value && recCatDropRef.value && !recCatDropRef.value.contains(t)) recCatDropOpen.value = false
   if (recAccDropOpen.value && recAccDropRef.value && !recAccDropRef.value.contains(t)) recAccDropOpen.value = false
 }
@@ -496,11 +529,13 @@ function onDropdownOutsideClick(e: MouseEvent) {
 onMounted(() => {
   document.addEventListener('click', onDatePickerOutsideClick, true)
   document.addEventListener('click', onTxDatePickerOutsideClick, true)
+  document.addEventListener('click', onRecDatePickerOutsideClick, true)
   document.addEventListener('click', onDropdownOutsideClick, true)
 })
 onUnmounted(() => {
   document.removeEventListener('click', onDatePickerOutsideClick, true)
   document.removeEventListener('click', onTxDatePickerOutsideClick, true)
+  document.removeEventListener('click', onRecDatePickerOutsideClick, true)
   document.removeEventListener('click', onDropdownOutsideClick, true)
 })
 
@@ -511,11 +546,11 @@ async function fetchSummaryTransactions() {
     if (summaryDateFrom.value) params.from = summaryDateFrom.value
     if (summaryDateTo.value) params.to = summaryDateTo.value
     if (summaryFilterAccount.value) params.accountId = summaryFilterAccount.value
-    const [result] = await Promise.all([
-      transactionsStore.fetchTransactions(params),
-      recurringStore.fetchRecurring()
+    const [txResponse] = await Promise.all([
+      transactionsApi.getAll(params),
+      recurringStore.recurring.length === 0 ? recurringStore.fetchRecurring() : Promise.resolve(recurringStore.recurring),
     ])
-    const regular: Transaction[] = result ?? []
+    const regular: Transaction[] = (txResponse.data ?? []) as Transaction[]
 
     // Expand recurring transactions into virtual entries for each month in range
     // Use YYYY-MM string comparison to avoid timezone issues
@@ -526,26 +561,25 @@ async function fetchSummaryTransactions() {
       if (summaryFilterAccount.value && r.accountId !== summaryFilterAccount.value && r.destinationAccountId !== summaryFilterAccount.value) continue
       let y = r.startYear
       let m = r.startMonth
-      const endY = r.endYear ?? new Date().getFullYear()
-      const endM = r.endMonth ?? new Date().getMonth() + 1
+      const { endY, endM } = recurringActiveEnd(r)
       while (y < endY || (y === endY && m <= endM)) {
         const ym = `${y}-${String(m).padStart(2, '0')}`
         const inRange = (!fromYM || ym >= fromYM) && (!toYM || ym <= toYM)
         if (inRange) {
-          const amt = r.frequency === RecurringFrequency.Annual
-            ? Math.round((r.amount / 12) * 100) / 100
-            : r.amount
-          virtual.push({
-            id: `recurring-${r.id}-${y}-${m}`,
-            accountId: r.accountId,
-            householdId: r.householdId,
-            type: r.type,
-            category: r.category,
-            amount: amt,
-            description: r.description ?? '',
-            date: `${y}-${String(m).padStart(2, '0')}-01`,
-            splits: []
-          })
+          const amt = recurringAmountForMonth(r, m)
+          if (amt !== 0) {
+            virtual.push({
+              id: `recurring-${r.id}-${y}-${m}`,
+              accountId: r.accountId,
+              householdId: r.householdId,
+              type: r.type,
+              category: r.category,
+              amount: amt,
+              description: r.description ?? '',
+              date: `${y}-${String(m).padStart(2, '0')}-01`,
+              splits: r.responsibleUserId ? [{ userId: r.responsibleUserId, percentage: 100 }] : []
+            })
+          }
         }
         m++
         if (m > 12) { m = 1; y++ }
@@ -570,6 +604,35 @@ const summaryFiltered = computed(() => {
   }
   list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
   return list
+})
+
+const summaryPage = ref(1)
+const summaryTotalPages = computed(() => Math.max(1, Math.ceil(summaryFiltered.value.length / pageSize)))
+const summaryPaginated = computed(() => {
+  const start = (summaryPage.value - 1) * pageSize
+  return summaryFiltered.value.slice(start, start + pageSize)
+})
+const canPrevSummaryPage = computed(() => summaryPage.value > 1)
+const canNextSummaryPage = computed(() => summaryPage.value < summaryTotalPages.value)
+function prevSummaryPage() { if (canPrevSummaryPage.value) summaryPage.value-- }
+function nextSummaryPage() { if (canNextSummaryPage.value) summaryPage.value++ }
+function goToSummaryPage(p: number) { summaryPage.value = p }
+const visibleSummaryPages = computed(() => {
+  const total = summaryTotalPages.value
+  const current = summaryPage.value
+  const pages: (number | '...')[] = []
+  if (total <= 7) {
+    for (let i = 1; i <= total; i++) pages.push(i)
+  } else {
+    pages.push(1)
+    if (current > 3) pages.push('...')
+    const start = Math.max(2, current - 1)
+    const end = Math.min(total - 1, current + 1)
+    for (let i = start; i <= end; i++) pages.push(i)
+    if (current < total - 2) pages.push('...')
+    pages.push(total)
+  }
+  return pages
 })
 
 const summaryTotalIncome = computed(() => summaryFiltered.value.filter(t => t.type === TransactionType.Income).reduce((s, t) => s + t.amount, 0))
@@ -704,20 +767,16 @@ function accountName(accountId: string): string {
   return accountsStore.accounts.find(a => a.id === accountId)?.name ?? ''
 }
 
-// Category colors for the bars
-const categoryColors: Record<number, string> = {
-  0: '#059669', 1: '#10b981', 2: '#0ea5e9', 3: '#8b5cf6', 4: '#6366f1',
-  10: '#ef4444', 11: '#f97316', 12: '#eab308', 13: '#84cc16', 14: '#ec4899',
-  15: '#a855f7', 16: '#f43f5e', 17: '#14b8a6', 99: '#94a3b8',
-  100: '#2563eb'
-}
+// Category colors for the bars (fonte única em categoryMeta)
+const categoryColors = CATEGORY_COLORS
 
 watch([summaryDateFrom, summaryDateTo, summaryFilterAccount], () => {
-  if (activeTab.value === 'summary') fetchSummaryTransactions()
+  summaryPage.value = 1
+  if (activeTab.value === 'dashboard') fetchSummaryTransactions()
 })
 
 watch(activeTab, (tab) => {
-  if (tab === 'summary') fetchSummaryTransactions()
+  if (tab === 'dashboard') fetchSummaryTransactions()
 })
 
 const accountsForRecurringCreate = computed(() =>
@@ -745,49 +804,92 @@ const filteredTransactions = computed(() => {
   return list
 })
 
-const paginatedTransactions = computed(() => {
-  const list = filteredTransactions.value
-  const start = (page.value - 1) * pageSize
-  return list.slice(start, start + pageSize)
+const paginatedTransactions = computed(() => filteredTransactions.value)
+
+const recurringInRange = computed(() => {
+  const fromYM = filterFrom.value ? filterFrom.value.slice(0, 7) : null
+  const toYM = filterTo.value ? filterTo.value.slice(0, 7) : null
+  const entries: { type: number; amount: number }[] = []
+  for (const r of recurringStore.recurring) {
+    let y = r.startYear
+    let m = r.startMonth
+    const { endY, endM } = recurringActiveEnd(r)
+    while (y < endY || (y === endY && m <= endM)) {
+      const ym = `${y}-${String(m).padStart(2, '0')}`
+      const inRange = (!fromYM || ym >= fromYM) && (!toYM || ym <= toYM)
+      if (inRange) {
+        const amt = recurringAmountForMonth(r, m)
+        if (amt !== 0) entries.push({ type: r.type, amount: amt })
+      }
+      m++
+      if (m > 12) { m = 1; y++ }
+    }
+  }
+  return entries
 })
+
+const allTransactionsFiltered = computed(() => {
+  let list = transactionsStore.transactions
+  if (filterCategory.value) {
+    const catVal = Number(filterCategory.value)
+    list = list.filter(tx => tx.category === catVal)
+  }
+  return list
+})
+
+const txTotalIncome = computed(() => {
+  const fromTx = allTransactionsFiltered.value
+    .filter(tx => tx.type === TransactionType.Income)
+    .reduce((sum, tx) => sum + tx.amount, 0)
+  const fromRec = recurringInRange.value
+    .filter(e => e.type === TransactionType.Income)
+    .reduce((sum, e) => sum + e.amount, 0)
+  return fromTx + fromRec
+})
+const txTotalExpenses = computed(() => {
+  const fromTx = allTransactionsFiltered.value
+    .filter(tx => tx.type === TransactionType.Expense)
+    .reduce((sum, tx) => sum + tx.amount, 0)
+  const fromRec = recurringInRange.value
+    .filter(e => e.type === TransactionType.Expense)
+    .reduce((sum, e) => sum + e.amount, 0)
+  return fromTx + fromRec
+})
+const txBalance = computed(() => txTotalIncome.value - txTotalExpenses.value)
 
 const currentYear = now.getFullYear()
 const currentMonth = now.getMonth() + 1
-const activeRecurring = computed(() =>
-  recurringStore.recurring.filter((r) => {
-    if (!r.endMonth || !r.endYear) return true
-    if (r.endYear > currentYear) return true
-    if (r.endYear === currentYear && r.endMonth > currentMonth) return true
-    return false
+const activeRecurring = computed(() => {
+  const fromYM = recFilterFrom.value ? recFilterFrom.value.slice(0, 7) : null
+  const toYM = recFilterTo.value ? recFilterTo.value.slice(0, 7) : null
+  return recurringStore.recurring.filter((r) => {
+    const startYM = `${r.startYear}-${String(r.startMonth).padStart(2, '0')}`
+    if (toYM && startYM > toYM) return false
+    if (r.endYear && r.endMonth) {
+      // Fim exclusivo: a recorrente só está ativa enquanto fim > mês.
+      const endYM = `${r.endYear}-${String(r.endMonth).padStart(2, '0')}`
+      if (fromYM && endYM <= fromYM) return false
+    }
+    return true
   })
-)
+})
 
 // Recurring tab filters
 const recFilterType = ref<'' | 'income' | 'expense' | 'transfer'>('')
 const recFilterCategory = ref<string>('')
 const recFilterAccount = ref<string>('')
 
-const recTypeDropOpen = ref(false)
 const recCatDropOpen = ref(false)
 const recAccDropOpen = ref(false)
-const recTypeDropRef = ref<HTMLElement | null>(null)
 const recCatDropRef = ref<HTMLElement | null>(null)
 const recAccDropRef = ref<HTMLElement | null>(null)
 
-function toggleRecTypeDrop() { recTypeDropOpen.value = !recTypeDropOpen.value; recCatDropOpen.value = false; recAccDropOpen.value = false }
-function toggleRecCatDrop() { recCatDropOpen.value = !recCatDropOpen.value; recTypeDropOpen.value = false; recAccDropOpen.value = false }
-function toggleRecAccDrop() { recAccDropOpen.value = !recAccDropOpen.value; recTypeDropOpen.value = false; recCatDropOpen.value = false }
+function toggleRecCatDrop() { recCatDropOpen.value = !recCatDropOpen.value; recAccDropOpen.value = false; recDatePickerOpen.value = false }
+function toggleRecAccDrop() { recAccDropOpen.value = !recAccDropOpen.value; recCatDropOpen.value = false; recDatePickerOpen.value = false }
 
-function pickRecType(val: '' | 'income' | 'expense' | 'transfer') { recFilterType.value = val; recTypeDropOpen.value = false }
 function pickRecCategory(val: string) { recFilterCategory.value = val; recCatDropOpen.value = false }
 function pickRecAccount(val: string) { recFilterAccount.value = val; recAccDropOpen.value = false }
 
-const recTypeLabel = computed(() => {
-  if (recFilterType.value === 'income') return 'Receita'
-  if (recFilterType.value === 'expense') return 'Despesa'
-  if (recFilterType.value === 'transfer') return 'Transferência'
-  return 'Todos os tipos'
-})
 const recCategoryLabel = computed(() => {
   if (recFilterCategory.value) return TRANSACTION_CATEGORY_LABELS[Number(recFilterCategory.value) as TransactionCategory] || 'Categoria'
   return 'Todas as categorias'
@@ -809,6 +911,180 @@ const recAvailableCategories = computed(() => {
 
 watch(recFilterType, () => { recFilterCategory.value = '' })
 
+const recAllFiltered = computed(() => {
+  let list = activeRecurring.value
+  if (recFilterCategory.value) {
+    const catVal = Number(recFilterCategory.value)
+    list = list.filter(r => r.category === catVal)
+  }
+  if (recFilterAccount.value) {
+    list = list.filter(r => r.accountId === recFilterAccount.value || r.destinationAccountId === recFilterAccount.value)
+  }
+  return list
+})
+
+const recExpandedTotals = computed(() => {
+  const fromYM = recFilterFrom.value ? recFilterFrom.value.slice(0, 7) : null
+  const toYM = recFilterTo.value ? recFilterTo.value.slice(0, 7) : null
+  let income = 0
+  let expenses = 0
+  for (const r of recAllFiltered.value) {
+    let y = r.startYear
+    let m = r.startMonth
+    const { endY, endM } = recurringActiveEnd(r)
+    while (y < endY || (y === endY && m <= endM)) {
+      const ym = `${y}-${String(m).padStart(2, '0')}`
+      const inRange = (!fromYM || ym >= fromYM) && (!toYM || ym <= toYM)
+      if (inRange) {
+        const amt = recurringAmountForMonth(r, m)
+        if (r.type === TransactionType.Income) income += amt
+        else if (r.type === TransactionType.Expense) expenses += amt
+      }
+      m++
+      if (m > 12) { m = 1; y++ }
+    }
+  }
+  return { income, expenses }
+})
+
+const recTxInRange = computed(() => {
+  return transactionsStore.transactions.filter(tx => {
+    if (recFilterFrom.value && tx.date < recFilterFrom.value) return false
+    if (recFilterTo.value && tx.date > recFilterTo.value) return false
+    return true
+  })
+})
+
+const recTotalIncome = computed(() => {
+  const fromTx = recTxInRange.value
+    .filter(tx => tx.type === TransactionType.Income)
+    .reduce((sum, tx) => sum + tx.amount, 0)
+  return fromTx + recExpandedTotals.value.income
+})
+const recTotalExpenses = computed(() => {
+  const fromTx = recTxInRange.value
+    .filter(tx => tx.type === TransactionType.Expense)
+    .reduce((sum, tx) => sum + tx.amount, 0)
+  return fromTx + recExpandedTotals.value.expenses
+})
+const recBalance = computed(() => recTotalIncome.value - recTotalExpenses.value)
+
+function pickRecTypeToggle(val: '' | 'income' | 'expense' | 'transfer') { recFilterType.value = val }
+
+const recDatePickerRef = ref<HTMLElement | null>(null)
+const recDatePickerOpen = ref(false)
+const _recInitToday = new Date()
+const _recInitMonthStart = `${_recInitToday.getFullYear()}-${String(_recInitToday.getMonth() + 1).padStart(2, '0')}-01`
+const _recInitLast = new Date(_recInitToday.getFullYear(), _recInitToday.getMonth() + 1, 0)
+const _recInitMonthEnd = `${_recInitToday.getFullYear()}-${String(_recInitToday.getMonth() + 1).padStart(2, '0')}-${String(_recInitLast.getDate()).padStart(2, '0')}`
+const recFilterFrom = ref(_recInitMonthStart)
+const recFilterTo = ref(_recInitMonthEnd)
+const recActivePreset = ref<string>('month')
+
+const recPickerLeftYear = ref(_recInitToday.getFullYear())
+const recPickerLeftMonth = ref(_recInitToday.getMonth())
+const recPickerRightYear = computed(() => recPickerLeftMonth.value === 11 ? recPickerLeftYear.value + 1 : recPickerLeftYear.value)
+const recPickerRightMonth = computed(() => recPickerLeftMonth.value === 11 ? 0 : recPickerLeftMonth.value + 1)
+const recPickerSelectStep = ref<'from' | 'to'>('from')
+
+const recLeftDays = computed(() => calendarDays(recPickerLeftYear.value, recPickerLeftMonth.value))
+const recRightDays = computed(() => calendarDays(recPickerRightYear.value, recPickerRightMonth.value))
+
+function recInitPickerFromValues() {
+  if (recFilterFrom.value) {
+    const d = new Date(recFilterFrom.value + 'T00:00:00')
+    recPickerLeftYear.value = d.getFullYear()
+    recPickerLeftMonth.value = d.getMonth()
+  }
+}
+
+function recPickerPrevMonth() {
+  if (recPickerLeftMonth.value === 0) { recPickerLeftMonth.value = 11; recPickerLeftYear.value-- }
+  else recPickerLeftMonth.value--
+}
+
+function recPickerNextMonth() {
+  if (recPickerLeftMonth.value === 11) { recPickerLeftMonth.value = 0; recPickerLeftYear.value++ }
+  else recPickerLeftMonth.value++
+}
+
+function recIsInRange(y: number, m: number, d: number): boolean {
+  if (!recFilterFrom.value || !recFilterTo.value) return false
+  const ds = toDateStr(y, m, d)
+  return ds >= recFilterFrom.value && ds <= recFilterTo.value
+}
+function recIsStart(y: number, m: number, d: number): boolean { return toDateStr(y, m, d) === recFilterFrom.value }
+function recIsEnd(y: number, m: number, d: number): boolean { return toDateStr(y, m, d) === recFilterTo.value }
+
+function recPickDay(y: number, m: number, d: number) {
+  const ds = toDateStr(y, m, d)
+  recActivePreset.value = ''
+  if (recPickerSelectStep.value === 'from') {
+    recFilterFrom.value = ds
+    recFilterTo.value = ''
+    recPickerSelectStep.value = 'to'
+  } else {
+    if (ds < recFilterFrom.value) {
+      recFilterFrom.value = ds
+      recFilterTo.value = ''
+      recPickerSelectStep.value = 'to'
+    } else {
+      recFilterTo.value = ds
+      recPickerSelectStep.value = 'from'
+      recDatePickerOpen.value = false
+    }
+  }
+}
+
+function recApplyPreset(preset: string) {
+  const today = new Date()
+  const toStr = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  recActivePreset.value = preset
+  recFilterTo.value = toStr(today)
+
+  if (preset === 'month') {
+    recFilterFrom.value = toStr(new Date(today.getFullYear(), today.getMonth(), 1))
+  } else if (preset === '30d') {
+    const d = new Date(); d.setDate(d.getDate() - 30)
+    recFilterFrom.value = toStr(d)
+  } else if (preset === '3m') {
+    const d = new Date(); d.setMonth(d.getMonth() - 3)
+    recFilterFrom.value = toStr(d)
+  } else if (preset === 'year') {
+    recFilterFrom.value = toStr(new Date(today.getFullYear(), 0, 1))
+  }
+
+  recInitPickerFromValues()
+  recPickerSelectStep.value = 'from'
+  recDatePickerOpen.value = false
+}
+
+function toggleRecDatePicker() {
+  recDatePickerOpen.value = !recDatePickerOpen.value
+  if (recDatePickerOpen.value) {
+    recInitPickerFromValues()
+    if (!recFilterTo.value) recPickerSelectStep.value = 'to'
+    else recPickerSelectStep.value = 'from'
+  }
+}
+
+const recDatePickerLabel = computed(() => {
+  if (recActivePreset.value && presetLabels[recActivePreset.value]) return presetLabels[recActivePreset.value]
+  if (!recFilterFrom.value && !recFilterTo.value) return 'Selecionar período'
+  const fmt = (s: string) => {
+    const d = new Date(s + 'T00:00:00')
+    return d.toLocaleDateString('pt-PT', { day: '2-digit', month: 'short', year: 'numeric' })
+  }
+  if (recFilterFrom.value && recFilterTo.value) return `${fmt(recFilterFrom.value)} – ${fmt(recFilterTo.value)}`
+  if (recFilterFrom.value) return `${fmt(recFilterFrom.value)} – ...`
+  return 'Selecionar período'
+})
+
+function onRecDatePickerOutsideClick(e: MouseEvent) {
+  if (!recDatePickerOpen.value || !recDatePickerRef.value) return
+  if (!recDatePickerRef.value.contains(e.target as Node)) recDatePickerOpen.value = false
+}
+
 const filteredRecurring = computed(() => {
   let list = activeRecurring.value
   if (recFilterType.value) {
@@ -825,23 +1101,57 @@ const filteredRecurring = computed(() => {
   return list
 })
 
-const totalPages = computed(() =>
-  Math.max(1, Math.ceil(filteredTransactions.value.length / pageSize))
-)
+const recPage = ref(1)
+const recTotalPages = computed(() => Math.max(1, Math.ceil(filteredRecurring.value.length / pageSize)))
+const paginatedRecurring = computed(() => {
+  const start = (recPage.value - 1) * pageSize
+  return filteredRecurring.value.slice(start, start + pageSize)
+})
+const canPrevRecPage = computed(() => recPage.value > 1)
+const canNextRecPage = computed(() => recPage.value < recTotalPages.value)
+function prevRecPage() { if (canPrevRecPage.value) recPage.value-- }
+function nextRecPage() { if (canNextRecPage.value) recPage.value++ }
+function goToRecPage(p: number) { recPage.value = p }
+const visibleRecPages = computed(() => {
+  const total = recTotalPages.value
+  const current = recPage.value
+  const pages: (number | '...')[] = []
+  if (total <= 7) {
+    for (let i = 1; i <= total; i++) pages.push(i)
+  } else {
+    pages.push(1)
+    if (current > 3) pages.push('...')
+    const start = Math.max(2, current - 1)
+    const end = Math.min(total - 1, current + 1)
+    for (let i = start; i <= end; i++) pages.push(i)
+    if (current < total - 2) pages.push('...')
+    pages.push(total)
+  }
+  return pages
+})
+
+const totalPages = computed(() => transactionsStore.totalPages)
 
 const canPrevPage = computed(() => page.value > 1)
 const canNextPage = computed(() => page.value < totalPages.value)
 
 function prevPage() {
-  if (canPrevPage.value) page.value--
+  if (canPrevPage.value) {
+    page.value--
+    fetchWithFilters(false)
+  }
 }
 
 function nextPage() {
-  if (canNextPage.value) page.value++
+  if (canNextPage.value) {
+    page.value++
+    fetchWithFilters(false)
+  }
 }
 
 function goToPage(p: number) {
   page.value = p
+  fetchWithFilters(false)
 }
 
 const visiblePages = computed(() => {
@@ -863,10 +1173,12 @@ const visiblePages = computed(() => {
 })
 
 async function loadMembers() {
+  if (membersLoaded.value) return
   membersLoading.value = true
   try {
     const { data } = await householdApi.getMembers()
     members.value = data
+    membersLoaded.value = true
   } catch {
     members.value = []
   } finally {
@@ -878,27 +1190,40 @@ onMounted(async () => {
   try {
     await householdStore.fetchHousehold()
     if (householdStore.household) {
-      await accountsStore.fetchAccounts()
-      await loadMembers()
-      await fetchWithFilters()
-      await recurringStore.fetchRecurring()
-      if (activeTab.value === 'summary') await fetchSummaryTransactions()
+      await Promise.all([
+        accountsStore.fetchAccounts(),
+        fetchWithFilters(),
+        recurringStore.fetchRecurring(),
+        subscriptionStore.fetchSubscription(),
+        loadMembers(),
+      ])
+      if (activeTab.value === 'dashboard') await fetchSummaryTransactions()
+    } else {
+      await subscriptionStore.fetchSubscription()
     }
-    await subscriptionStore.fetchSubscription()
   } catch {
     // Handled in stores
   }
+  if (routeRef.query.action === 'new') {
+    if (activeTab.value === 'recurring') {
+      if (!recurringLocked.value) openRecurringCreateModal()
+    } else openCreateModal()
+    router.replace({ query: { ...routeRef.query, action: undefined } })
+  }
 })
 
-async function fetchWithFilters() {
-  const params: { accountId?: string; from?: string; to?: string } = {}
+async function fetchWithFilters(resetPage = true) {
+  if (resetPage) page.value = 1
+  const params: { accountId?: string; from?: string; to?: string; page?: number; pageSize?: number } = {
+    page: page.value,
+    pageSize,
+  }
   if (filterAccountId.value) params.accountId = filterAccountId.value
   if (filterFrom.value) params.from = filterFrom.value
   if (filterTo.value) params.to = filterTo.value
 
   try {
-    await transactionsStore.fetchTransactions(params)
-    page.value = 1
+    await transactionsStore.fetchTransactionsPaged(params)
   } catch {
     // Handled in store
   }
@@ -908,15 +1233,11 @@ watch([filterAccountId, filterFrom, filterTo], () => {
   fetchWithFilters()
 })
 
-watch([filterType, filterCategory], () => {
-  page.value = 1
-})
-
 function openCreateModal() {
   if (needsPrimarySelection.value) {
     limitModalKind.value = 'primary'
     limitMessage.value =
-      'Tens mais do que uma conta no plano Free. Vai a Contas e escolhe qual fica ativa para movimentos antes de continuar.'
+      'Tem mais do que uma conta no plano Free. Vá a Contas e escolha qual fica ativa para movimentos antes de continuar.'
     limitModalOpen.value = true
     return
   }
@@ -927,6 +1248,7 @@ function handleTypeSelection(type: 'income-expense' | 'transfer') {
   typeSelectionModalOpen.value = false
   isTransferMode.value = type === 'transfer'
   transactionsStore.clearError()
+  loadMembers()
   createModalOpen.value = true
 }
 
@@ -944,9 +1266,9 @@ function dismissLimitModal() {
   closeEditModal()
   closeRecurringCreateModal()
   closeRecurringEditModal()
-  activeTab.value = 'transactions'
+  activeTab.value = 'movements'
   if (router.currentRoute.value.name !== 'transactions') {
-    void router.push({ name: 'transactions' })
+    void router.push({ name: 'movimentos' })
   }
 }
 
@@ -954,7 +1276,7 @@ function openEditModal(tx: Transaction) {
   if (needsPrimarySelection.value) {
     limitModalKind.value = 'primary'
     limitMessage.value =
-      'Tens mais do que uma conta no plano Free. Vai a Contas e escolhe a conta principal antes de editar movimentos.'
+      'Tem mais do que uma conta no plano Free. Vá a Contas e escolha a conta principal antes de editar movimentos.'
     limitModalOpen.value = true
     return
   }
@@ -962,11 +1284,12 @@ function openEditModal(tx: Transaction) {
   if (acc && acc.isActiveForPlan === false) {
     limitModalKind.value = 'primary'
     limitMessage.value =
-      'Esta transação está numa conta que não é a principal no plano Free. Só podes editar movimentos na conta principal, ou altera a conta principal em Contas.'
+      'Esta transação está numa conta que não é a principal no plano Free. Só pode editar movimentos na conta principal, ou altere a conta principal em Contas.'
     limitModalOpen.value = true
     return
   }
   transactionsStore.clearError()
+  loadMembers()
   transactionToEdit.value = tx
   isTransferMode.value = tx.type === TransactionType.Transfer
   editModalOpen.value = true
@@ -992,31 +1315,38 @@ async function handleCreate(payload: CreateTransactionRequest) {
   actionLoading.value = true
   try {
     await transactionsStore.createTransaction(payload)
-    await accountsStore.fetchAccounts()
+    // Update account balances locally instead of re-fetching
+    if (payload.type === TransactionType.Transfer && payload.destinationAccountId) {
+      accountsStore.adjustBalance(payload.accountId, -payload.amount)
+      accountsStore.adjustBalance(payload.destinationAccountId, payload.amount)
+    } else {
+      const delta = payload.type === TransactionType.Income ? payload.amount : -payload.amount
+      accountsStore.adjustBalance(payload.accountId, delta)
+    }
+    await fetchWithFilters(false)
     closeCreateModal()
   } catch (e: unknown) {
     const err = e as { response?: { status?: number; data?: { code?: string; message?: string } } }
     const code = err.response?.data?.code
     if (err.response?.status === 403 && code === 'PLAN_LIMIT') {
       closeCreateModal()
-      limitModalKind.value = 'plan'
-      limitMessage.value = payload.type === TransactionType.Income
-        ? 'Atingiste o limite de receitas do plano Free: só podes adicionar 1 receita por mês. Atualiza para Pro ou Couple para continuares.'
-        : 'Atingiste o limite de despesas do plano Free: só podes adicionar 5 despesas por mês. Atualiza para Pro ou Couple para continuares.'
-      limitModalOpen.value = true
+      planUpsellText.value = payload.type === TransactionType.Income
+        ? 'Atingiu o limite de receitas do plano Free: só pode registar 1 receita por mês.'
+        : 'Atingiu o limite de despesas do plano Free: só pode registar 5 despesas por mês.'
+      planUpsellOpen.value = true
     } else if (err.response?.status === 403 && code === 'FREE_PRIMARY_REQUIRED') {
       closeCreateModal()
       limitModalKind.value = 'primary'
       limitMessage.value =
         err.response?.data?.message ??
-        'Tens mais do que uma conta no plano Free. Escolhe a conta principal em Contas antes de adicionar movimentos.'
+        'Tem mais do que uma conta no plano Free. Escolha a conta principal em Contas antes de adicionar movimentos.'
       limitModalOpen.value = true
     } else if (err.response?.status === 403 && code === 'FREE_ACCOUNT_LOCKED') {
       closeCreateModal()
       limitModalKind.value = 'primary'
       limitMessage.value =
         err.response?.data?.message ??
-        'No plano Free só podes usar a conta principal para movimentos. Altera a conta principal em Contas.'
+        'No plano Free só pode usara conta principal para movimentos. Altere a conta principal em Contas.'
       limitModalOpen.value = true
     }
   } finally {
@@ -1027,9 +1357,25 @@ async function handleCreate(payload: CreateTransactionRequest) {
 async function handleEdit(payload: CreateTransactionRequest) {
   if (!transactionToEdit.value) return
   actionLoading.value = true
+  const old = transactionToEdit.value
   try {
-    await transactionsStore.updateTransaction(transactionToEdit.value.id, payload)
-    await accountsStore.fetchAccounts()
+    await transactionsStore.updateTransaction(old.id, payload)
+    // Revert old balance effects locally
+    if (old.type === TransactionType.Transfer && old.destinationAccountId) {
+      accountsStore.adjustBalance(old.accountId, old.amount)
+      accountsStore.adjustBalance(old.destinationAccountId, -old.amount)
+    } else {
+      const revertDelta = old.type === TransactionType.Income ? -old.amount : old.amount
+      accountsStore.adjustBalance(old.accountId, revertDelta)
+    }
+    // Apply new balance effects locally
+    if (payload.type === TransactionType.Transfer && payload.destinationAccountId) {
+      accountsStore.adjustBalance(payload.accountId, -payload.amount)
+      accountsStore.adjustBalance(payload.destinationAccountId, payload.amount)
+    } else {
+      const applyDelta = payload.type === TransactionType.Income ? payload.amount : -payload.amount
+      accountsStore.adjustBalance(payload.accountId, applyDelta)
+    }
     closeEditModal()
   } catch (e: unknown) {
     const err = e as { response?: { status?: number; data?: { code?: string; message?: string } } }
@@ -1039,14 +1385,14 @@ async function handleEdit(payload: CreateTransactionRequest) {
       limitModalKind.value = 'primary'
       limitMessage.value =
         err.response?.data?.message ??
-        'Escolhe a conta principal em Contas antes de editar movimentos.'
+        'Escolha a conta principal em Contas antes de editar movimentos.'
       limitModalOpen.value = true
     } else if (err.response?.status === 403 && code === 'FREE_ACCOUNT_LOCKED') {
       closeEditModal()
       limitModalKind.value = 'primary'
       limitMessage.value =
         err.response?.data?.message ??
-        'No plano Free só podes alterar movimentos na conta principal.'
+        'No plano Free só pode alterar movimentos na conta principal.'
       limitModalOpen.value = true
     }
   } finally {
@@ -1057,9 +1403,18 @@ async function handleEdit(payload: CreateTransactionRequest) {
 async function handleDelete() {
   if (!transactionToDelete.value) return
   actionLoading.value = true
+  const tx = transactionToDelete.value
   try {
-    await transactionsStore.deleteTransaction(transactionToDelete.value.id)
-    await accountsStore.fetchAccounts()
+    await transactionsStore.deleteTransaction(tx.id)
+    // Revert balance effects locally
+    if (tx.type === TransactionType.Transfer && tx.destinationAccountId) {
+      accountsStore.adjustBalance(tx.accountId, tx.amount)
+      accountsStore.adjustBalance(tx.destinationAccountId, -tx.amount)
+    } else {
+      const revertDelta = tx.type === TransactionType.Income ? -tx.amount : tx.amount
+      accountsStore.adjustBalance(tx.accountId, revertDelta)
+    }
+    await fetchWithFilters(false)
     closeDeleteModal()
   } catch {
     // Error shown in store
@@ -1088,30 +1443,32 @@ function formatDate(dateStr: string): string {
 
 function getResponsibleDisplay(tx: Transaction): string {
   if (tx.splits.length === 0) return '-'
+  const map = membersMap.value
   if (tx.splits.length === 1 && tx.splits[0].percentage === 100) {
-    const m = members.value.find((x) => x.id === tx.splits[0].userId)
-    if (m) return m.id === authStore.user?.id ? 'Tu' : `${m.firstName} ${m.lastName}`
-    return 'Tu'
+    const m = map.get(tx.splits[0].userId)
+    return m ? `${m.firstName} ${m.lastName}` : '-'
   }
   return tx.splits
     .map((s) => {
-      const m = members.value.find((x) => x.id === s.userId)
-      const name = m ? (m.id === authStore.user?.id ? 'Tu' : m.firstName) : '?'
+      const m = map.get(s.userId)
+      const name = m ? m.firstName : '?'
       return `${name} ${s.percentage}%`
     })
     .join(', ')
 }
 
-function getSplitsDisplay(tx: Transaction): string {
-  if (tx.splits.length <= 1) return '-'
-  return tx.splits.map((s) => `${s.percentage}%`).join(' / ')
+function getRecurringResponsibleDisplay(r: RecurringTransaction): string {
+  if (!r.responsibleUserId) return '-'
+  const m = membersMap.value.get(r.responsibleUserId)
+  return m ? `${m.firstName} ${m.lastName}` : '-'
 }
 
 function openRecurringCreateModal() {
+  if (recurringLocked.value) return
   if (needsPrimarySelection.value) {
     limitModalKind.value = 'primary'
     limitMessage.value =
-      'Tens mais do que uma conta no plano Free. Vai a Contas e escolhe a conta principal antes de criar recorrentes.'
+      'Tem mais do que uma conta no plano Free. Vá a Contas e escolha a conta principal antes de criar recorrentes.'
     limitModalOpen.value = true
     return
   }
@@ -1131,10 +1488,11 @@ function closeRecurringCreateModal() {
 }
 
 function openRecurringEditModal(r: RecurringTransaction) {
+  if (recurringLocked.value) return
   if (needsPrimarySelection.value) {
     limitModalKind.value = 'primary'
     limitMessage.value =
-      'Tens mais do que uma conta no plano Free. Vai a Contas e escolhe a conta principal antes de editar recorrentes.'
+      'Tem mais do que uma conta no plano Free. Vá a Contas e escolha a conta principal antes de editar recorrentes.'
     limitModalOpen.value = true
     return
   }
@@ -1142,7 +1500,7 @@ function openRecurringEditModal(r: RecurringTransaction) {
   if (acc && acc.isActiveForPlan === false) {
     limitModalKind.value = 'primary'
     limitMessage.value =
-      'Esta recorrente está numa conta que não é a principal no plano Free. Só podes editar na conta principal, ou altera a conta principal em Contas.'
+      'Esta recorrente está numa conta que não é a principal no plano Free. Só pode editar na conta principal, ou altere a conta principal em Contas.'
     limitModalOpen.value = true
     return
   }
@@ -1159,6 +1517,7 @@ function closeRecurringEditModal() {
 }
 
 function openRecurringRemoveModal(r: RecurringTransaction) {
+  recurringStore.clearError()
   recurringToRemove.value = r
   recurringRemoveModalOpen.value = true
 }
@@ -1176,13 +1535,14 @@ async function handleRecurringCreate(payload: CreateRecurringTransactionRequest)
   } catch (e: unknown) {
     const err = e as { response?: { status?: number; data?: { code?: string; message?: string } } }
     const code = err.response?.data?.code
-    if (err.response?.status === 403 && code === 'PLAN_LIMIT') {
+    if (err.response?.status === 403 && (code === 'PLAN_LIMIT' || code === 'RECURRING_LOCKED')) {
       closeRecurringCreateModal()
-      limitModalKind.value = 'plan'
-      limitMessage.value = payload.type === TransactionType.Income
-        ? 'Atingiste o limite de receitas do plano Free: só podes adicionar 1 receita por mês. Atualiza para Pro ou Couple para continuares.'
-        : 'Atingiste o limite de despesas do plano Free: só podes adicionar 5 despesas por mês. Atualiza para Pro ou Couple para continuares.'
-      limitModalOpen.value = true
+      planUpsellText.value = code === 'RECURRING_LOCKED'
+        ? 'As transações recorrentes estão disponíveis nos planos Pro e Couple.'
+        : payload.type === TransactionType.Income
+          ? 'Atingiu o limite de receitas do plano Free: só pode registar 1 receita por mês.'
+          : 'Atingiu o limite de despesas do plano Free: só pode registar 5 despesas por mês.'
+      planUpsellOpen.value = true
       return
     }
     if (err.response?.status === 403 && code === 'FREE_PRIMARY_REQUIRED') {
@@ -1190,7 +1550,7 @@ async function handleRecurringCreate(payload: CreateRecurringTransactionRequest)
       limitModalKind.value = 'primary'
       limitMessage.value =
         err.response?.data?.message ??
-        'Escolhe a conta principal em Contas antes de adicionar recorrentes.'
+        'Escolha a conta principal em Contas antes de adicionar recorrentes.'
       limitModalOpen.value = true
       return
     }
@@ -1199,7 +1559,7 @@ async function handleRecurringCreate(payload: CreateRecurringTransactionRequest)
       limitModalKind.value = 'primary'
       limitMessage.value =
         err.response?.data?.message ??
-        'No plano Free só podes usar recorrentes na conta principal.'
+        'No plano Free só pode usarrecorrentes na conta principal.'
       limitModalOpen.value = true
       return
     }
@@ -1223,14 +1583,14 @@ async function handleRecurringEdit(payload: CreateRecurringTransactionRequest) {
       limitModalKind.value = 'primary'
       limitMessage.value =
         err.response?.data?.message ??
-        'Escolhe a conta principal em Contas antes de editar recorrentes.'
+        'Escolha a conta principal em Contas antes de editar recorrentes.'
       limitModalOpen.value = true
     } else if (err.response?.status === 403 && code === 'FREE_ACCOUNT_LOCKED') {
       closeRecurringEditModal()
       limitModalKind.value = 'primary'
       limitMessage.value =
         err.response?.data?.message ??
-        'No plano Free só podes editar recorrentes na conta principal.'
+        'No plano Free só pode editar recorrentes na conta principal.'
       limitModalOpen.value = true
     }
   } finally {
@@ -1290,13 +1650,13 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
 <template>
   <div class="transactions-view">
     <div class="page-header">
-      <h1>{{ activeTab === 'recurring' ? 'Transações Recorrentes' : activeTab === 'summary' ? 'Resumo de Movimentos' : 'Transações' }}</h1>
-      <p class="subtitle">{{ activeTab === 'recurring' ? 'Gerir transações automáticas' : activeTab === 'summary' ? 'Visão geral das receitas e despesas' : 'Gerir receitas e despesas' }}</p>
+      <h1>{{ activeTab === 'recurring' ? 'Transações Recorrentes' : activeTab === 'dashboard' ? 'Dashboard' : 'Movimentos' }}</h1>
+      <p class="subtitle">{{ activeTab === 'recurring' ? 'Receitas e despesas que se repetem mensalmente e/ou anualmente.' : activeTab === 'dashboard' ? 'Visão geral das receitas e despesas' : 'Gerir receitas e despesas' }}</p>
     </div>
 
     <div v-if="!householdStore.household && !householdStore.loading" class="empty-state">
-      <p>Configura primeiro o teu household.</p>
-      <router-link to="/dashboard" class="link">Ir para o painel</router-link>
+      <p>Configure primeiro o seu household.</p>
+      <router-link to="/overview" class="link">Ir para o painel</router-link>
     </div>
 
     <div v-else-if="householdStore.loading && !householdStore.household" class="loading-state">
@@ -1309,7 +1669,7 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
     </div>
 
     <div v-else class="content">
-      <div v-if="activeTab === 'transactions' && transactionsStore.error" class="global-error">
+      <div v-if="activeTab === 'movements' && transactionsStore.error" class="global-error">
         {{ transactionsStore.error }}
       </div>
       <div v-if="activeTab === 'recurring' && recurringStore.error" class="global-error">
@@ -1317,7 +1677,7 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
       </div>
 
       <!-- ═══ SUMMARY TAB ═══ -->
-      <div v-show="activeTab === 'summary'" class="tab-content">
+      <div v-show="activeTab === 'dashboard'" class="tab-content">
         <!-- Filters -->
         <div class="summary-filters">
           <div ref="datePickerRef" class="date-range-picker">
@@ -1549,15 +1909,18 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
             <thead>
               <tr>
                 <th>Data</th>
+                <th class="logo-col"></th>
                 <th>Descrição</th>
                 <th>Categoria</th>
                 <th>Conta</th>
+                <th v-if="householdStore.isCouple">Responsável</th>
                 <th class="text-center">Valor</th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="tx in summaryFiltered" :key="tx.id">
+              <tr v-for="tx in summaryPaginated" :key="tx.id">
                 <td class="summary-td-date">{{ new Date(tx.date).toLocaleDateString('pt-PT', { day: '2-digit', month: 'short' }) }}</td>
+                <td class="td-logo"><BrandLogo :name="tx.entityName || tx.description" :size="24" :show-fallback="false" /></td>
                 <td class="summary-td-desc">{{ tx.description || TRANSACTION_CATEGORY_LABELS[tx.category] || '—' }}</td>
                 <td>
                   <span class="summary-cat-badge" :style="{ background: (categoryColors[tx.category] || '#94a3b8') + '18', color: categoryColors[tx.category] || '#94a3b8' }">
@@ -1565,6 +1928,7 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
                   </span>
                 </td>
                 <td class="summary-td-account">{{ accountName(tx.accountId) }}</td>
+                <td v-if="householdStore.isCouple" class="summary-td-responsible">{{ getResponsibleDisplay(tx) }}</td>
                 <td class="text-center">
                   <span :class="tx.type === TransactionType.Income ? 'val-income' : 'val-expense'">
                     {{ tx.type === TransactionType.Income ? '+' : '-' }}{{ formatCurrencySummary(tx.amount) }}
@@ -1573,6 +1937,18 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
               </tr>
             </tbody>
           </table>
+          <div v-if="summaryTotalPages > 1" class="pagination">
+            <button type="button" class="pg-arrow" :disabled="!canPrevSummaryPage" @click="prevSummaryPage" aria-label="Anterior">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+            </button>
+            <template v-for="(p, i) in visibleSummaryPages" :key="i">
+              <span v-if="p === '...'" class="pg-dots">...</span>
+              <button v-else type="button" class="pg-num" :class="{ active: p === summaryPage }" @click="goToSummaryPage(p)">{{ p }}</button>
+            </template>
+            <button type="button" class="pg-arrow" :disabled="!canNextSummaryPage" @click="nextSummaryPage" aria-label="Seguinte">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+            </button>
+          </div>
         </div>
         <div v-else-if="!summaryLoading" class="section-empty">
           <p>Nenhum movimento encontrado para o período selecionado.</p>
@@ -1581,134 +1957,137 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
       </div>
 
       <!-- ═══ TRANSACTIONS TAB ═══ -->
-      <div v-show="activeTab === 'transactions'" class="tab-content">
+      <div v-show="activeTab === 'movements'" class="tab-content">
       <div v-if="needsPrimarySelection" class="primary-inline-hint">
-        <router-link :to="{ name: 'accounts' }" class="primary-inline-link">Escolhe a conta principal em Contas</router-link>
-        <span> para poderes adicionar ou editar transações no plano Free com várias contas.</span>
+        <router-link :to="{ name: 'contas' }" class="primary-inline-link">Escolha a conta principal em Contas</router-link>
+        <span> para poder adicionar ou editar transações no plano Free com várias contas.</span>
       </div>
-      <div class="toolbar">
-        <div class="filters">
-          <div ref="txDatePickerRef" class="date-range-picker">
-            <button type="button" class="date-range-btn" @click.stop="toggleTxDatePicker">
-              <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
-              <span>{{ txDatePickerLabel }}</span>
-              <svg class="date-range-chevron" :class="{ open: txDatePickerOpen }" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
-            </button>
-            <Transition name="panel">
-              <div v-show="txDatePickerOpen" class="date-range-panel" @click.stop>
-                <div class="dr-presets">
-                  <button type="button" class="dr-preset-btn" :class="{ active: txActivePreset === 'month' }" @click="txApplyPreset('month')">Este mês</button>
-                  <button type="button" class="dr-preset-btn" :class="{ active: txActivePreset === '30d' }" @click="txApplyPreset('30d')">30 dias</button>
-                  <button type="button" class="dr-preset-btn" :class="{ active: txActivePreset === '3m' }" @click="txApplyPreset('3m')">3 meses</button>
-                  <button type="button" class="dr-preset-btn" :class="{ active: txActivePreset === 'year' }" @click="txApplyPreset('year')">Este ano</button>
-                </div>
-                <div class="date-range-calendars">
-                  <div class="dr-calendar">
-                    <div class="dr-cal-header">
-                      <button type="button" class="dr-cal-nav" @click="txPickerPrevMonth">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
-                      </button>
-                      <span class="dr-cal-title">{{ PICKER_MONTH_NAMES[txPickerLeftMonth] }} {{ txPickerLeftYear }}</span>
-                      <span style="width:28px"></span>
-                    </div>
-                    <div class="dr-cal-weekdays">
-                      <span v-for="wd in PICKER_WEEKDAYS" :key="wd">{{ wd }}</span>
-                    </div>
-                    <div class="dr-cal-grid">
-                      <button
-                        v-for="(d, i) in txLeftDays"
-                        :key="'tl'+i"
-                        type="button"
-                        class="dr-day"
-                        :class="{
-                          empty: d === null,
-                          'in-range': d !== null && txIsInRange(txPickerLeftYear, txPickerLeftMonth, d),
-                          'is-start': d !== null && txIsStart(txPickerLeftYear, txPickerLeftMonth, d),
-                          'is-end': d !== null && txIsEnd(txPickerLeftYear, txPickerLeftMonth, d),
-                        }"
-                        :disabled="d === null"
-                        @click="d !== null && txPickDay(txPickerLeftYear, txPickerLeftMonth, d)"
-                      >
-                        {{ d ?? '' }}
-                      </button>
-                    </div>
-                  </div>
-                  <div class="dr-calendar">
-                    <div class="dr-cal-header">
-                      <span style="width:28px"></span>
-                      <span class="dr-cal-title">{{ PICKER_MONTH_NAMES[txPickerRightMonth] }} {{ txPickerRightYear }}</span>
-                      <button type="button" class="dr-cal-nav" @click="txPickerNextMonth">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
-                      </button>
-                    </div>
-                    <div class="dr-cal-weekdays">
-                      <span v-for="wd in PICKER_WEEKDAYS" :key="wd">{{ wd }}</span>
-                    </div>
-                    <div class="dr-cal-grid">
-                      <button
-                        v-for="(d, i) in txRightDays"
-                        :key="'tr'+i"
-                        type="button"
-                        class="dr-day"
-                        :class="{
-                          empty: d === null,
-                          'in-range': d !== null && txIsInRange(txPickerRightYear, txPickerRightMonth, d),
-                          'is-start': d !== null && txIsStart(txPickerRightYear, txPickerRightMonth, d),
-                          'is-end': d !== null && txIsEnd(txPickerRightYear, txPickerRightMonth, d),
-                        }"
-                        :disabled="d === null"
-                        @click="d !== null && txPickDay(txPickerRightYear, txPickerRightMonth, d)"
-                      >
-                        {{ d ?? '' }}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </Transition>
-          </div>
-          <div ref="typeDropRef" class="custom-dropdown">
-            <button type="button" class="custom-dropdown-btn" :class="{ active: filterType !== '' }" @click.stop="toggleTypeDrop">
-              <span>{{ typeLabel }}</span>
-              <svg class="custom-dropdown-chevron" :class="{ open: typeDropOpen }" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
-            </button>
-            <Transition name="panel">
-              <div v-show="typeDropOpen" class="custom-dropdown-panel" @click.stop>
-                <button type="button" class="custom-dropdown-item" :class="{ selected: filterType === '' }" @click="pickType('')">Todos os tipos</button>
-                <button type="button" class="custom-dropdown-item" :class="{ selected: filterType === 'income' }" @click="pickType('income')">Receita</button>
-                <button type="button" class="custom-dropdown-item" :class="{ selected: filterType === 'expense' }" @click="pickType('expense')">Despesa</button>
-                <button type="button" class="custom-dropdown-item" :class="{ selected: filterType === 'transfer' }" @click="pickType('transfer')">Transferência</button>
-              </div>
-            </Transition>
-          </div>
-          <div ref="catDropRef" class="custom-dropdown">
-            <button type="button" class="custom-dropdown-btn" :class="{ active: filterCategory !== '' }" @click.stop="toggleCatDrop">
-              <span>{{ categoryLabel }}</span>
-              <svg class="custom-dropdown-chevron" :class="{ open: catDropOpen }" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
-            </button>
-            <Transition name="panel">
-              <div v-show="catDropOpen" class="custom-dropdown-panel" @click.stop>
-                <button type="button" class="custom-dropdown-item" :class="{ selected: filterCategory === '' }" @click="pickCategory('')">Todas as categorias</button>
-                <button v-for="(label, key) in availableCategories" :key="key" type="button" class="custom-dropdown-item" :class="{ selected: filterCategory === String(key) }" @click="pickCategory(String(key))">{{ label }}</button>
-              </div>
-            </Transition>
-          </div>
-          <div ref="accDropRef" class="custom-dropdown">
-            <button type="button" class="custom-dropdown-btn" :class="{ active: filterAccountId !== '' }" @click.stop="toggleAccDrop">
-              <span>{{ accountLabel }}</span>
-              <svg class="custom-dropdown-chevron" :class="{ open: accDropOpen }" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
-            </button>
-            <Transition name="panel">
-              <div v-show="accDropOpen" class="custom-dropdown-panel" @click.stop>
-                <button type="button" class="custom-dropdown-item" :class="{ selected: filterAccountId === '' }" @click="pickAccount('')">Todas as contas</button>
-                <button v-for="a in accountsStore.accounts" :key="a.id" type="button" class="custom-dropdown-item" :class="{ selected: filterAccountId === a.id }" @click="pickAccount(a.id)">{{ a.name }}</button>
-              </div>
-            </Transition>
+      <div class="toolbar" style="align-items:flex-start">
+        <div class="tx-totals">
+          <span class="tx-totals-balance">{{ formatCurrencySummary(txBalance) }}</span>
+          <div class="tx-totals-detail">
+            <span class="tx-totals-income">Receitas <strong>{{ formatCurrencySummary(txTotalIncome) }}</strong></span>
+            <span class="tx-totals-sep">&middot;</span>
+            <span class="tx-totals-expense">Despesas <strong>{{ formatCurrencySummary(txTotalExpenses) }}</strong></span>
           </div>
         </div>
         <button type="button" class="btn-add" @click="openCreateModal">
-          + Nova transação
+          + Adicionar
         </button>
+      </div>
+
+      <div class="tx-filters-row">
+        <div class="filters">
+        <div ref="txDatePickerRef" class="date-range-picker">
+          <button type="button" class="date-range-btn" @click.stop="toggleTxDatePicker">
+            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
+            <span>{{ txDatePickerLabel }}</span>
+            <svg class="date-range-chevron" :class="{ open: txDatePickerOpen }" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+          </button>
+          <Transition name="panel">
+            <div v-show="txDatePickerOpen" class="date-range-panel" @click.stop>
+              <div class="dr-presets">
+                <button type="button" class="dr-preset-btn" :class="{ active: txActivePreset === 'month' }" @click="txApplyPreset('month')">Este mês</button>
+                <button type="button" class="dr-preset-btn" :class="{ active: txActivePreset === '30d' }" @click="txApplyPreset('30d')">30 dias</button>
+                <button type="button" class="dr-preset-btn" :class="{ active: txActivePreset === '3m' }" @click="txApplyPreset('3m')">3 meses</button>
+                <button type="button" class="dr-preset-btn" :class="{ active: txActivePreset === 'year' }" @click="txApplyPreset('year')">Este ano</button>
+              </div>
+              <div class="date-range-calendars">
+                <div class="dr-calendar">
+                  <div class="dr-cal-header">
+                    <button type="button" class="dr-cal-nav" @click="txPickerPrevMonth">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                    </button>
+                    <span class="dr-cal-title">{{ PICKER_MONTH_NAMES[txPickerLeftMonth] }} {{ txPickerLeftYear }}</span>
+                    <span style="width:28px"></span>
+                  </div>
+                  <div class="dr-cal-weekdays">
+                    <span v-for="wd in PICKER_WEEKDAYS" :key="wd">{{ wd }}</span>
+                  </div>
+                  <div class="dr-cal-grid">
+                    <button
+                      v-for="(d, i) in txLeftDays"
+                      :key="'tl'+i"
+                      type="button"
+                      class="dr-day"
+                      :class="{
+                        empty: d === null,
+                        'in-range': d !== null && txIsInRange(txPickerLeftYear, txPickerLeftMonth, d),
+                        'is-start': d !== null && txIsStart(txPickerLeftYear, txPickerLeftMonth, d),
+                        'is-end': d !== null && txIsEnd(txPickerLeftYear, txPickerLeftMonth, d),
+                      }"
+                      :disabled="d === null"
+                      @click="d !== null && txPickDay(txPickerLeftYear, txPickerLeftMonth, d)"
+                    >
+                      {{ d ?? '' }}
+                    </button>
+                  </div>
+                </div>
+                <div class="dr-calendar">
+                  <div class="dr-cal-header">
+                    <span style="width:28px"></span>
+                    <span class="dr-cal-title">{{ PICKER_MONTH_NAMES[txPickerRightMonth] }} {{ txPickerRightYear }}</span>
+                    <button type="button" class="dr-cal-nav" @click="txPickerNextMonth">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                    </button>
+                  </div>
+                  <div class="dr-cal-weekdays">
+                    <span v-for="wd in PICKER_WEEKDAYS" :key="wd">{{ wd }}</span>
+                  </div>
+                  <div class="dr-cal-grid">
+                    <button
+                      v-for="(d, i) in txRightDays"
+                      :key="'tr'+i"
+                      type="button"
+                      class="dr-day"
+                      :class="{
+                        empty: d === null,
+                        'in-range': d !== null && txIsInRange(txPickerRightYear, txPickerRightMonth, d),
+                        'is-start': d !== null && txIsStart(txPickerRightYear, txPickerRightMonth, d),
+                        'is-end': d !== null && txIsEnd(txPickerRightYear, txPickerRightMonth, d),
+                      }"
+                      :disabled="d === null"
+                      @click="d !== null && txPickDay(txPickerRightYear, txPickerRightMonth, d)"
+                    >
+                      {{ d ?? '' }}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </Transition>
+        </div>
+        <div ref="catDropRef" class="custom-dropdown">
+          <button type="button" class="custom-dropdown-btn" :class="{ active: filterCategory !== '' }" @click.stop="toggleCatDrop">
+            <span>{{ categoryLabel }}</span>
+            <svg class="custom-dropdown-chevron" :class="{ open: catDropOpen }" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+          </button>
+          <Transition name="panel">
+            <div v-show="catDropOpen" class="custom-dropdown-panel" @click.stop>
+              <button type="button" class="custom-dropdown-item" :class="{ selected: filterCategory === '' }" @click="pickCategory('')">Todas as categorias</button>
+              <button v-for="(label, key) in availableCategories" :key="key" type="button" class="custom-dropdown-item" :class="{ selected: filterCategory === String(key) }" @click="pickCategory(String(key))">{{ label }}</button>
+            </div>
+          </Transition>
+        </div>
+        <div ref="accDropRef" class="custom-dropdown">
+          <button type="button" class="custom-dropdown-btn" :class="{ active: filterAccountId !== '' }" @click.stop="toggleAccDrop">
+            <span>{{ accountLabel }}</span>
+            <svg class="custom-dropdown-chevron" :class="{ open: accDropOpen }" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+          </button>
+          <Transition name="panel">
+            <div v-show="accDropOpen" class="custom-dropdown-panel" @click.stop>
+              <button type="button" class="custom-dropdown-item" :class="{ selected: filterAccountId === '' }" @click="pickAccount('')">Todas as contas</button>
+              <button v-for="a in accountsStore.accounts" :key="a.id" type="button" class="custom-dropdown-item" :class="{ selected: filterAccountId === a.id }" @click="pickAccount(a.id)">{{ a.name }}</button>
+            </div>
+          </Transition>
+        </div>
+        </div>
+        <div class="type-toggle-bar">
+          <button type="button" class="type-toggle-btn" :class="{ active: filterType === '' }" @click="pickType('')">Todos</button>
+          <button type="button" class="type-toggle-btn" :class="{ active: filterType === 'income', 'type-income': filterType === 'income' }" @click="pickType('income')">Receitas</button>
+          <button type="button" class="type-toggle-btn" :class="{ active: filterType === 'expense', 'type-expense': filterType === 'expense' }" @click="pickType('expense')">Despesas</button>
+          <button type="button" class="type-toggle-btn" :class="{ active: filterType === 'transfer', 'type-transfer': filterType === 'transfer' }" @click="pickType('transfer')">Transferências</button>
+        </div>
       </div>
 
       <div v-if="transactionsStore.loading && transactionsStore.transactions.length === 0" class="loading-state">
@@ -1717,14 +2096,14 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
       </div>
 
       <div v-else-if="transactionsStore.transactions.length === 0" class="empty-state">
-        <p>Nenhuma transação ainda. Cria a tua primeira transação.</p>
+        <p>Nenhum movimento ainda. Crie o seu primeiro movimento.</p>
         <button type="button" class="btn-add" @click="openCreateModal">
-          + Nova transação
+          + Novo movimento
         </button>
       </div>
 
       <div v-else-if="filteredTransactions.length === 0" class="empty-state">
-        <p>Nenhuma transação encontrada com os filtros selecionados.</p>
+        <p>Nenhum movimento encontrado com os filtros selecionados.</p>
       </div>
 
       <div v-else class="table-container">
@@ -1732,11 +2111,12 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
           <thead>
             <tr>
               <th>Data</th>
+              <th class="logo-col"></th>
+              <th>Nome</th>
               <th>Categoria</th>
               <th>Tipo</th>
               <th class="amount-col">Valor</th>
               <th>Responsável</th>
-              <th v-if="householdStore.isCouple">Repartição</th>
               <th class="actions-col"></th>
             </tr>
           </thead>
@@ -1747,6 +2127,8 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
               class="table-row"
             >
               <td>{{ formatDate(tx.date) }}</td>
+              <td class="td-logo"><BrandLogo :name="tx.entityName || tx.description" :size="24" :show-fallback="false" /></td>
+              <td class="td-name">{{ tx.description || '—' }}</td>
               <td>
                 {{ TRANSACTION_CATEGORY_LABELS[tx.category] }}
                 <span v-if="tx.type === TransactionType.Transfer" class="transfer-accounts-hint">
@@ -1762,7 +2144,6 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
                 {{ formatAmount(tx.amount, tx.type) }}
               </td>
               <td>{{ getResponsibleDisplay(tx) }}</td>
-              <td v-if="householdStore.isCouple">{{ getSplitsDisplay(tx) }}</td>
                 <td class="actions-col">
                 <button
                   type="button"
@@ -1796,24 +2177,117 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
       </div>
 
       <div v-show="activeTab === 'recurring'" class="tab-content">
+        <PlanUpsellCard
+          v-if="recurringLocked"
+          title="Controle as suas despesas recorrentes"
+          description="Saiba exatamente quanto gasta em subscrições e pagamentos fixos todos os meses."
+          :features="[
+            'Agrupe despesas por categoria e frequência',
+            'Preveja o total de gastos fixos do próximo mês',
+            'Identifique subscrições esquecidas ou duplicadas',
+          ]"
+        >
+          <template #icon>
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
+          </template>
+        </PlanUpsellCard>
+        <template v-else>
         <div v-if="needsPrimarySelection" class="primary-inline-hint">
-          <router-link :to="{ name: 'accounts' }" class="primary-inline-link">Escolhe a conta principal em Contas</router-link>
-          <span> para gerires recorrentes no plano Free com várias contas.</span>
+          <router-link :to="{ name: 'contas' }" class="primary-inline-link">Escolha a conta principal em Contas</router-link>
+          <span> para gerir recorrentes no plano Free com várias contas.</span>
         </div>
-        <p class="recurring-hint">Receitas e despesas que se repetem mensalmente. São contabilizadas a partir do mês atual.</p>
-        <div class="toolbar">
+        <div class="toolbar" style="align-items:flex-start">
+          <div class="tx-totals">
+            <span class="tx-totals-balance">{{ formatCurrencySummary(recBalance) }}</span>
+            <div class="tx-totals-detail">
+              <span class="tx-totals-income">Receitas <strong>{{ formatCurrencySummary(recTotalIncome) }}</strong></span>
+              <span class="tx-totals-sep">&middot;</span>
+              <span class="tx-totals-expense">Despesas <strong>{{ formatCurrencySummary(recTotalExpenses) }}</strong></span>
+            </div>
+          </div>
+          <button type="button" class="btn-add" @click="openRecurringCreateModal">
+            + Adicionar
+          </button>
+        </div>
+
+        <div class="tx-filters-row">
           <div class="filters">
-            <div ref="recTypeDropRef" class="custom-dropdown">
-              <button type="button" class="custom-dropdown-btn" :class="{ active: recFilterType !== '' }" @click.stop="toggleRecTypeDrop">
-                <span>{{ recTypeLabel }}</span>
-                <svg class="custom-dropdown-chevron" :class="{ open: recTypeDropOpen }" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+            <div ref="recDatePickerRef" class="date-range-picker">
+              <button type="button" class="date-range-btn" @click.stop="toggleRecDatePicker">
+                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
+                <span>{{ recDatePickerLabel }}</span>
+                <svg class="date-range-chevron" :class="{ open: recDatePickerOpen }" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
               </button>
               <Transition name="panel">
-                <div v-show="recTypeDropOpen" class="custom-dropdown-panel" @click.stop>
-                  <button type="button" class="custom-dropdown-item" :class="{ selected: recFilterType === '' }" @click="pickRecType('')">Todos os tipos</button>
-                  <button type="button" class="custom-dropdown-item" :class="{ selected: recFilterType === 'income' }" @click="pickRecType('income')">Receita</button>
-                  <button type="button" class="custom-dropdown-item" :class="{ selected: recFilterType === 'expense' }" @click="pickRecType('expense')">Despesa</button>
-                  <button type="button" class="custom-dropdown-item" :class="{ selected: recFilterType === 'transfer' }" @click="pickRecType('transfer')">Transferência</button>
+                <div v-show="recDatePickerOpen" class="date-range-panel" @click.stop>
+                  <div class="dr-presets">
+                    <button type="button" class="dr-preset-btn" :class="{ active: recActivePreset === 'month' }" @click="recApplyPreset('month')">Este mês</button>
+                    <button type="button" class="dr-preset-btn" :class="{ active: recActivePreset === '30d' }" @click="recApplyPreset('30d')">30 dias</button>
+                    <button type="button" class="dr-preset-btn" :class="{ active: recActivePreset === '3m' }" @click="recApplyPreset('3m')">3 meses</button>
+                    <button type="button" class="dr-preset-btn" :class="{ active: recActivePreset === 'year' }" @click="recApplyPreset('year')">Este ano</button>
+                  </div>
+                  <div class="date-range-calendars">
+                    <div class="dr-calendar">
+                      <div class="dr-cal-header">
+                        <button type="button" class="dr-cal-nav" @click="recPickerPrevMonth">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                        </button>
+                        <span class="dr-cal-title">{{ PICKER_MONTH_NAMES[recPickerLeftMonth] }} {{ recPickerLeftYear }}</span>
+                        <span style="width:28px"></span>
+                      </div>
+                      <div class="dr-cal-weekdays">
+                        <span v-for="wd in PICKER_WEEKDAYS" :key="wd">{{ wd }}</span>
+                      </div>
+                      <div class="dr-cal-grid">
+                        <button
+                          v-for="(d, i) in recLeftDays"
+                          :key="'rl'+i"
+                          type="button"
+                          class="dr-day"
+                          :class="{
+                            empty: d === null,
+                            'in-range': d !== null && recIsInRange(recPickerLeftYear, recPickerLeftMonth, d),
+                            'is-start': d !== null && recIsStart(recPickerLeftYear, recPickerLeftMonth, d),
+                            'is-end': d !== null && recIsEnd(recPickerLeftYear, recPickerLeftMonth, d),
+                          }"
+                          :disabled="d === null"
+                          @click="d !== null && recPickDay(recPickerLeftYear, recPickerLeftMonth, d)"
+                        >
+                          {{ d ?? '' }}
+                        </button>
+                      </div>
+                    </div>
+                    <div class="dr-calendar">
+                      <div class="dr-cal-header">
+                        <span style="width:28px"></span>
+                        <span class="dr-cal-title">{{ PICKER_MONTH_NAMES[recPickerRightMonth] }} {{ recPickerRightYear }}</span>
+                        <button type="button" class="dr-cal-nav" @click="recPickerNextMonth">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                        </button>
+                      </div>
+                      <div class="dr-cal-weekdays">
+                        <span v-for="wd in PICKER_WEEKDAYS" :key="wd">{{ wd }}</span>
+                      </div>
+                      <div class="dr-cal-grid">
+                        <button
+                          v-for="(d, i) in recRightDays"
+                          :key="'rr'+i"
+                          type="button"
+                          class="dr-day"
+                          :class="{
+                            empty: d === null,
+                            'in-range': d !== null && recIsInRange(recPickerRightYear, recPickerRightMonth, d),
+                            'is-start': d !== null && recIsStart(recPickerRightYear, recPickerRightMonth, d),
+                            'is-end': d !== null && recIsEnd(recPickerRightYear, recPickerRightMonth, d),
+                          }"
+                          :disabled="d === null"
+                          @click="d !== null && recPickDay(recPickerRightYear, recPickerRightMonth, d)"
+                        >
+                          {{ d ?? '' }}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </Transition>
             </div>
@@ -1842,16 +2316,19 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
               </Transition>
             </div>
           </div>
-          <button type="button" class="btn-add" @click="openRecurringCreateModal">
-            + Nova transação recorrente
-          </button>
+          <div class="type-toggle-bar">
+            <button type="button" class="type-toggle-btn" :class="{ active: recFilterType === '' }" @click="pickRecTypeToggle('')">Todos</button>
+            <button type="button" class="type-toggle-btn" :class="{ active: recFilterType === 'income', 'type-income': recFilterType === 'income' }" @click="pickRecTypeToggle('income')">Receitas</button>
+            <button type="button" class="type-toggle-btn" :class="{ active: recFilterType === 'expense', 'type-expense': recFilterType === 'expense' }" @click="pickRecTypeToggle('expense')">Despesas</button>
+            <button type="button" class="type-toggle-btn" :class="{ active: recFilterType === 'transfer', 'type-transfer': recFilterType === 'transfer' }" @click="pickRecTypeToggle('transfer')">Transferências</button>
+          </div>
         </div>
         <div v-if="recurringStore.loading && activeRecurring.length === 0" class="loading-state">
           <div class="spinner"></div>
           <p>A carregar contas recorrentes...</p>
         </div>
         <div v-else-if="activeRecurring.length === 0" class="empty-state">
-          <p>Nenhuma conta recorrente. Adiciona uma receita ou despesa mensal.</p>
+          <p>Nenhuma conta recorrente. Adicione uma receita ou despesa mensal.</p>
           <button type="button" class="btn-add" @click="openRecurringCreateModal">
             + Nova transação recorrente
           </button>
@@ -1864,17 +2341,20 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
             <thead>
               <tr>
                 <th>Conta</th>
+                <th class="logo-col"></th>
+                <th>Nome</th>
                 <th>Categoria</th>
                 <th>Tipo</th>
                 <th class="amount-col">Valor</th>
                 <th>Frequência</th>
                 <th>Início</th>
+                <th v-if="householdStore.isCouple">Responsável</th>
                 <th class="actions-col"></th>
               </tr>
             </thead>
             <tbody>
               <tr
-                v-for="r in filteredRecurring"
+                v-for="r in paginatedRecurring"
                 :key="r.id"
                 class="table-row"
               >
@@ -1884,6 +2364,8 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
                     → {{ getAccountName(r.destinationAccountId ?? '') }}
                   </span>
                 </td>
+                <td class="td-logo"><BrandLogo :name="r.entityName || r.description" :size="24" :show-fallback="false" /></td>
+                <td class="td-name">{{ r.description || '—' }}</td>
                 <td>{{ TRANSACTION_CATEGORY_LABELS[r.category] }}</td>
                 <td>
                   <span :class="['type-badge', r.type === TransactionType.Income ? 'type-income' : r.type === TransactionType.Transfer ? 'type-transfer' : 'type-expense']">
@@ -1893,8 +2375,9 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
                 <td class="amount-col" :class="{ 'amount-income': r.type === TransactionType.Income, 'amount-expense': r.type === TransactionType.Expense, 'amount-transfer': r.type === TransactionType.Transfer }">
                   {{ formatAmount(r.amount, r.type) }}
                 </td>
-                <td>{{ RECURRING_FREQUENCY_LABELS[r.frequency as RecurringFrequency] }}</td>
+                <td>{{ recurringFrequencyDescription(r) }}</td>
                 <td>{{ MONTH_NAMES[r.startMonth] }} {{ r.startYear }}</td>
+                <td v-if="householdStore.isCouple">{{ getRecurringResponsibleDisplay(r) }}</td>
                 <td class="actions-col">
                   <button
                     type="button"
@@ -1911,7 +2394,20 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
               </tr>
             </tbody>
           </table>
+          <div v-if="recTotalPages > 1" class="pagination">
+            <button type="button" class="pg-arrow" :disabled="!canPrevRecPage" @click="prevRecPage" aria-label="Anterior">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+            </button>
+            <template v-for="(p, i) in visibleRecPages" :key="i">
+              <span v-if="p === '...'" class="pg-dots">...</span>
+              <button v-else type="button" class="pg-num" :class="{ active: p === recPage }" @click="goToRecPage(p)">{{ p }}</button>
+            </template>
+            <button type="button" class="pg-arrow" :disabled="!canNextRecPage" @click="nextRecPage" aria-label="Seguinte">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+            </button>
+          </div>
         </div>
+        </template>
       </div>
     </div>
 
@@ -1967,6 +2463,9 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
     <RecurringFormModal
       :open="recurringCreateModalOpen"
       :accounts="accountsForRecurringCreate"
+      :members="members"
+      :is-couple="householdStore.isCouple"
+      :current-user-id="authStore.user?.id ?? ''"
       :loading="actionLoading"
       :is-transfer="isRecTransferMode"
       @close="closeRecurringCreateModal"
@@ -1977,6 +2476,9 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
       :open="recurringEditModalOpen"
       :recurring="recurringToEdit"
       :accounts="accountsForRecurringEdit"
+      :members="members"
+      :is-couple="householdStore.isCouple"
+      :current-user-id="authStore.user?.id ?? ''"
       :loading="actionLoading"
       :is-transfer="isRecTransferMode"
       @close="closeRecurringEditModal"
@@ -1987,6 +2489,7 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
       :open="recurringRemoveModalOpen"
       :recurring="recurringToRemove"
       :loading="actionLoading"
+      :error="recurringStore.error"
       @close="closeRecurringRemoveModal"
       @remove-from-current-month="handleRecurringRemoveFromCurrentMonth"
       @remove-from-next-month="handleRecurringRemoveFromNextMonth"
@@ -2003,7 +2506,7 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
           <button type="button" class="btn-secondary" @click="dismissLimitModal">Agora não</button>
           <router-link
             v-if="limitModalKind === 'primary'"
-            :to="{ name: 'accounts' }"
+            :to="{ name: 'contas' }"
             class="locked-modal-cta"
             @click="dismissLimitModal"
           >
@@ -2011,7 +2514,7 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
           </router-link>
           <router-link
             v-else
-            :to="{ name: 'subscription' }"
+            :to="{ name: 'subscricao' }"
             class="locked-modal-cta"
             @click="dismissLimitModal"
           >
@@ -2020,6 +2523,18 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
         </div>
       </div>
     </BaseModal>
+
+    <PlanUpsellModal
+      :open="planUpsellOpen"
+      title="Fazer upgrade do plano"
+      :description="planUpsellText"
+      :features="[
+        'Movimentos ilimitados todos os meses',
+        'Transações recorrentes',
+        'Objetivos de poupança e relatórios mensais',
+      ]"
+      @close="planUpsellOpen = false"
+    />
   </div>
 </template>
 
@@ -2158,6 +2673,7 @@ html.dark .tab.active {
   margin: 0 0 1.25rem;
 }
 
+
 .global-error {
   padding: 0.75rem 1rem;
   background: #fef2f2;
@@ -2207,17 +2723,12 @@ html.dark .tab.active {
 }
 
 .custom-dropdown-btn:hover {
-  border-color: #166534;
+  border-color: var(--color-text-muted);
 }
 
 .custom-dropdown-btn.active {
-  border-color: #166534;
-  color: #166534;
-}
-
-html.dark .custom-dropdown-btn.active {
-  border-color: #4ade80;
-  color: #4ade80;
+  border-color: var(--color-text-muted);
+  color: var(--color-text);
 }
 
 .custom-dropdown-chevron {
@@ -2282,7 +2793,96 @@ html.dark .custom-dropdown-item.selected {
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  margin-bottom: 1.5rem;
+  margin-top: -0.5rem;
+  margin-bottom: 2rem;
+}
+
+.tx-filters-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 2.5rem;
+  margin-bottom: 2rem;
+}
+
+.tx-totals {
+}
+
+.tx-totals-balance {
+  display: block;
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--color-text);
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+
+.tx-totals-detail {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+}
+
+.tx-totals-income,
+.tx-totals-expense {
+  color: var(--color-text-muted);
+}
+
+.tx-totals-sep {
+  color: var(--color-text-muted);
+}
+
+.type-toggle-bar {
+  display: inline-flex;
+  background: var(--color-table-row-hover);
+  border-radius: 10px;
+  padding: 3px;
+  gap: 2px;
+  box-shadow: var(--app-shadow-card, 0 1px 3px rgba(0, 0, 0, 0.06));
+}
+
+.type-toggle-btn {
+  padding: 0.375rem 1rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  font-family: inherit;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.type-toggle-btn.active {
+  background: var(--color-bg-card);
+  color: var(--color-text);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.type-toggle-btn.active.type-income {
+  color: var(--color-type-income-text);
+}
+
+.type-toggle-btn.active.type-expense {
+  color: var(--color-type-expense-text);
+}
+
+.type-toggle-btn.active.type-transfer {
+  color: #2563eb;
+}
+
+html.dark .type-toggle-btn.active.type-transfer {
+  color: #60a5fa;
+}
+
+.type-toggle-btn:not(.active):hover {
+  color: var(--color-text);
 }
 
 .filters {
@@ -2339,7 +2939,7 @@ html.dark .custom-dropdown-item.selected {
   border-radius: 14px;
   box-shadow: var(--app-shadow-card, 0 1px 3px rgba(0, 0, 0, 0.06));
   border: 1px solid var(--color-border);
-  overflow: hidden;
+  overflow-x: auto;
 }
 
 .transactions-table {
@@ -2349,7 +2949,7 @@ html.dark .custom-dropdown-item.selected {
 
 .transactions-table th {
   text-align: left;
-  padding: 0.875rem 1.125rem;
+  padding: 0.875rem 0.75rem;
   font-size: 0.6875rem;
   font-weight: 700;
   color: var(--color-text-muted);
@@ -2360,7 +2960,7 @@ html.dark .custom-dropdown-item.selected {
 }
 
 .transactions-table td {
-  padding: 0.875rem 1.125rem;
+  padding: 0.875rem 0.75rem;
   font-size: 0.875rem;
   color: var(--color-text);
   border-bottom: 1px solid var(--color-border);
@@ -2394,6 +2994,39 @@ html.dark .custom-dropdown-item.selected {
 .actions-col {
   width: 1%;
   white-space: nowrap;
+  text-align: right;
+}
+
+.td-name {
+  white-space: nowrap;
+}
+
+.logo-col {
+  width: 1%;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+.td-logo {
+  width: 1%;
+  padding-left: 0.15rem !important;
+  padding-right: 0 !important;
+  white-space: nowrap;
+}
+
+/* Data/Conta com um pequeno espaço antes do logo (sem sobrepor) */
+.transactions-table td:first-child,
+.summary-table td:first-child {
+  padding-right: 0.3rem !important;
+  white-space: nowrap;
+}
+
+.td-name {
+  padding-left: 0.6rem !important;
+}
+
+.summary-td-desc {
+  padding-left: 0.6rem !important;
 }
 
 .type-badge {
@@ -2444,7 +3077,7 @@ html.dark .amount-transfer {
 }
 
 .btn-icon {
-  padding: 0.3rem 0.625rem;
+  padding: 0.3rem 0.5rem;
   font-size: 0.75rem;
   font-weight: 500;
   color: var(--color-text-muted);
@@ -2452,8 +3085,13 @@ html.dark .amount-transfer {
   border: 1px solid var(--color-border);
   border-radius: 6px;
   cursor: pointer;
-  margin-right: 0.25rem;
+  margin-right: 0.2rem;
+  white-space: nowrap;
   transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.actions-col .btn-icon:last-child {
+  margin-right: 0;
 }
 
 .btn-icon:hover {
@@ -2571,14 +3209,13 @@ html.dark .amount-transfer {
 }
 
 .pg-num.active {
-  background: #166534;
-  color: #fff;
-  font-weight: 700;
+  background: #e5e7eb;
+  color: #111827;
 }
 
 html.dark .pg-num.active {
-  background: #4ade80;
-  color: #0a0a0a;
+  background: #374151;
+  color: #f3f4f6;
 }
 
 .pg-dots {
@@ -2865,6 +3502,12 @@ html.dark .dr-day.is-end {
 
 .summary-search-input::placeholder {
   color: var(--color-text-muted);
+}
+
+.summary-search-input:focus,
+.summary-search-input:focus-visible {
+  box-shadow: none;
+  outline: none;
 }
 
 /* Summary cards */

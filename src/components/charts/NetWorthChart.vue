@@ -10,14 +10,23 @@ import {
   Tooltip,
   Filler,
 } from 'chart.js'
-import type { MonthlyTrend } from '@/types/dashboard'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Filler)
 
+export interface DailyBalancePoint {
+  date: string
+  balance: number
+}
+
 const props = defineProps<{
-  trendData: MonthlyTrend[]
-  currentBalance: number
+  points: DailyBalancePoint[]
   currency: string
+  hideValues?: boolean
+  period?: string
+}>()
+
+const emit = defineEmits<{
+  hover: [point: { date: string; balance: number } | null]
 }>()
 
 const isDark = ref(document.documentElement.classList.contains('dark'))
@@ -34,37 +43,60 @@ onBeforeUnmount(() => {
   observer?.disconnect()
 })
 
-/** Build cumulative balance series working backwards from currentBalance */
-const balanceSeries = computed(() => {
-  const trend = props.trendData
-  if (trend.length === 0) {
-    return { labels: [] as string[], values: [] as number[] }
+const MONTH_NAMES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
+
+const chartKey = computed(() => `${isDark.value}-${props.points.length}-${props.period}`)
+
+// Pré-calcula que índices recebem etiqueta no eixo X. O primeiro mês/ano é
+// sempre etiquetado; as fronteiras seguintes só aparecem se estiverem a uma
+// distância mínima da última etiqueta mostrada (evita sobreposições quando o
+// primeiro mês é parcial, ex.: 1A começa a 30/Mai e Jun ficaria colado).
+const tickLabels = computed<(string | null)[]>(() => {
+  const pts = props.points
+  const n = pts.length
+  const labels: (string | null)[] = new Array(n).fill(null)
+  if (n === 0) return labels
+
+  const is5A = props.period === '5A'
+  const minGap = Math.max(2, Math.round(n / 24))
+  let lastShown = -Infinity
+
+  for (let i = 0; i < n; i++) {
+    const dateStr = pts[i]?.date
+    if (!dateStr) continue
+    const prev = i > 0 ? pts[i - 1]?.date : null
+
+    let label: string | null = null
+    if (is5A) {
+      const y = dateStr.substring(0, 4)
+      if (!prev || y !== prev.substring(0, 4)) label = y
+    } else {
+      const ym = dateStr.substring(0, 7)
+      if (!prev || ym !== prev.substring(0, 7)) {
+        label = MONTH_NAMES[Number(dateStr.substring(5, 7)) - 1]
+      }
+    }
+
+    if (label !== null && i - lastShown >= minGap) {
+      labels[i] = label
+      lastShown = i
+    }
   }
-
-  // trend is chronological: oldest first
-  const values: number[] = new Array(trend.length)
-  values[trend.length - 1] = props.currentBalance
-
-  for (let i = trend.length - 2; i >= 0; i--) {
-    values[i] = values[i + 1] - trend[i + 1].savings
-  }
-
-  const labels = trend.map((t) => t.label)
-  return { labels, values }
+  return labels
 })
 
-const chartKey = computed(() => `${isDark.value}-${balanceSeries.value.values.length}`)
-
 const chartData = computed(() => {
-  const { labels, values } = balanceSeries.value
+  const pts = props.points
   const dark = isDark.value
 
   return {
-    labels,
+    labels: pts.map((p) => p.date),
     datasets: [
       {
         label: 'Saldo',
-        data: values,
+        data: pts.map((p) => p.balance),
+        // Não cortar os pontos na fronteira: a bola do último ponto (hoje) fica inteira.
+        clip: false as const,
         borderColor: dark ? '#4ade80' : '#166534',
         borderWidth: 2.5,
         backgroundColor: (ctx: { chart: { ctx: CanvasRenderingContext2D; chartArea?: { top: number; bottom: number } } }) => {
@@ -85,7 +117,7 @@ const chartData = computed(() => {
         pointRadius: 0,
         pointHoverRadius: 6,
         pointHoverBackgroundColor: dark ? '#4ade80' : '#166534',
-        pointHoverBorderColor: dark ? '#0f172a' : '#fff',
+        pointHoverBorderColor: dark ? '#0a0a0a' : '#fff',
         pointHoverBorderWidth: 2.5,
       },
     ],
@@ -95,21 +127,33 @@ const chartData = computed(() => {
 const chartOptions = computed(() => {
   const dark = isDark.value
   const cur = props.currency || 'EUR'
+  const pts = props.points
 
   return {
     responsive: true,
     maintainAspectRatio: false,
+    // Folga no topo/lados para a bola do hover não ser cortada.
+    layout: { padding: { top: 18, right: 16, left: 4, bottom: 0 } },
     interaction: {
       mode: 'index' as const,
       intersect: false,
     },
+    onHover: (_event: unknown, elements: { index: number }[]) => {
+      if (elements.length > 0) {
+        const idx = elements[0].index
+        const pt = pts[idx]
+        if (pt) {
+          emit('hover', { date: pt.date, balance: pt.balance })
+        }
+      }
+    },
     plugins: {
       legend: { display: false },
       tooltip: {
-        backgroundColor: dark ? '#1e293b' : '#fff',
-        titleColor: dark ? '#e2e8f0' : '#334155',
-        bodyColor: dark ? '#f8fafc' : '#0f172a',
-        borderColor: dark ? '#334155' : '#e2e8f0',
+        backgroundColor: dark ? '#161616' : '#fff',
+        titleColor: dark ? '#d4d4d4' : '#334155',
+        bodyColor: dark ? '#fafafa' : '#0f172a',
+        borderColor: dark ? '#2a2a2a' : '#e2e8f0',
         borderWidth: 1,
         padding: 12,
         cornerRadius: 10,
@@ -117,7 +161,15 @@ const chartOptions = computed(() => {
         bodyFont: { size: 14, weight: 'bold' as const },
         displayColors: false,
         callbacks: {
+          title: (items: { dataIndex: number }[]) => {
+            if (items.length === 0) return ''
+            const dateStr = pts[items[0].dataIndex]?.date
+            if (!dateStr) return ''
+            const d = new Date(dateStr + 'T00:00:00')
+            return d.toLocaleDateString('pt-PT', { day: 'numeric', month: 'long', year: 'numeric' })
+          },
           label: (ctx: { raw: unknown }) => {
+            if (props.hideValues) return '••••••'
             const v = Number(ctx.raw)
             return new Intl.NumberFormat('pt-PT', {
               style: 'currency',
@@ -133,22 +185,33 @@ const chartOptions = computed(() => {
         grid: { display: false },
         border: { display: false },
         ticks: {
-          color: dark ? '#64748b' : '#94a3b8',
+          color: dark ? '#737373' : '#94a3b8',
           font: { size: 12 },
           padding: 8,
+          maxRotation: 0,
+          autoSkip: false,
+          callback: function (_value: unknown, index: number) {
+            return tickLabels.value[index] ?? null
+          },
         },
       },
       y: {
         display: false,
         beginAtZero: false,
+        // Folga acima do máximo e abaixo do mínimo (bola do topo inteira, linha não colada ao fundo).
+        grace: '18%',
       },
     },
   }
 })
+
+function onMouseLeave() {
+  emit('hover', null)
+}
 </script>
 
 <template>
-  <div class="net-worth-chart">
+  <div class="net-worth-chart" @mouseleave="onMouseLeave">
     <Line :key="chartKey" :data="chartData" :options="chartOptions" />
   </div>
 </template>

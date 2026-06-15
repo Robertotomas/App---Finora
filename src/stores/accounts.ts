@@ -29,13 +29,14 @@ function mapAccount(a: Account): Account {
     householdId: a.householdId,
     isActiveForPlan: a.isActiveForPlan ?? true,
     isArchived: a.isArchived ?? false,
-    archivedAt: a.archivedAt
+    archivedAt: a.archivedAt,
+    logoDomain: a.logoDomain ?? null
   }
 }
 
 export const useAccountsStore = defineStore('accounts', () => {
   const accounts = ref<Account[]>([])
-  const loading = ref(false)
+  const loading = ref(true)
   const error = ref<string | null>(null)
 
   const activeAccounts = computed(() => accounts.value.filter((a) => !a.isArchived))
@@ -162,6 +163,14 @@ export const useAccountsStore = defineStore('accounts', () => {
     }
   }
 
+  function adjustBalance(accountId: string, delta: number) {
+    const idx = accounts.value.findIndex((a) => a.id === accountId)
+    if (idx >= 0) {
+      accounts.value = [...accounts.value]
+      accounts.value[idx] = { ...accounts.value[idx], balance: accounts.value[idx].balance + delta }
+    }
+  }
+
   function clearError() {
     error.value = null
   }
@@ -179,6 +188,7 @@ export const useAccountsStore = defineStore('accounts', () => {
     archiveAccount,
     reactivateAccount,
     deleteAccountWithTransfer,
+    adjustBalance,
     clearError
   }
 })

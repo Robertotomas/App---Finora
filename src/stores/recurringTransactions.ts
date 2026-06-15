@@ -36,7 +36,10 @@ function mapRecurring(d: {
   category: number
   amount: number
   description?: string
+  entityType?: number
+  entityName?: string | null
   destinationAccountId?: string
+  responsibleUserId?: string | null
   frequency?: number
   annualMonth?: number
   startMonth: number
@@ -52,7 +55,10 @@ function mapRecurring(d: {
     category: d.category,
     amount: Number(d.amount),
     description: d.description,
+    entityType: d.entityType,
+    entityName: d.entityName ?? null,
     destinationAccountId: d.destinationAccountId,
+    responsibleUserId: d.responsibleUserId ?? null,
     frequency: d.frequency ?? 0,
     annualMonth: d.annualMonth,
     startMonth: d.startMonth,
@@ -64,7 +70,7 @@ function mapRecurring(d: {
 
 export const useRecurringTransactionsStore = defineStore('recurringTransactions', () => {
   const recurring = ref<RecurringTransaction[]>([])
-  const loading = ref(false)
+  const loading = ref(true)
   const error = ref<string | null>(null)
 
   async function fetchRecurring() {

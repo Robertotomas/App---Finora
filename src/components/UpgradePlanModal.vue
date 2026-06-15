@@ -60,7 +60,7 @@ async function handleChoose(target: SubscriptionPlan) {
 <template>
   <BaseModal
     v-if="open"
-    title="Atualiza o teu plano"
+    title="Atualize o seu plano"
     @close="emit('close')"
   >
     <div class="modal-body">

@@ -52,24 +52,25 @@
 }
 
 html.dark {
-  --color-bg: #0f172a;
-  --color-bg-card: #1e293b;
+  /* Preto/cinza neutro — sem tons azulados (slate). */
+  --color-bg: #0a0a0a;
+  --color-bg-card: #161616;
   --color-text: #ffffff;
-  --color-text-muted: #e2e8f0;
-  --color-border: #334155;
-  --color-header-bg: #1e293b;
-  --color-header-border: #334155;
-  --color-logo: #f1f5f9;
-  --color-link: #94a3b8;
-  --color-link-hover: #60a5fa;
-  --color-input-bg: #334155;
-  --color-input-border: #475569;
+  --color-text-muted: #a3a3a3;
+  --color-border: #2a2a2a;
+  --color-header-bg: #121212;
+  --color-header-border: #2a2a2a;
+  --color-logo: #f5f5f5;
+  --color-link: #a3a3a3;
+  --color-link-hover: #4ade80;
+  --color-input-bg: #1f1f1f;
+  --color-input-border: #3a3a3a;
   --color-btn-secondary-bg: transparent;
-  --color-btn-secondary-border: #475569;
-  --color-btn-secondary-hover: #334155;
-  --color-table-header-bg: #1e293b;
-  --color-table-row-hover: #334155;
-  --color-empty-state: #94a3b8;
+  --color-btn-secondary-border: #3a3a3a;
+  --color-btn-secondary-hover: #262626;
+  --color-table-header-bg: #161616;
+  --color-table-row-hover: #1f1f1f;
+  --color-empty-state: #a3a3a3;
   --color-error: #f87171;
   --color-success: #34d399;
   --color-income: #34d399;
@@ -79,18 +80,18 @@ html.dark {
   --color-type-expense-bg: #7f1d1d;
   --color-type-expense-text: #fca5a5;
   --color-modal-overlay: rgba(0, 0, 0, 0.7);
-  /* Sidebar dark mode */
-  --color-sidebar-bg: #1e293b;
-  --color-sidebar-text: #e2e8f0;
-  --color-sidebar-border: #334155;
-  --color-sidebar-hover: #334155;
-  --color-sidebar-active: #475569;
-  --color-sidebar-edge-shadow: 14px 0 40px -12px rgba(0, 0, 0, 0.55),
-    6px 0 20px -6px rgba(0, 0, 0, 0.35);
-  --color-top-header-shadow: 0 4px 20px -4px rgba(0, 0, 0, 0.45);
-  --color-top-header-focus-ring: rgba(96, 165, 250, 0.35);
+  /* Sidebar dark mode — preto neutro */
+  --color-sidebar-bg: #121212;
+  --color-sidebar-text: #e5e5e5;
+  --color-sidebar-border: #262626;
+  --color-sidebar-hover: #262626;
+  --color-sidebar-active: #333333;
+  --color-sidebar-edge-shadow: 14px 0 40px -12px rgba(0, 0, 0, 0.6),
+    6px 0 20px -6px rgba(0, 0, 0, 0.4);
+  --color-top-header-shadow: 0 4px 20px -4px rgba(0, 0, 0, 0.5);
+  --color-top-header-focus-ring: rgba(74, 222, 128, 0.3);
   --focus-ring: 0 0 0 2px var(--color-bg), 0 0 0 4px rgba(74, 222, 128, 0.4);
-  --scrollbar-thumb: #475569;
+  --scrollbar-thumb: #3a3a3a;
   --scrollbar-track: transparent;
 }
 
@@ -328,6 +329,21 @@ html.dark select {
   color: var(--color-text) !important;
 }
 
+/* Autofill do browser: o Chrome força um fundo claro próprio em campos
+   preenchidos automaticamente. Mascaramos com box-shadow inset + cor de texto. */
+html.dark input:-webkit-autofill,
+html.dark input:-webkit-autofill:hover,
+html.dark input:-webkit-autofill:focus,
+html.dark input:-webkit-autofill:active,
+html.dark textarea:-webkit-autofill,
+html.dark select:-webkit-autofill {
+  -webkit-text-fill-color: var(--color-text) !important;
+  -webkit-box-shadow: 0 0 0 1000px var(--color-input-bg) inset !important;
+  box-shadow: 0 0 0 1000px var(--color-input-bg) inset !important;
+  caret-color: var(--color-text);
+  transition: background-color 9999s ease-out 0s;
+}
+
 /* Dashboard cards */
 html.dark .summary-card,
 html.dark .card {
@@ -527,7 +543,7 @@ html.dark .error-hint {
 
 /* Plano Mensal */
 html.dark .expected-section {
-  background: linear-gradient(135deg, #1e3a5f 0%, #0f172a 100%) !important;
+  background: linear-gradient(135deg, #1f1f1f 0%, #141414 100%) !important;
   border-color: var(--color-border) !important;
 }
 html.dark .expected-label {
@@ -672,7 +688,7 @@ html.dark .error-hint {
 
 /* Plano Mensal (MonthlyFinance) */
 html.dark .expected-section {
-  background: linear-gradient(135deg, #1e3a5f 0%, #0f172a 100%) !important;
+  background: linear-gradient(135deg, #1f1f1f 0%, #141414 100%) !important;
   border-color: var(--color-border) !important;
 }
 html.dark .expected-label {
@@ -814,7 +830,7 @@ html.dark .error-hint {
 
 /* Plano Mensal (MonthlyFinance) */
 html.dark .expected-section {
-  background: linear-gradient(135deg, #1e3a5f 0%, #0f172a 100%) !important;
+  background: linear-gradient(135deg, #1f1f1f 0%, #141414 100%) !important;
   border-color: var(--color-border) !important;
 }
 html.dark .expected-label {
@@ -967,7 +983,7 @@ html.dark .error-hint {
 
 /* Plano Mensal (MonthlyFinanceView) */
 html.dark .expected-section {
-  background: linear-gradient(135deg, #1e3a5f 0%, #0f172a 100%) !important;
+  background: linear-gradient(135deg, #1f1f1f 0%, #141414 100%) !important;
   border-color: var(--color-border) !important;
 }
 html.dark .expected-label {
@@ -1134,7 +1150,7 @@ html.dark .link {
 
 /* Plano Mensal - expected & submitted sections */
 html.dark .expected-section {
-  background: linear-gradient(135deg, #1e3a5f 0%, #0f172a 100%) !important;
+  background: linear-gradient(135deg, #1f1f1f 0%, #141414 100%) !important;
   border-color: var(--color-border) !important;
 }
 html.dark .expected-label {
@@ -1314,7 +1330,7 @@ html.dark .error-hint {
 
 /* Plano Mensal (MonthlyFinance) */
 html.dark .expected-section {
-  background: linear-gradient(135deg, #1e3a5f 0%, #0f172a 100%) !important;
+  background: linear-gradient(135deg, #1f1f1f 0%, #141414 100%) !important;
   border-color: var(--color-border) !important;
 }
 
@@ -1516,7 +1532,7 @@ html.dark .error-hint {
 
 /* Plano Mensal - expected section, submitted section */
 html.dark .expected-section {
-  background: linear-gradient(135deg, #1e3a5f 0%, #0f172a 100%) !important;
+  background: linear-gradient(135deg, #1f1f1f 0%, #141414 100%) !important;
   border-color: var(--color-border) !important;
 }
 
@@ -1718,7 +1734,7 @@ html.dark .link {
 
 /* Plano Mensal - expected section */
 html.dark .expected-section {
-  background: linear-gradient(135deg, #1e3a5f 0%, #0f172a 100%) !important;
+  background: linear-gradient(135deg, #1f1f1f 0%, #141414 100%) !important;
   border-color: var(--color-border) !important;
 }
 

@@ -27,6 +27,8 @@ export interface Account {
   isActiveForPlan?: boolean
   isArchived?: boolean
   archivedAt?: string
+  /** Domínio da marca para o logo (ex.: "santander.pt"). */
+  logoDomain?: string | null
 }
 
 export interface CreateAccountRequest {
@@ -34,6 +36,7 @@ export interface CreateAccountRequest {
   type: AccountType
   balance: number
   currency: string
+  logoDomain?: string | null
 }
 
 export interface UpdateAccountRequest {
@@ -41,4 +44,5 @@ export interface UpdateAccountRequest {
   type: AccountType
   balance: number
   currency: string
+  logoDomain?: string | null
 }

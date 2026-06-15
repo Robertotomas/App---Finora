@@ -1,6 +1,8 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { transactionsApi } from '@/api/transactions'
+import { useNotificationStore } from '@/stores/notifications'
+import type { GetTransactionsPagedParams } from '@/api/transactions'
 import type {
   Transaction,
   CreateTransactionRequest,
@@ -29,7 +31,7 @@ function isHandledPlanRestrictionError(e: unknown): boolean {
   )
 }
 
-function mapTransaction(d: { id: string; accountId: string; householdId: string; type: number; category: number; amount: number; date: string; description?: string; destinationAccountId?: string; splits?: { userId: string; percentage: number }[] }): Transaction {
+function mapTransaction(d: { id: string; accountId: string; householdId: string; type: number; category: number; amount: number; date: string; description?: string; entityType?: number; entityName?: string | null; destinationAccountId?: string; splits?: { userId: string; percentage: number }[] }): Transaction {
   return {
     id: d.id,
     accountId: d.accountId,
@@ -39,6 +41,8 @@ function mapTransaction(d: { id: string; accountId: string; householdId: string;
     amount: Number(d.amount),
     date: d.date,
     description: d.description,
+    entityType: d.entityType,
+    entityName: d.entityName ?? null,
     destinationAccountId: d.destinationAccountId,
     splits: (d.splits ?? []).map((s) => ({ userId: s.userId, percentage: Number(s.percentage) }))
   }
@@ -46,15 +50,43 @@ function mapTransaction(d: { id: string; accountId: string; householdId: string;
 
 export const useTransactionsStore = defineStore('transactions', () => {
   const transactions = ref<Transaction[]>([])
-  const loading = ref(false)
+  const totalCount = ref(0)
+  const currentPage = ref(1)
+  const totalPages = ref(1)
+  const loading = ref(true)
   const error = ref<string | null>(null)
 
-  async function fetchTransactions(params?: { accountId?: string; from?: string; to?: string }) {
+  async function fetchTransactions(params?: { accountId?: string; from?: string; to?: string; limit?: number }) {
     loading.value = true
     error.value = null
     try {
       const { data } = await transactionsApi.getAll(params)
       transactions.value = data.map(mapTransaction)
+      return transactions.value
+    } catch (e: unknown) {
+      if (!isHandledPlanRestrictionError(e)) {
+        error.value = extractError(e)
+      } else {
+        error.value = null
+      }
+      throw e
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function fetchTransactionsPaged(params?: GetTransactionsPagedParams) {
+    loading.value = true
+    error.value = null
+    try {
+      const { data } = await transactionsApi.getPaged(params)
+      const res = data as unknown as Record<string, unknown>
+      const get = (key: string) => res[key] ?? res[key.charAt(0).toUpperCase() + key.slice(1)]
+      const items = get('items')
+      transactions.value = Array.isArray(items) ? items.map(mapTransaction) : []
+      totalCount.value = Number(get('totalCount')) || 0
+      currentPage.value = Number(get('page')) || 1
+      totalPages.value = Number(get('totalPages')) || 1
       return transactions.value
     } catch (e: unknown) {
       if (!isHandledPlanRestrictionError(e)) {
@@ -75,6 +107,7 @@ export const useTransactionsStore = defineStore('transactions', () => {
       const { data } = await transactionsApi.create(request)
       const tx = mapTransaction(data)
       transactions.value = [tx, ...transactions.value]
+      useNotificationStore().fetchUnreadCount()
       return tx
     } catch (e: unknown) {
       if (!isHandledPlanRestrictionError(e)) {
@@ -101,6 +134,7 @@ export const useTransactionsStore = defineStore('transactions', () => {
       } else {
         transactions.value = [tx, ...transactions.value]
       }
+      useNotificationStore().fetchUnreadCount()
       return tx
     } catch (e: unknown) {
       if (!isHandledPlanRestrictionError(e)) {
@@ -120,6 +154,7 @@ export const useTransactionsStore = defineStore('transactions', () => {
     try {
       await transactionsApi.delete(id)
       transactions.value = transactions.value.filter((t) => t.id !== id)
+      useNotificationStore().fetchUnreadCount()
     } catch (e: unknown) {
       if (!isHandledPlanRestrictionError(e)) {
         error.value = extractError(e)
@@ -138,9 +173,13 @@ export const useTransactionsStore = defineStore('transactions', () => {
 
   return {
     transactions,
+    totalCount,
+    currentPage,
+    totalPages,
     loading,
     error,
     fetchTransactions,
+    fetchTransactionsPaged,
     createTransaction,
     updateTransaction,
     deleteTransaction,

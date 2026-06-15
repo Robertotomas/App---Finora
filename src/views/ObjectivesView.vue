@@ -5,6 +5,7 @@ import { useHouseholdStore } from '@/stores/household'
 import { objectivesApi } from '@/api/objectives'
 import { useSubscriptionStore } from '@/stores/subscription'
 import ConfirmDeleteModal from '@/components/ConfirmDeleteModal.vue'
+import PlanUpsellCard from '@/components/PlanUpsellCard.vue'
 import type {
   CreateSavingsObjectiveRequest,
   SavingsObjectiveActive,
@@ -18,14 +19,22 @@ const router = useRouter()
 const householdStore = useHouseholdStore()
 const subscriptionStore = useSubscriptionStore()
 
-const loading = ref(false)
+const pageReady = ref(false)
+const loading = ref(true)
 const saving = ref(false)
 const error = ref<string | null>(null)
 
-const activeTab = computed<'active' | 'history'>({
-  get: () => (route.query.tab === 'history' ? 'history' : 'active'),
-  set: (val) => router.replace({ query: { ...route.query, tab: val } })
+type SectionFilter = 'all' | 'active' | 'history'
+const sectionFilter = computed<SectionFilter>({
+  get: () =>
+    route.query.tab === 'history' ? 'history' : route.query.tab === 'active' ? 'active' : 'all',
+  set: (val) => {
+    const tab = val === 'all' ? undefined : val
+    router.replace({ query: { ...route.query, tab } })
+  },
 })
+const showActive = computed(() => sectionFilter.value !== 'history')
+const showHistory = computed(() => sectionFilter.value !== 'active')
 
 const overview = ref<SavingsObjectivesOverview>({
   totalSavings: 0,
@@ -34,6 +43,29 @@ const overview = ref<SavingsObjectivesOverview>({
   activeObjectives: [],
   historyObjectives: [],
 })
+
+// Textos dos tooltips dos cards. No plano Couple falamos no plural (2 membros);
+// nos planos individuais (Free/Pro) no singular.
+const isCouple = computed(() => subscriptionStore.plan === 'Couple')
+const statTooltips = computed(() =>
+  isCouple.value
+    ? {
+        savings:
+          'Receitas − Despesas\nTotal que pouparam desde o início até ao último mês.\nPode ser negativo se as despesas forem superiores às receitas.',
+        reserved:
+          'Valor reservado para objetivos concluídos mas ainda não liquidados. Não está disponível para outros objetivos.',
+        available:
+          'Poupança disponível para distribuir pelos objetivos ativos, depois de descontado o valor reservado.',
+      }
+    : {
+        savings:
+          'Receitas − Despesas\nTotal que poupaste desde o início até ao último mês.\nPode ser negativo se as despesas forem superiores às receitas.',
+        reserved:
+          'Valor reservado para objetivos concluídos mas ainda não liquidados. Não está disponível para outros objetivos.',
+        available:
+          'Poupança disponível para distribuir pelos objetivos ativos, depois de descontado o valor reservado.',
+      },
+)
 
 const formOpen = ref(false)
 const editingId = ref<string | null>(null)
@@ -59,6 +91,8 @@ function resetForm() {
 function openCreateForm() {
   if (objectivesLocked.value) return
   resetForm()
+  // Garante que a secção Ativos (que contém o formulário) está visível.
+  if (sectionFilter.value === 'history') sectionFilter.value = 'all'
   formOpen.value = true
 }
 
@@ -136,21 +170,26 @@ function normalizeOverview(payload: unknown): SavingsObjectivesOverview {
         targetDate: parseTargetDateField(item.targetDate ?? item.TargetDate),
         sortOrder: Number(item.sortOrder ?? item.SortOrder) || 0,
         completedAt: String(item.completedAt ?? item.CompletedAt ?? ''),
+        liquidatedAt: (() => {
+          const v = item.liquidatedAt ?? item.LiquidatedAt
+          return v ? String(v) : null
+        })(),
       }
     }),
   }
 }
 
 function distributeLocalSavings(ov: ReturnType<typeof normalizeOverview>) {
-  const available = Math.max(0, ov.totalSavings)
-  if (available > 0 && ov.activeObjectives.length > 0) {
-    for (const goal of ov.activeObjectives) {
-      const allocated = Math.min(available, goal.targetAmount)
-      goal.allocatedAmount = allocated
-      goal.progressPercent = goal.targetAmount > 0 ? (allocated / goal.targetAmount) * 100 : 0
-      goal.canFinalize = allocated >= goal.targetAmount
-    }
-    ov.availableForActiveObjectives = available
+  // O pool disponível para objetivos ativos já vem calculado pelo backend
+  // (poupança acumulada menos o que está reservado pelos objetivos finalizados).
+  // Usamos esse valor — NÃO o totalSavings — para não voltar a contar o
+  // dinheiro já reservado por finalizados.
+  const available = Math.max(0, ov.availableForActiveObjectives)
+  for (const goal of ov.activeObjectives) {
+    const allocated = Math.min(available, goal.targetAmount)
+    goal.allocatedAmount = allocated
+    goal.progressPercent = goal.targetAmount > 0 ? (allocated / goal.targetAmount) * 100 : 0
+    goal.canFinalize = allocated >= goal.targetAmount
   }
   return ov
 }
@@ -176,7 +215,7 @@ watch(
     await loadOverview()
     if (!enabled) {
       error.value = null
-      activeTab.value = 'active'
+      sectionFilter.value = 'all'
       resetForm()
     }
   }
@@ -228,7 +267,7 @@ async function finalizeObjective(item: SavingsObjectiveActive) {
   try {
     const { data } = await objectivesApi.finalize(item.id)
     overview.value = distributeLocalSavings(normalizeOverview(data))
-    activeTab.value = 'active'
+    sectionFilter.value = 'all'
   } catch (e: unknown) {
     const err = e as { response?: { data?: { message?: string } }; message?: string }
     error.value = err.response?.data?.message || err.message || 'Não foi possível finalizar objetivo.'
@@ -286,23 +325,37 @@ onMounted(async () => {
   } catch {
     // handled below
   }
-  if (householdStore.household) {
+  pageReady.value = true
+  if (householdStore.household && !objectivesLocked.value) {
     await loadOverview()
+    if (route.query.action === 'new') {
+      openCreateForm()
+      router.replace({ query: { ...route.query, action: undefined } })
+    }
+  } else {
+    loading.value = false
+  }
+})
+
+watch(() => route.query.action, (action) => {
+  if (action === 'new' && !objectivesLocked.value) {
+    openCreateForm()
+    router.replace({ query: { ...route.query, action: undefined } })
   }
 })
 </script>
 
 <template>
   <div class="objectives-page">
-    <!-- Loading -->
-    <div v-if="!householdStore.household && householdStore.loading" class="loading-state">
+    <!-- Loading until household + subscription resolved -->
+    <div v-if="!pageReady" class="loading-state">
       <div class="spinner"></div>
       <p>A carregar...</p>
     </div>
 
     <!-- No household -->
-    <div v-else-if="!householdStore.household && !householdStore.loading" class="empty-state">
-      <p>Configura primeiro o teu household.</p>
+    <div v-else-if="!householdStore.household" class="empty-state">
+      <p>Configure primeiro o seu household.</p>
       <router-link to="/household" class="link">Ir para Household</router-link>
     </div>
 
@@ -311,45 +364,86 @@ onMounted(async () => {
       <!-- Page header -->
       <div class="page-header">
         <div class="page-header-text">
-          <h1 class="page-title">{{ activeTab === 'active' ? 'Objetivos Ativos' : 'Objetivos Concluídos' }}</h1>
-          <p class="page-subtitle">{{ activeTab === 'active' ? 'Define objetivos de poupança e acompanha o progresso' : 'Histórico dos objetivos já alcançados' }}</p>
+          <h1 class="page-title">Objetivos</h1>
+          <p class="page-subtitle">Defina objetivos de poupança e acompanhe o progresso</p>
         </div>
         <button
-          v-if="activeTab === 'active'"
+          v-if="!objectivesLocked"
           type="button"
           class="btn-add"
-          :disabled="objectivesLocked"
           @click="openCreateForm"
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="5" y2="19"/><line x1="5" x2="19" y1="12" y2="12"/></svg>
-          Novo objetivo
+          Adicionar
         </button>
       </div>
 
-      <div class="objectives-shell-wrap" :class="{ 'objectives-shell-wrap--locked': objectivesLocked }">
+      <PlanUpsellCard
+        v-if="objectivesLocked"
+        title="Defina e alcance os seus objetivos"
+        description="Crie metas de poupança e acompanhe o progresso automaticamente, mês a mês."
+        :features="[
+          'Veja quanto já tem reservado para cada meta',
+          'Saiba se está no bom caminho para a atingir',
+          'Reserve poupança sem mexer no dinheiro real',
+        ]"
+      >
+        <template #icon>
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/><line x1="22" x2="12" y1="2" y2="12"/></svg>
+        </template>
+      </PlanUpsellCard>
+
+      <div v-else class="objectives-shell-wrap">
         <div class="objectives-shell objectives-shell-inner">
 
           <!-- Summary stats -->
           <div class="stats-grid">
             <div class="stat-card">
-              <p class="stat-label">Poupança acumulada</p>
-              <p class="stat-value">{{ formatCurrency(overview.totalSavings) }}</p>
+              <div class="stat-header">
+                <p class="stat-label">Poupança acumulada</p>
+                <span class="stat-info" tabindex="0" role="button" aria-label="O que é a poupança acumulada?">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="16" y2="12"/><line x1="12" x2="12.01" y1="8" y2="8"/></svg>
+                  <span class="stat-tooltip" role="tooltip">{{ statTooltips.savings }}</span>
+                </span>
+              </div>
+              <p class="stat-value" :class="{ 'stat-value--negative': overview.totalSavings < 0 }">
+                {{ formatCurrency(overview.totalSavings) }}
+              </p>
             </div>
             <div class="stat-card">
-              <p class="stat-label">Reservado por finalizados</p>
+              <div class="stat-header">
+                <p class="stat-label">Reservado por finalizados</p>
+                <span class="stat-info" tabindex="0" role="button" aria-label="O que é o reservado por finalizados?">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="16" y2="12"/><line x1="12" x2="12.01" y1="8" y2="8"/></svg>
+                  <span class="stat-tooltip" role="tooltip">{{ statTooltips.reserved }}</span>
+                </span>
+              </div>
               <p class="stat-value">{{ formatCurrency(overview.reservedByCompletedObjectives) }}</p>
             </div>
             <div class="stat-card">
-              <p class="stat-label">Disponível para ativos</p>
+              <div class="stat-header">
+                <p class="stat-label">Disponível para ativos</p>
+                <span class="stat-info" tabindex="0" role="button" aria-label="O que é o disponível para ativos?">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="16" y2="12"/><line x1="12" x2="12.01" y1="8" y2="8"/></svg>
+                  <span class="stat-tooltip" role="tooltip">{{ statTooltips.available }}</span>
+                </span>
+              </div>
               <p class="stat-value">{{ formatCurrency(overview.availableForActiveObjectives) }}</p>
             </div>
+          </div>
+
+          <!-- Filtro de secções -->
+          <div class="filter-chips" role="tablist">
+            <button type="button" class="filter-chip" :class="{ active: sectionFilter === 'all' }" role="tab" :aria-selected="sectionFilter === 'all'" @click="sectionFilter = 'all'">Todos</button>
+            <button type="button" class="filter-chip" :class="{ active: sectionFilter === 'active' }" role="tab" :aria-selected="sectionFilter === 'active'" @click="sectionFilter = 'active'">Ativos</button>
+            <button type="button" class="filter-chip" :class="{ active: sectionFilter === 'history' }" role="tab" :aria-selected="sectionFilter === 'history'" @click="sectionFilter = 'history'">Concluídos</button>
           </div>
 
           <!-- Error -->
           <div v-if="error" class="global-error">{{ error }}</div>
 
-          <!-- ═══ ACTIVE TAB ═══ -->
-          <section v-if="activeTab === 'active'">
+          <!-- ═══ ATIVOS ═══ -->
+          <section v-if="showActive" id="sec-ativos" class="objectives-section">
             <!-- Create/Edit form -->
             <div v-if="formOpen" class="form-card">
               <h2 class="form-title">{{ editingId ? 'Editar objetivo' : 'Novo objetivo' }}</h2>
@@ -378,29 +472,26 @@ onMounted(async () => {
               </div>
             </div>
 
+            <h2 class="section-heading">Ativos</h2>
+
             <!-- Loading -->
-            <div v-if="loading" class="loading-state">
+            <div v-if="loading && !objectivesLocked" class="loading-state">
               <div class="spinner"></div>
               <p>A carregar objetivos...</p>
             </div>
 
             <!-- Empty -->
-            <div v-else-if="activeObjectives.length === 0 && !formOpen" class="empty-card">
+            <div v-else-if="activeObjectives.length === 0 && !formOpen && !loading" class="empty-card">
               <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="empty-icon"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/><line x1="22" x2="12" y1="2" y2="12"/></svg>
-              <p class="empty-text">Ainda não tens objetivos ativos</p>
-              <p class="empty-hint">Cria um objetivo de poupança para começar a acompanhar o progresso.</p>
+              <p class="empty-text">Ainda não tem objetivos ativos</p>
+              <p class="empty-hint">Crie um objetivo de poupança para começar a acompanhar o progresso.</p>
               <button
-                v-if="!objectivesLocked"
                 type="button"
                 class="btn-confirm"
                 @click="openCreateForm()"
               >
                 Criar primeiro objetivo
               </button>
-              <p v-else class="empty-hint">
-                Atualiza o plano para criar objetivos.
-                <router-link :to="{ name: 'subscription' }" class="link">Ver planos</router-link>
-              </p>
             </div>
 
             <!-- Goals grid -->
@@ -473,17 +564,14 @@ onMounted(async () => {
             </div>
           </section>
 
-          <!-- ═══ HISTORY TAB ═══ -->
-          <section v-else>
-            <div v-if="loading" class="loading-state">
-              <div class="spinner"></div>
-              <p>A carregar objetivos concluídos...</p>
-            </div>
+          <!-- ═══ CONCLUÍDOS ═══ -->
+          <section v-if="!loading && showHistory" id="sec-concluidos" class="objectives-section" :class="{ 'objectives-section--history': sectionFilter === 'all' }">
+            <h2 class="section-heading">Concluídos</h2>
 
-            <div v-else-if="historyObjectives.length === 0" class="empty-card">
+            <div v-if="historyObjectives.length === 0" class="empty-card">
               <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="empty-icon"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
               <p class="empty-text">Sem objetivos finalizados</p>
-              <p class="empty-hint">Quando finalizares um objetivo ativo, ele aparece aqui.</p>
+              <p class="empty-hint">Quando finalizar um objetivo ativo, ele aparece aqui.</p>
             </div>
 
             <div v-else class="goals-grid">
@@ -495,12 +583,14 @@ onMounted(async () => {
                   <div class="goal-info">
                     <div class="goal-name-row">
                       <h3 class="goal-name">{{ item.name }}</h3>
-                      <span class="badge badge--completed">Concluído</span>
+                      <span v-if="item.liquidatedAt" class="badge badge--liquidated">Liquidado</span>
+                      <span v-else class="badge badge--completed">Concluído</span>
                     </div>
                     <p class="goal-amounts">{{ formatCurrency(item.targetAmount) }}</p>
                     <div class="goal-meta">
                       <span v-if="item.targetDate" class="goal-meta-item">Meta: {{ formatDate(item.targetDate) }}</span>
                       <span class="goal-meta-item">Finalizado: {{ formatDate(item.completedAt) }}</span>
+                      <span v-if="item.liquidatedAt" class="goal-meta-item">Liquidado: {{ formatDate(item.liquidatedAt) }}</span>
                     </div>
                   </div>
                 </div>
@@ -520,17 +610,6 @@ onMounted(async () => {
             </div>
           </section>
         </div>
-
-        <!-- Lock overlay -->
-        <div v-if="objectivesLocked" class="lock-overlay" aria-hidden="true">
-          <div class="lock-panel">
-            <p class="lock-title">Atualiza o plano para aceder aos objetivos</p>
-            <p class="lock-text">
-              Os teus objetivos mantêm-se guardados. Voltam a aparecer ao atualizares o plano.
-            </p>
-            <router-link :to="{ name: 'subscription' }" class="btn-confirm">Ver planos</router-link>
-          </div>
-        </div>
       </div>
     </template>
 
@@ -539,7 +618,7 @@ onMounted(async () => {
       title="Eliminar objetivo"
       :message="
         objectiveToDelete
-          ? `Tens a certeza que queres eliminar «${objectiveToDelete.name}»? Esta ação não pode ser desfeita.`
+          ? `Tem a certeza que quer eliminar «${objectiveToDelete.name}»? Esta ação não pode ser desfeita.`
           : ''
       "
       :loading="saving"
@@ -626,6 +705,12 @@ onMounted(async () => {
   box-shadow: var(--app-shadow-card, 0 1px 3px rgba(0, 0, 0, 0.06));
 }
 
+.stat-header {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
 .stat-label {
   font-size: 0.75rem;
   font-weight: 600;
@@ -635,12 +720,129 @@ onMounted(async () => {
   margin: 0;
 }
 
+/* ── Info tooltip (i) ── */
+.stat-info {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-muted);
+  cursor: help;
+  outline: none;
+  flex-shrink: 0;
+  transition: color 0.15s ease;
+}
+
+.stat-info:hover,
+.stat-info:focus-visible {
+  color: var(--color-success);
+}
+
+.stat-tooltip {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  width: max-content;
+  max-width: 240px;
+  padding: 0.625rem 0.75rem;
+  background: var(--color-bg-card);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.4;
+  text-transform: none;
+  letter-spacing: normal;
+  white-space: pre-line;
+  z-index: 30;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.15s ease, transform 0.15s ease, visibility 0.15s;
+}
+
+/* Seta do tooltip */
+.stat-tooltip::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-top-color: var(--color-border);
+}
+
+.stat-info:hover .stat-tooltip,
+.stat-info:focus-visible .stat-tooltip {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+}
+
 .stat-value {
   font-size: 1.25rem;
   font-weight: 700;
   color: var(--color-text);
   margin: 0.25rem 0 0;
   letter-spacing: -0.02em;
+}
+
+.stat-value--negative {
+  color: var(--color-expense);
+}
+
+/* ── Filtro de secções ── */
+.filter-chips {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.filter-chip {
+  padding: 0.4rem 0.875rem;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-card);
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.filter-chip:hover {
+  color: var(--color-text);
+  border-color: var(--color-text-muted);
+}
+
+.filter-chip.active {
+  background: #166534;
+  border-color: #166534;
+  color: #ffffff;
+}
+
+html.dark .filter-chip.active {
+  background: #15803d;
+  border-color: #15803d;
+}
+
+/* ── Secções (Ativos / Concluídos) ── */
+.section-heading {
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: var(--color-text);
+  margin: 0 0 0.875rem;
+  letter-spacing: -0.01em;
+}
+
+.objectives-section--history {
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--color-border);
 }
 
 /* ── Goals grid ── */
@@ -823,6 +1025,11 @@ html.dark .goal-icon-wrap--completed {
 .badge--completed {
   color: #fff;
   background: #64748b;
+}
+
+.badge--liquidated {
+  color: #fff;
+  background: #166534;
 }
 
 /* ── Goal actions ── */
@@ -1036,62 +1243,6 @@ html.dark .action-btn--danger:hover:not(:disabled) {
   font-size: 0.8125rem;
   color: var(--color-text-muted);
   margin: 0 0 1.25rem;
-}
-
-/* ── Lock overlay ── */
-.objectives-shell-wrap {
-  position: relative;
-}
-
-.objectives-shell-wrap--locked .objectives-shell-inner {
-  filter: blur(9px) grayscale(0.25);
-  opacity: 0.52;
-  pointer-events: none;
-  user-select: none;
-}
-
-.objectives-shell {
-  transition: opacity 0.2s ease, filter 0.2s ease;
-}
-
-.lock-overlay {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 1.5rem;
-  background: rgba(0, 0, 0, 0.06);
-  pointer-events: none;
-}
-
-html.dark .lock-overlay {
-  background: rgba(0, 0, 0, 0.28);
-}
-
-.lock-panel {
-  pointer-events: auto;
-  max-width: 420px;
-  text-align: center;
-  padding: 1.5rem 2rem;
-  border-radius: 14px;
-  background: var(--color-bg-card);
-  border: 1px solid var(--color-border);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-}
-
-.lock-title {
-  margin: 0 0 0.5rem;
-  font-size: 1rem;
-  font-weight: 700;
-  color: var(--color-text);
-}
-
-.lock-text {
-  margin: 0 0 1.25rem;
-  font-size: 0.875rem;
-  line-height: 1.5;
-  color: var(--color-text-muted);
 }
 
 /* ── Loading / Error ── */

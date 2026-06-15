@@ -67,11 +67,11 @@ const showForm = computed(() => !hasBudget.value || isEditing.value)
 
 const remainingMonthsCount = computed(() => 12 - selectedMonth.value)
 
-function submit() {
+async function submit() {
   const income = Number(inputIncome.value) || 0
   const expenses = Number(inputExpenses.value) || 0
 
-  budget.setBudget(
+  await budget.setBudget(
     householdId.value,
     selectedYear.value,
     selectedMonth.value,
@@ -81,7 +81,7 @@ function submit() {
 
   if (applyToRemaining.value) {
     for (let m = selectedMonth.value + 1; m <= 12; m++) {
-      budget.setBudget(householdId.value, selectedYear.value, m, income, expenses)
+      await budget.setBudget(householdId.value, selectedYear.value, m, income, expenses)
     }
     applyToRemaining.value = false
   }
@@ -105,8 +105,8 @@ function cancelDelete() {
   deleteModalOpen.value = false
 }
 
-function deleteBudget() {
-  budget.clearBudget(householdId.value, selectedYear.value, selectedMonth.value)
+async function deleteBudget() {
+  await budget.clearBudget(householdId.value, selectedYear.value, selectedMonth.value)
   inputIncome.value = 0
   inputExpenses.value = 0
   isEditing.value = false
@@ -186,9 +186,9 @@ async function fetchProgressData() {
     } else if (err.response?.data?.message) {
       progressError.value = err.response.data.message
     } else if (err.message?.includes('timeout') || err.message?.includes('Network Error')) {
-      progressError.value = 'A API não respondeu. Verifica se está a correr em http://localhost:5000'
+      progressError.value = 'A API não respondeu. Verifique se está a correr em http://localhost:5000'
     } else {
-      progressError.value = 'Erro ao carregar dados. Verifica a consola (F12) para mais detalhes.'
+      progressError.value = 'Erro ao carregar dados. Verifique a consola (F12) para mais detalhes.'
     }
   } finally {
     progressLoading.value = false
@@ -227,14 +227,14 @@ onMounted(async () => {
     <div class="page-header">
       <div class="page-header-text">
         <h1 class="page-title">Plano Mensal</h1>
-        <p class="page-subtitle">Define as expectativas de receita e despesa para cada mês</p>
+        <p class="page-subtitle">Defina as expectativas de receita e despesa para cada mês</p>
       </div>
     </div>
 
     <!-- Empty / Loading -->
     <div v-if="!householdStore.household && !householdStore.loading" class="empty-state-card">
       <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="empty-icon"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
-      <p>Configura primeiro o teu household.</p>
+      <p>Configure primeiro o seu household.</p>
       <router-link to="/household" class="empty-action">Ir para Household</router-link>
     </div>
 
@@ -423,7 +423,7 @@ onMounted(async () => {
         <!-- No data -->
         <div v-else class="progress-empty">
           <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="empty-icon"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
-          <p>Sem dados reais para comparar. Adiciona transações para ver o progresso.</p>
+          <p>Sem dados reais para comparar. Adicione transações para ver o progresso.</p>
         </div>
       </section>
     </div>
@@ -435,7 +435,7 @@ onMounted(async () => {
       <div v-if="deleteModalOpen" class="modal-overlay" @click.self="cancelDelete">
         <div class="modal-box">
           <h3 class="modal-title">Apagar plano</h3>
-          <p class="modal-text">Tens a certeza que queres apagar o plano de <strong>{{ periodLabel }}</strong>? Esta ação não pode ser revertida.</p>
+          <p class="modal-text">Tem a certeza que quer apagar o plano de <strong>{{ periodLabel }}</strong>? Esta ação não pode ser revertida.</p>
           <div class="modal-actions">
             <button type="button" class="btn-secondary" @click="cancelDelete">Cancelar</button>
             <button type="button" class="btn-danger" @click="deleteBudget">Apagar</button>
@@ -681,6 +681,7 @@ onMounted(async () => {
   display: flex;
   justify-content: flex-end;
   gap: 0.625rem;
+  margin-top: 1rem;
 }
 
 /* ── Stat cards (overview) ── */
@@ -745,7 +746,7 @@ onMounted(async () => {
   align-items: center;
   gap: 0.375rem;
   padding: 0.625rem 1.5rem;
-  background: var(--color-success);
+  background: #166534;
   color: #fff;
   border: none;
   border-radius: 10px;
@@ -753,10 +754,10 @@ onMounted(async () => {
   font-weight: 600;
   font-family: inherit;
   cursor: pointer;
-  transition: opacity 0.15s ease;
+  transition: background 0.15s ease;
 }
 
-.btn-primary:hover { opacity: 0.9; }
+.btn-primary:hover { background: #15803d; }
 
 .btn-secondary {
   display: inline-flex;

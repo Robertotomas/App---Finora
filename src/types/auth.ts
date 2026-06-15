@@ -13,6 +13,8 @@ export interface User {
   isCoupleGuest?: boolean
   /** Se uniste por OTP: se os dados do agregado anterior foram migrados; omitido no registo só por link */
   coupleJoinDataMigrated?: boolean | null
+  /** Email confirmado (false até clicar no link enviado no registo). */
+  emailConfirmed?: boolean
 }
 
 export interface AuthResponse {
@@ -23,9 +25,20 @@ export interface AuthResponse {
   user: User
 }
 
+/** Registo normal: conta criada, falta confirmar o email (sem sessão iniciada). */
+export interface RegisterConfirmationPending {
+  requiresEmailConfirmation: true
+  email: string
+  message?: string
+}
+
+/** O registo devolve a sessão (convite de casal) OU o estado "confirma o email". */
+export type RegisterResponse = AuthResponse | RegisterConfirmationPending
+
 export interface LoginRequest {
   email: string
   password: string
+  timeZoneId?: string
 }
 
 export interface RegisterRequest {
@@ -35,6 +48,7 @@ export interface RegisterRequest {
   lastName: string
   gender?: Gender
   inviteToken?: string
+  timeZoneId?: string
 }
 
 export interface UpdateProfileRequest {
@@ -56,6 +70,7 @@ export function userFromProfileResponse(data: unknown): User {
   const tz = pick('timeZoneId')
   const guest = pick('isCoupleGuest')
   const migrated = pick('coupleJoinDataMigrated')
+  const confirmed = pick('emailConfirmed')
   return {
     id: String(pick('id') ?? ''),
     email: String(pick('email') ?? ''),
@@ -70,6 +85,7 @@ export function userFromProfileResponse(data: unknown): User {
         ? null
         : migrated === true
           ? true
-          : false
+          : false,
+    emailConfirmed: confirmed === true
   }
 }

@@ -13,33 +13,72 @@ const coupleProfileHint = computed(() => {
   if (u.coupleJoinDataMigrated === null || u.coupleJoinDataMigrated === undefined)
     return 'Conta de parceiro convidado (registada por convite).'
   if (u.coupleJoinDataMigrated === true)
-    return 'Os teus dados do agregado anterior foram integrados neste household.'
-  return 'Entraste no agregado do convite sem migrar dados anteriores (ou não tinhas dados a migrar).'
+    return 'Os seus dados do agregado anterior foram integrados neste household.'
+  return 'Entrou no agregado do convite sem migrar dados anteriores (ou não tinha dados a migrar).'
 })
 
 const firstName = ref('')
 const lastName = ref('')
 const email = ref('')
-const gender = ref<'Male' | 'Female' | ''>('')
 const timeZoneId = ref('')
+
+const browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+
+const timezoneOptions = [
+  { value: '', label: '— Nenhum (UTC)' },
+  { value: '__auto__', label: `Detetar automaticamente (${browserTimezone})` },
+  { value: 'Europe/Lisbon', label: 'Europe/Lisbon' },
+  { value: 'Europe/London', label: 'Europe/London' },
+  { value: 'Europe/Madrid', label: 'Europe/Madrid' },
+  { value: 'Europe/Paris', label: 'Europe/Paris' },
+  { value: 'Europe/Berlin', label: 'Europe/Berlin' },
+  { value: 'Europe/Rome', label: 'Europe/Rome' },
+  { value: 'Europe/Amsterdam', label: 'Europe/Amsterdam' },
+  { value: 'Europe/Brussels', label: 'Europe/Brussels' },
+  { value: 'Europe/Zurich', label: 'Europe/Zurich' },
+  { value: 'Europe/Warsaw', label: 'Europe/Warsaw' },
+  { value: 'Europe/Athens', label: 'Europe/Athens' },
+  { value: 'Europe/Helsinki', label: 'Europe/Helsinki' },
+  { value: 'Europe/Moscow', label: 'Europe/Moscow' },
+  { value: 'Atlantic/Azores', label: 'Atlantic/Azores' },
+  { value: 'America/New_York', label: 'America/New_York' },
+  { value: 'America/Chicago', label: 'America/Chicago' },
+  { value: 'America/Denver', label: 'America/Denver' },
+  { value: 'America/Los_Angeles', label: 'America/Los_Angeles' },
+  { value: 'America/Sao_Paulo', label: 'America/Sao_Paulo' },
+  { value: 'America/Argentina/Buenos_Aires', label: 'America/Argentina/Buenos_Aires' },
+  { value: 'America/Mexico_City', label: 'America/Mexico_City' },
+  { value: 'America/Toronto', label: 'America/Toronto' },
+  { value: 'Asia/Tokyo', label: 'Asia/Tokyo' },
+  { value: 'Asia/Shanghai', label: 'Asia/Shanghai' },
+  { value: 'Asia/Kolkata', label: 'Asia/Kolkata' },
+  { value: 'Asia/Dubai', label: 'Asia/Dubai' },
+  { value: 'Asia/Singapore', label: 'Asia/Singapore' },
+  { value: 'Australia/Sydney', label: 'Australia/Sydney' },
+  { value: 'Pacific/Auckland', label: 'Pacific/Auckland' },
+  { value: 'Africa/Johannesburg', label: 'Africa/Johannesburg' },
+]
+
+const ensuredOptions = computed(() => {
+  const current = timeZoneId.value
+  if (!current || current === '__auto__' || timezoneOptions.some(o => o.value === current)) {
+    return timezoneOptions
+  }
+  const copy = [...timezoneOptions]
+  copy.splice(2, 0, { value: current, label: current })
+  return copy
+})
 
 const loading = ref(false)
 const saving = ref(false)
 const error = ref('')
 const success = ref(false)
 
-function genderToSelect(g: User['gender']): 'Male' | 'Female' | '' {
-  if (g === 0 || g === 'Male') return 'Male'
-  if (g === 1 || g === 'Female') return 'Female'
-  return ''
-}
-
 function fillFromUser(u: User | null) {
   if (!u) return
   firstName.value = u.firstName
   lastName.value = u.lastName
   email.value = u.email
-  gender.value = genderToSelect(u.gender)
   timeZoneId.value = u.timeZoneId ?? ''
 }
 
@@ -72,8 +111,8 @@ async function handleSubmit() {
     const { data } = await authApi.updateProfile({
       firstName: firstName.value.trim(),
       lastName: lastName.value.trim(),
-      gender: gender.value === 'Male' ? 0 : gender.value === 'Female' ? 1 : null,
-      timeZoneId: timeZoneId.value.trim() || null,
+      gender: null,
+      timeZoneId: timeZoneId.value === '__auto__' ? browserTimezone : (timeZoneId.value.trim() || null),
     })
     authStore.applyUserFromProfileResponse(data)
     fillFromUser(authStore.user)
@@ -93,10 +132,12 @@ async function handleSubmit() {
 </script>
 
 <template>
-  <div class="profile-view">
+  <div class="profile-page">
     <div class="page-header">
-      <h1>Perfil</h1>
-      <p class="subtitle">Edita os teus dados pessoais</p>
+      <div class="page-header-text">
+        <h1 class="page-title">Perfil</h1>
+        <p class="page-subtitle">Edite os seus dados pessoais</p>
+      </div>
     </div>
 
     <div v-if="loading" class="loading-state">
@@ -104,104 +145,107 @@ async function handleSubmit() {
       <p>A carregar perfil…</p>
     </div>
 
-    <div v-else class="content">
-      <p v-if="coupleProfileHint" class="couple-profile-hint">{{ coupleProfileHint }}</p>
-      <form class="profile-card" @submit.prevent="handleSubmit">
+    <template v-else>
+      <p v-if="coupleProfileHint" class="couple-hint">{{ coupleProfileHint }}</p>
+
+      <form class="card" @submit.prevent="handleSubmit">
         <div v-if="error" class="form-error">{{ error }}</div>
         <div v-if="success" class="form-success">Alterações guardadas.</div>
 
-        <label class="field">
-          <span class="field-label">Nome</span>
-          <input v-model="firstName" class="field-input" type="text" maxlength="100" required autocomplete="given-name" />
-        </label>
+        <div class="section-label">Dados pessoais</div>
+        <div class="form-grid">
+          <label class="field">
+            <span class="field-label">Nome</span>
+            <input v-model="firstName" class="field-input" type="text" maxlength="100" required autocomplete="given-name" />
+          </label>
+          <label class="field">
+            <span class="field-label">Apelido</span>
+            <input v-model="lastName" class="field-input" type="text" maxlength="100" required autocomplete="family-name" />
+          </label>
+        </div>
 
-        <label class="field">
-          <span class="field-label">Apelido</span>
-          <input v-model="lastName" class="field-input" type="text" maxlength="100" required autocomplete="family-name" />
-        </label>
+        <div class="section-divider"></div>
 
-        <label class="field">
-          <span class="field-label">Género</span>
-          <select v-model="gender" class="field-input">
-            <option value="">—</option>
-            <option value="Male">Masculino</option>
-            <option value="Female">Feminino</option>
-          </select>
-        </label>
+        <div class="section-label">Conta</div>
+        <div class="form-grid">
+          <label class="field field-readonly">
+            <span class="field-label">Email</span>
+            <input :value="email" class="field-input" type="email" disabled readonly />
+            <span class="field-hint">O email não pode ser alterado.</span>
+          </label>
+          <label class="field">
+            <span class="field-label">Fuso horário</span>
+            <select v-model="timeZoneId" class="field-input">
+              <option v-for="tz in ensuredOptions" :key="tz.value" :value="tz.value">{{ tz.label }}</option>
+            </select>
+          </label>
+        </div>
 
-        <label class="field field-readonly">
-          <span class="field-label">Email</span>
-          <input :value="email" class="field-input" type="email" disabled readonly />
-          <span class="field-hint">O email não pode ser alterado aqui.</span>
-        </label>
-
-        <label class="field">
-          <span class="field-label">Fuso horário (IANA)</span>
-          <input
-            v-model="timeZoneId"
-            class="field-input"
-            type="text"
-            maxlength="100"
-            placeholder="Europe/Lisbon"
-            autocomplete="off"
-          />
-          <span class="field-hint">Usado para gerar o relatório mensal no dia 1 (mês anterior). Vazio = UTC.</span>
-        </label>
+        <div class="section-divider"></div>
 
         <div class="form-actions">
           <button type="submit" class="btn-save" :disabled="saving">
-            {{ saving ? 'A guardar…' : 'Guardar alterações' }}
+{{ saving ? 'A guardar…' : 'Guardar alterações' }}
           </button>
         </div>
       </form>
-    </div>
+    </template>
   </div>
 </template>
 
 <style scoped>
-.profile-view {
-  max-width: min(520px, 100%);
+.profile-page {
+  max-width: min(860px, 100%);
   margin: 0 auto;
-  padding: 0 0 2.5rem;
+  padding: 0 0 3rem;
 }
 
+/* ── Page header ── */
 .page-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
   margin-bottom: 1.5rem;
 }
 
-.page-header h1 {
-  margin: 0 0 0.35rem;
+.page-title {
   font-size: 1.5rem;
   font-weight: 700;
   color: var(--color-text);
-}
-
-.subtitle {
   margin: 0;
-  font-size: 0.9375rem;
-  color: var(--color-text-muted);
+  letter-spacing: -0.02em;
 }
 
-.couple-profile-hint {
-  margin: 0 0 1rem 0;
+.page-subtitle {
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+  margin: 0.25rem 0 0;
+}
+
+/* ── Couple hint ── */
+.couple-hint {
+  margin: 0 0 1rem;
   padding: 0.75rem 1rem;
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
   line-height: 1.45;
   color: var(--color-text);
   background: var(--color-bg-card);
   border: 1px solid var(--color-border);
-  border-radius: var(--app-radius-md, 12px);
+  border-radius: 14px;
+  box-shadow: var(--app-shadow-card, 0 1px 3px rgba(0, 0, 0, 0.06));
 }
 
+/* ── Loading ── */
 .loading-state {
   text-align: center;
-  padding: 3rem 1rem;
+  padding: 3rem;
   color: var(--color-text-muted);
 }
 
 .spinner {
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
   border: 3px solid var(--color-border);
   border-top-color: #166534;
   border-radius: 50%;
@@ -210,22 +254,10 @@ async function handleSubmit() {
 }
 
 @keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
+  to { transform: rotate(360deg); }
 }
 
-.profile-card {
-  background: var(--color-bg-card);
-  border: 1px solid var(--color-border);
-  border-radius: 14px;
-  padding: 1.75rem;
-  box-shadow: var(--app-shadow-card, 0 1px 3px rgba(0, 0, 0, 0.06));
-  display: flex;
-  flex-direction: column;
-  gap: 1.125rem;
-}
-
+/* ── Feedback banners ── */
 .form-error {
   padding: 0.75rem 1rem;
   border-radius: 10px;
@@ -234,6 +266,7 @@ async function handleSubmit() {
   border: 1px solid #fecaca;
   font-size: 0.8125rem;
   font-weight: 500;
+  margin-bottom: 1rem;
 }
 
 .form-success {
@@ -244,27 +277,64 @@ async function handleSubmit() {
   border: 1px solid #a7f3d0;
   font-size: 0.8125rem;
   font-weight: 600;
+  margin-bottom: 1rem;
+}
+
+/* ── Card ── */
+.card {
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  padding: 1.5rem;
+  box-shadow: var(--app-shadow-card, 0 1px 3px rgba(0, 0, 0, 0.06));
+}
+
+/* ── Sections inside card ── */
+.section-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 0.75rem;
+}
+
+.section-divider {
+  height: 1px;
+  background: var(--color-border);
+  margin: 1.25rem 0;
+}
+
+/* ── Form grid ── */
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.875rem;
 }
 
 .field {
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  gap: 0.375rem;
 }
 
 .field-label {
   font-size: 0.75rem;
-  font-weight: 700;
-  color: var(--color-text-muted);
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.03em;
+  color: var(--color-text-muted);
 }
 
 .field-input {
-  padding: 0.5625rem 0.875rem;
-  border: 1.5px solid var(--color-input-border);
+  padding: 0.625rem 0.875rem;
+  border: 1px solid var(--color-input-border);
   border-radius: 10px;
-  font-size: 0.9375rem;
+  font-size: 0.875rem;
+  font-family: inherit;
   background: var(--color-input-bg);
   color: var(--color-text);
   transition: border-color 0.15s, box-shadow 0.15s;
@@ -273,7 +343,7 @@ async function handleSubmit() {
 .field-input:focus {
   outline: none;
   border-color: #166534;
-  box-shadow: 0 0 0 3px rgba(22, 101, 52, 0.08);
+  box-shadow: 0 0 0 3px rgba(22, 101, 52, 0.12);
 }
 
 .field-readonly .field-input:disabled {
@@ -286,30 +356,52 @@ async function handleSubmit() {
   color: var(--color-text-muted);
 }
 
+/* ── Actions ── */
 .form-actions {
-  margin-top: 0.5rem;
+  display: flex;
+  justify-content: flex-end;
 }
 
 .btn-save {
-  padding: 0.625rem 1.5rem;
-  font-size: 0.875rem;
-  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.5rem 1rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  font-family: inherit;
   color: #fff;
-  background: linear-gradient(135deg, #166534 0%, #15803d 100%);
+  background: #166534;
   border: none;
   border-radius: 10px;
   cursor: pointer;
-  transition: transform 0.15s, box-shadow 0.15s;
-  box-shadow: 0 1px 3px rgba(22, 101, 52, 0.2);
+  transition: background 0.15s, transform 0.15s;
+  white-space: nowrap;
 }
 
 .btn-save:hover:not(:disabled) {
+  background: #15803d;
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(22, 101, 52, 0.25);
 }
 
 .btn-save:disabled {
-  opacity: 0.6;
+  opacity: 0.5;
   cursor: not-allowed;
+}
+
+@media (max-width: 600px) {
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+
+  .card {
+    padding: 1.125rem;
+  }
+
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

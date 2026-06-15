@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useAccountsStore } from '@/stores/accounts'
 import { useHouseholdStore } from '@/stores/household'
 import { useSubscriptionStore } from '@/stores/subscription'
@@ -9,9 +10,13 @@ import BaseModal from '@/components/BaseModal.vue'
 import ConfirmDeleteModal from '@/components/ConfirmDeleteModal.vue'
 import DeleteAccountWithTransferModal from '@/components/DeleteAccountWithTransferModal.vue'
 import ArchiveAccountModal from '@/components/ArchiveAccountModal.vue'
+import PlanUpsellModal from '@/components/PlanUpsellModal.vue'
+import BrandLogo from '@/components/BrandLogo.vue'
 import type { Account, CreateAccountRequest } from '@/types/account'
 import { ACCOUNT_TYPE_LABELS, AccountType } from '@/types/account'
 
+const route = useRoute()
+const router = useRouter()
 const accountsStore = useAccountsStore()
 const subscriptionStore = useSubscriptionStore()
 
@@ -39,6 +44,24 @@ const deleteWithTransferAccount = ref<Account | null>(null)
 // Archive modal
 const archiveModalOpen = ref(false)
 const archiveAccount = ref<Account | null>(null)
+
+// Filtro de secção (chips Todas / Ativas / Arquivadas), ligado a ?tab=active|archived
+type SectionFilter = 'all' | 'active' | 'archived'
+const sectionFilter = computed<SectionFilter>({
+  get: () =>
+    route.query.tab === 'archived' ? 'archived' : route.query.tab === 'active' ? 'active' : 'all',
+  set: (val) => {
+    const tab = val === 'all' ? undefined : val
+    router.replace({ query: { ...route.query, tab } })
+  },
+})
+
+const showActiveSection = computed(
+  () => sectionFilter.value === 'all' || sectionFilter.value === 'active'
+)
+const showArchivedSection = computed(
+  () => sectionFilter.value === 'all' || sectionFilter.value === 'archived'
+)
 
 const needsPrimarySelection = computed(
   () => subscriptionStore.limits.needsPrimaryAccountSelection === true
@@ -93,13 +116,25 @@ function isPrimaryBadge(account: Account): boolean {
 
 onMounted(async () => {
   try {
-    await householdStore.fetchHousehold()
-    if (householdStore.household) {
-      await accountsStore.fetchAccounts()
-    }
-    await subscriptionStore.fetchSubscription()
+    await Promise.all([
+      householdStore.fetchHousehold().then(() => {
+        if (householdStore.household) return accountsStore.fetchAccounts()
+      }),
+      subscriptionStore.fetchSubscription(),
+    ])
   } catch {
     // Handled in stores
+  }
+  if (route.query.action === 'new') {
+    openCreateModal()
+    router.replace({ query: { ...route.query, action: undefined } })
+  }
+})
+
+watch(() => route.query.action, (action) => {
+  if (action === 'new') {
+    openCreateModal()
+    router.replace({ query: { ...route.query, action: undefined } })
   }
 })
 
@@ -301,7 +336,7 @@ function accountIcon(type: AccountType): string {
 
     <!-- No household -->
     <div v-else-if="!householdStore.household && !householdStore.loading" class="empty-state">
-      <p>Configura primeiro o teu household.</p>
+      <p>Configure primeiro o seu household.</p>
       <router-link to="/household" class="link">Ir para Household</router-link>
     </div>
 
@@ -316,7 +351,7 @@ function accountIcon(type: AccountType): string {
       <div class="page-header">
         <div class="page-header-text">
           <h1 class="page-title">Contas</h1>
-          <p class="page-subtitle">Gere as tuas contas financeiras</p>
+          <p class="page-subtitle">Faça a gestão das suas contas financeiras</p>
         </div>
         <button
           v-if="accountsStore.activeAccounts.length > 0"
@@ -325,7 +360,7 @@ function accountIcon(type: AccountType): string {
           @click="openCreateModal"
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="5" y2="19"/><line x1="5" x2="19" y1="12" y2="12"/></svg>
-          Nova conta
+          Adicionar
         </button>
       </div>
 
@@ -334,13 +369,51 @@ function accountIcon(type: AccountType): string {
         {{ accountsStore.error }}
       </div>
 
+      <!-- Filtro Ativas / Arquivadas -->
+      <div
+        v-if="accountsStore.activeAccounts.length > 0 || accountsStore.archivedAccounts.length > 0"
+        class="filter-chips"
+        role="tablist"
+      >
+        <button
+          type="button"
+          class="filter-chip"
+          :class="{ active: sectionFilter === 'all' }"
+          role="tab"
+          :aria-selected="sectionFilter === 'all'"
+          @click="sectionFilter = 'all'"
+        >
+          Todas
+        </button>
+        <button
+          type="button"
+          class="filter-chip"
+          :class="{ active: sectionFilter === 'active' }"
+          role="tab"
+          :aria-selected="sectionFilter === 'active'"
+          @click="sectionFilter = 'active'"
+        >
+          Ativas
+        </button>
+        <button
+          type="button"
+          class="filter-chip"
+          :class="{ active: sectionFilter === 'archived' }"
+          role="tab"
+          :aria-selected="sectionFilter === 'archived'"
+          @click="sectionFilter = 'archived'"
+        >
+          Arquivadas
+        </button>
+      </div>
+
       <!-- Primary selection banner -->
       <div
-        v-if="needsPrimarySelection && accountsStore.activeAccounts.length > 1"
+        v-if="showActiveSection && needsPrimarySelection && accountsStore.activeAccounts.length > 1"
         class="banner banner--warning"
       >
         <div class="banner-content">
-          <p class="banner-title">Escolhe a conta principal</p>
+          <p class="banner-title">Escolha a conta principal</p>
           <p class="banner-text">
             No plano Free só uma conta pode estar ativa para movimentos e edições.
           </p>
@@ -363,13 +436,13 @@ function accountIcon(type: AccountType): string {
       </div>
 
       <!-- Unlock banner -->
-      <div v-if="showUnlockAccountsBanner" class="banner banner--warning">
+      <div v-if="showActiveSection && showUnlockAccountsBanner" class="banner banner--warning">
         <div class="banner-content banner-row">
           <div>
             <p class="banner-title">Contas bloqueadas</p>
-            <p class="banner-text">Atualiza para Pro ou Couple para desbloquear todas as contas.</p>
+            <p class="banner-text">Atualize para Pro ou Couple para desbloquear todas as contas.</p>
           </div>
-          <router-link :to="{ name: 'subscription' }" class="btn-confirm">
+          <router-link :to="{ name: 'subscricao' }" class="btn-confirm">
             Ver planos
           </router-link>
         </div>
@@ -384,19 +457,16 @@ function accountIcon(type: AccountType): string {
       <!-- Empty state -->
       <div v-else-if="accountsStore.activeAccounts.length === 0 && accountsStore.archivedAccounts.length === 0" class="empty-card">
         <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="empty-icon"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 10h20"/><circle cx="17" cy="15" r="1.5"/></svg>
-        <p class="empty-text">Ainda não tens contas</p>
-        <p class="empty-hint">Adiciona a tua primeira conta para começar a controlar as finanças.</p>
+        <p class="empty-text">Ainda não tem contas</p>
+        <p class="empty-hint">Adicione a sua primeira conta para começar a controlar as finanças.</p>
         <button type="button" class="btn-confirm" @click="openCreateModal">
           Adicionar conta
         </button>
       </div>
 
       <!-- Active accounts -->
-      <template v-if="accountsStore.activeAccounts.length > 0">
-        <div class="section-label">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 10h20"/><circle cx="17" cy="15" r="1.5"/></svg>
-          Contas Ativas
-        </div>
+      <template v-if="showActiveSection && accountsStore.activeAccounts.length > 0">
+        <h2 v-if="sectionFilter === 'all'" class="section-heading">Ativas</h2>
         <div class="accounts-grid">
           <div
             v-for="account in accountsStore.activeAccounts"
@@ -406,11 +476,15 @@ function accountIcon(type: AccountType): string {
               'account-card--locked': account.isActiveForPlan === false,
             }"
           >
-            <!-- Icon -->
-            <div class="card-icon-wrap">
-              <svg v-if="isCreditCard(account.type)" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
-              <svg v-else xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path :d="accountIcon(account.type)"/></svg>
-            </div>
+            <!-- Icon: logo do banco se reconhecido, senão ícone por tipo (default) -->
+            <BrandLogo :name="account.name" :domain="account.logoDomain" :size="40" class="card-brand-logo">
+              <template #fallback>
+                <span class="card-icon-wrap">
+                  <svg v-if="isCreditCard(account.type)" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
+                  <svg v-else xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path :d="accountIcon(account.type)"/></svg>
+                </span>
+              </template>
+            </BrandLogo>
 
             <!-- Info -->
             <div class="card-body">
@@ -459,13 +533,19 @@ function accountIcon(type: AccountType): string {
         </div>
       </template>
 
-      <!-- Archived accounts -->
-      <div v-if="accountsStore.archivedAccounts.length > 0" class="archived-section">
-        <div class="section-label">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></svg>
-          Contas Arquivadas
-        </div>
+      <!-- Archived empty state -->
+      <div
+        v-if="sectionFilter === 'archived' && accountsStore.archivedAccounts.length === 0"
+        class="empty-card"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="empty-icon"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></svg>
+        <p class="empty-text">Sem contas arquivadas</p>
+        <p class="empty-hint">As contas que arquivar aparecem aqui, sem perder o histórico.</p>
+      </div>
 
+      <!-- Archived accounts -->
+      <div v-if="showArchivedSection && accountsStore.archivedAccounts.length > 0" class="archived-section">
+        <h2 v-if="sectionFilter === 'all'" class="section-heading">Arquivadas</h2>
         <div class="accounts-grid">
           <div
             v-for="account in accountsStore.archivedAccounts"
@@ -545,7 +625,7 @@ function accountIcon(type: AccountType): string {
     >
       <div class="blocked-body">
         <p class="blocked-msg">{{ accountDeleteBlockedMessage }}</p>
-        <p class="blocked-question">O que queres fazer?</p>
+        <p class="blocked-question">O que quer fazer?</p>
         <div class="blocked-options">
           <button type="button" class="blocked-option" @click="handleArchiveFromBlocked" :disabled="actionLoading">
             <div class="blocked-option-icon">
@@ -590,23 +670,17 @@ function accountIcon(type: AccountType): string {
       @confirm="handleArchiveConfirm"
     />
 
-    <BaseModal
-      v-if="accountLimitModalOpen"
-      title="Limite do plano Free"
+    <PlanUpsellModal
+      :open="accountLimitModalOpen"
+      title="Adicione todas as suas contas"
+      description="No plano Free só pode ter 1 conta. Atualize para Pro ou Couple para juntar todas as que precisar."
+      :features="[
+        'Contas ilimitadas',
+        'Veja o seu património completo num só sítio',
+        'Objetivos de poupança e relatórios mensais',
+      ]"
       @close="accountLimitModalOpen = false"
-    >
-      <div class="blocked-body">
-        <p class="blocked-msg">
-          Atingiste o limite de contas do plano Free. Atualiza para Pro ou Couple para adicionares mais.
-        </p>
-        <div class="blocked-footer">
-          <button type="button" class="btn-cancel" @click="accountLimitModalOpen = false">Agora não</button>
-          <router-link :to="{ name: 'subscription' }" class="btn-confirm" @click="accountLimitModalOpen = false">
-            Ver planos
-          </router-link>
-        </div>
-      </div>
-    </BaseModal>
+    />
   </div>
 </template>
 
@@ -666,6 +740,19 @@ function accountIcon(type: AccountType): string {
   transform: translateY(-1px);
 }
 
+/* ── Section heading (vista "Todas") ── */
+.section-heading {
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: var(--color-text);
+  margin: 0 0 0.875rem;
+  letter-spacing: -0.01em;
+}
+
+.archived-section {
+  margin-top: 1.75rem;
+}
+
 /* ── Accounts grid ── */
 .accounts-grid {
   display: grid;
@@ -716,6 +803,10 @@ function accountIcon(type: AccountType): string {
 html.dark .card-icon-wrap {
   background: rgba(22, 101, 52, 0.2);
   color: #4ade80;
+}
+
+.card-brand-logo {
+  border-radius: 10px;
 }
 
 .card-icon-wrap--muted {
@@ -863,21 +954,43 @@ html.dark .action-btn--reactivate:hover {
   background: rgba(74, 222, 128, 0.1);
 }
 
-/* ── Archived section ── */
-.archived-section {
-  margin-top: 2rem;
+/* ── Filtro Ativas / Arquivadas ── */
+.filter-chips {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.25rem;
 }
 
-.section-label {
-  display: flex;
+.filter-chip {
+  display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.4rem;
+  padding: 0.4rem 0.875rem;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-card);
+  color: var(--color-text-muted);
   font-size: 0.8125rem;
   font-weight: 600;
-  color: var(--color-text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  margin-bottom: 0.75rem;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.filter-chip:hover {
+  color: var(--color-text);
+  border-color: var(--color-text-muted);
+}
+
+.filter-chip.active {
+  background: #166534;
+  border-color: #166534;
+  color: #ffffff;
+}
+
+html.dark .filter-chip.active {
+  background: #15803d;
+  border-color: #15803d;
 }
 
 /* ── Banners ── */

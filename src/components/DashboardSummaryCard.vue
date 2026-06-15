@@ -83,10 +83,10 @@ defineProps<{
 }
 
 html.dark .card-savings .card-value {
-  color: #60a5fa;
+  color: #4ade80;
 }
 
 html.dark .card-savings {
-  border-left-color: #60a5fa;
+  border-left-color: #4ade80;
 }
 </style>

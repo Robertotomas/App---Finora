@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { householdApi } from '@/api/household'
 import { useAuthStore } from '@/stores/auth'
+import { useNotificationStore } from '@/stores/notifications'
 import { userFromProfileResponse } from '@/types/auth'
 import type { Household, HouseholdMember, HouseholdType } from '@/types/household'
 
@@ -114,6 +115,7 @@ export const useHouseholdStore = defineStore('household', () => {
       const { data } = await householdApi.leaveCouple()
       authStore.setAuth(data.accessToken, userFromProfileResponse(data.user))
       await fetchHousehold()
+      useNotificationStore().fetchUnreadCount()
     } catch (e: unknown) {
       const err = e as { response?: { data?: { message?: string } } }
       error.value = err.response?.data?.message ?? 'Não foi possível sair do agregado.'
