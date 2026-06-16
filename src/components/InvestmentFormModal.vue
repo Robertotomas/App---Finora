@@ -190,7 +190,7 @@ function handleClose() {
 
         <div class="form-group">
           <label>Data</label>
-          <DatePicker :model-value="date" placeholder="Selecione uma data" @update:model-value="(v) => (date = v)" />
+          <DatePicker editable :model-value="date" placeholder="dd/mm/aaaa" @update:model-value="(v) => (date = v)" />
         </div>
 
         <div class="form-row form-row--3">
