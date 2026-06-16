@@ -9,6 +9,7 @@ import { objectivesApi } from '@/api/objectives'
 import { useHouseholdStore } from '@/stores/household'
 import { useAccountsStore } from '@/stores/accounts'
 import { useAssetsStore } from '@/stores/assets'
+import { useInvestmentsStore } from '@/stores/investments'
 import { useSubscriptionStore } from '@/stores/subscription'
 import { useTransactionsStore } from '@/stores/transactions'
 import { TransactionType, TRANSACTION_CATEGORY_LABELS } from '@/types/transaction'
@@ -28,13 +29,18 @@ import IncomePieChart from '@/components/charts/IncomePieChart.vue'
 import MonthlyLineChart from '@/components/charts/MonthlyLineChart.vue'
 import NetWorthChart from '@/components/charts/NetWorthChart.vue'
 import IncomeVsExpensesBarChart from '@/components/charts/IncomeVsExpensesBarChart.vue'
+import AssetsChart from '@/components/charts/AssetsChart.vue'
+import type { AssetChartPoint } from '@/components/charts/AssetsChart.vue'
 import PlanUpsellModal from '@/components/PlanUpsellModal.vue'
 import BrandLogo from '@/components/BrandLogo.vue'
+import InstrumentLogo from '@/components/InstrumentLogo.vue'
+import { investmentsApi } from '@/api/investments'
 
 const router = useRouter()
 const householdStore = useHouseholdStore()
 const accountsStore = useAccountsStore()
 const assetsStore = useAssetsStore()
+const investmentsStore = useInvestmentsStore()
 const subscriptionStore = useSubscriptionStore()
 const transactionsStore = useTransactionsStore()
 const dashboard = useDashboard()
@@ -380,6 +386,7 @@ onMounted(async () => {
             }),
             accountsStore.fetchAccounts(),
             assetsStore.fetchAssets().catch(() => {}),
+            investmentsStore.fetchHoldings().catch(() => {}),
             loadObjectivesPreview(),
             subscriptionStore.fetchSubscription(),
             transactionsStore.fetchTransactions({ limit: 5 }),
@@ -445,7 +452,9 @@ const accountsToShow = computed(() =>
 )
 
 const currentTotalBalance = computed(() =>
-  accountsStore.accounts.reduce((sum, a) => sum + a.balance, 0) + assetsStore.totalCurrentValue
+  accountsStore.accounts.reduce((sum, a) => sum + a.balance, 0)
+  + assetsStore.totalCurrentValue
+  + investmentsStore.totalCurrentValueEur
 )
 
 const hasChartData = computed(
@@ -534,7 +543,8 @@ const dailyAverage = computed(() => {
 const accountCategoryGroups = computed(() => {
   const accs = accountsToShow.value
   const assetsTotal = assetsStore.totalCurrentValue
-  const total = accs.reduce((s, a) => s + Math.abs(a.balance), 0) + Math.abs(assetsTotal)
+  const investmentsTotal = investmentsStore.totalCurrentValueEur
+  const total = accs.reduce((s, a) => s + Math.abs(a.balance), 0) + Math.abs(assetsTotal) + Math.abs(investmentsTotal)
 
   const groups = [
     {
@@ -561,7 +571,8 @@ const accountCategoryGroups = computed(() => {
   }
 
   const rows = groups.map((g) => ({ label: g.label, sum: g.sum }))
-  // Bens e valores entram no Património Total como categoria própria.
+  // Investimentos e Bens e valores entram no Património Total como categorias próprias.
+  if (investmentsTotal !== 0) rows.push({ label: 'Investimentos', sum: investmentsTotal })
   if (assetsTotal !== 0) rows.push({ label: 'Bens e valores', sum: assetsTotal })
 
   return rows.map((g) => ({
@@ -893,6 +904,135 @@ function selectTrendPeriod(p: TrendChartPeriod) {
   trendChartPeriod.value = p
 }
 
+/* ── Card de Investimentos no dashboard (gráfico da carteira / ativo via dropdown) ── */
+type InvPeriod = 'YTD' | '3M' | '6M' | '1A' | '5A' | 'Tudo'
+const invPeriods: InvPeriod[] = ['YTD', '3M', '6M', '1A', '5A', 'Tudo']
+const invPeriod = ref<InvPeriod>('6M')
+const invSelectedId = ref<string | null>(null) // null = carteira inteira
+const invDropdownOpen = ref(false)
+const invDropdownRef = ref<HTMLElement | null>(null)
+const invChartPoints = ref<AssetChartPoint[]>([])
+const invChartLoading = ref(false)
+const invHover = ref<{ date: string; value: number; cost: number } | null>(null)
+let invSeq = 0
+
+const showInvestmentsCard = computed(
+  () => subscriptionStore.canAccessInvestments && investmentsStore.holdings.length > 0,
+)
+
+const invSortedHoldings = computed(() =>
+  [...investmentsStore.holdings].sort(
+    (a, b) => (b.currentValueEur ?? b.investedEur) - (a.currentValueEur ?? a.investedEur),
+  ),
+)
+
+const invSelectedHolding = computed(() =>
+  invSelectedId.value ? investmentsStore.holdings.find((h) => h.id === invSelectedId.value) ?? null : null,
+)
+
+function invRangeFor(p: InvPeriod): { from: string; to: string } {
+  const to = new Date()
+  // "Tudo" = desde a 1ª compra (from vazio → o backend usa a transação mais antiga).
+  if (p === 'Tudo') return { from: '', to: localDateStr(to) }
+  const from = new Date()
+  if (p === 'YTD') from.setMonth(0, 1)
+  else if (p === '3M') from.setMonth(from.getMonth() - 3)
+  else if (p === '6M') from.setMonth(from.getMonth() - 6)
+  else if (p === '1A') from.setFullYear(from.getFullYear() - 1)
+  else from.setFullYear(from.getFullYear() - 5)
+  return { from: localDateStr(from), to: localDateStr(to) }
+}
+
+async function loadInvestmentsChart() {
+  if (!showInvestmentsCard.value) return
+  const seq = ++invSeq
+  invChartLoading.value = true
+  invHover.value = null
+  try {
+    const range = invRangeFor(invPeriod.value)
+    const { data } = invSelectedId.value
+      ? await investmentsApi.holdingHistory(invSelectedId.value, range)
+      : await investmentsApi.history(range)
+    if (seq !== invSeq) return
+    invChartPoints.value = data.points.map((p) => ({ date: p.date, value: p.value, cost: p.cost }))
+  } catch {
+    if (seq === invSeq) invChartPoints.value = []
+  } finally {
+    if (seq === invSeq) invChartLoading.value = false
+  }
+}
+
+function onInvSelect(val: string | null) {
+  invDropdownOpen.value = false
+  const next = val === 'all' ? null : val
+  if (next === invSelectedId.value) return
+  invSelectedId.value = next
+  loadInvestmentsChart()
+}
+function selectInvPeriod(p: InvPeriod) {
+  if (invPeriod.value === p) return
+  invPeriod.value = p
+  loadInvestmentsChart()
+}
+function onInvDropdownOutsideClick(e: MouseEvent) {
+  if (!invDropdownOpen.value || !invDropdownRef.value) return
+  if (!invDropdownRef.value.contains(e.target as Node)) invDropdownOpen.value = false
+}
+onMounted(() => document.addEventListener('click', onInvDropdownOutsideClick, true))
+onUnmounted(() => document.removeEventListener('click', onInvDropdownOutsideClick, true))
+function onInvChartHover(p: { date: string; value: number; cost: number } | null) {
+  invHover.value = p
+}
+
+const invShowChart = computed(() => invChartPoints.value.length >= 2)
+
+const invBaseValue = computed(() => {
+  const h = invSelectedHolding.value
+  if (h) return h.currentValueEur ?? h.investedEur
+  return investmentsStore.totalCurrentValueEur
+})
+const invBaseInvested = computed(() => {
+  const h = invSelectedHolding.value
+  if (h) return h.investedEur
+  return investmentsStore.totalInvestedEur
+})
+const invHeroValue = computed(() => invHover.value?.value ?? invBaseValue.value)
+const invHeroInvested = computed(() => invHover.value?.cost ?? invBaseInvested.value)
+const invHeroReturn = computed(() => invHeroValue.value - invHeroInvested.value)
+const invHeroReturnPct = computed(() =>
+  invHeroInvested.value !== 0 ? (invHeroReturn.value / Math.abs(invHeroInvested.value)) * 100 : null,
+)
+const invHeroDate = computed(() => {
+  if (!invHover.value) return 'Hoje'
+  const today = new Date()
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+  if (invHover.value.date === todayStr) return 'Hoje'
+  const d = new Date(invHover.value.date + 'T00:00:00')
+  return d.toLocaleDateString('pt-PT', { day: 'numeric', month: 'long', year: 'numeric' })
+})
+
+const invChartYearTicks = computed(() => {
+  const pts = invChartPoints.value
+  if (pts.length < 2) return false
+  const span =
+    (new Date(pts[pts.length - 1].date + 'T00:00:00').getTime() - new Date(pts[0].date + 'T00:00:00').getTime()) / 86400000
+  return span > 760
+})
+
+function invFmtEur(v: number): string {
+  return formatCurrency(v, 'EUR')
+}
+function invFmtSignedEur(v: number): string {
+  return `${v >= 0 ? '+' : '−'}${invFmtEur(Math.abs(v))}`
+}
+function invFmtPct(pct: number): string {
+  return `${pct >= 0 ? '+' : ''}${pct.toFixed(2).replace('.', ',')}%`
+}
+
+watch(showInvestmentsCard, (v) => {
+  if (v && invChartPoints.value.length === 0) loadInvestmentsChart()
+}, { immediate: true })
+
 const showContent = computed(() =>
   mounted.value &&
   !loadError.value &&
@@ -1189,6 +1329,94 @@ const showContent = computed(() =>
           </div>
         </div>
         </template>
+      </div>
+
+      <!-- ═══ INVESTIMENTOS — card a toda a largura, por baixo dos 3 ═══ -->
+      <div v-if="showInvestmentsCard" class="dashboard-section-card inv-card">
+        <div class="inv-card-top">
+          <h2 class="section-title">Investimentos</h2>
+          <div class="inv-card-top-right">
+            <div class="patrimonio-periods">
+              <button
+                v-for="p in invPeriods"
+                :key="p"
+                class="patrimonio-period-btn"
+                :class="{ active: invPeriod === p }"
+                @click="selectInvPeriod(p)"
+              >{{ p }}</button>
+            </div>
+            <!-- Dropdown de ativos (logo + nome completo) -->
+            <div ref="invDropdownRef" class="inv-select">
+              <button type="button" class="inv-select-trigger" :class="{ open: invDropdownOpen }" @click.stop="invDropdownOpen = !invDropdownOpen">
+                <InstrumentLogo
+                  v-if="invSelectedHolding"
+                  :symbol="invSelectedHolding.symbol"
+                  :name="invSelectedHolding.name"
+                  :type="invSelectedHolding.type"
+                  :domain="invSelectedHolding.logoDomain"
+                  :size="22"
+                />
+                <span v-else class="inv-select-all-icon">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg>
+                </span>
+                <span class="inv-select-label">{{ invSelectedHolding ? invSelectedHolding.name : 'Todos os ativos' }}</span>
+                <svg class="inv-select-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+              </button>
+              <Transition name="panel">
+                <div v-show="invDropdownOpen" class="inv-select-menu">
+                  <button type="button" class="inv-select-opt" :class="{ active: !invSelectedId }" @click="onInvSelect('all')">
+                    <span class="inv-select-all-icon">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg>
+                    </span>
+                    <span class="inv-select-opt-text"><span class="inv-select-opt-name">Todos os ativos</span></span>
+                    <svg v-if="!invSelectedId" class="inv-select-check" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                  </button>
+                  <button
+                    v-for="h in invSortedHoldings"
+                    :key="h.id"
+                    type="button"
+                    class="inv-select-opt"
+                    :class="{ active: invSelectedId === h.id }"
+                    @click="onInvSelect(h.id)"
+                  >
+                    <InstrumentLogo :symbol="h.symbol" :name="h.name" :type="h.type" :domain="h.logoDomain" :size="26" />
+                    <span class="inv-select-opt-text">
+                      <span class="inv-select-opt-name">{{ h.name }}</span>
+                      <span class="inv-select-opt-sub">{{ h.providerSymbol || h.symbol }}</span>
+                    </span>
+                    <svg v-if="invSelectedId === h.id" class="inv-select-check" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                  </button>
+                </div>
+              </Transition>
+            </div>
+            <router-link :to="{ name: 'investimentos' }" class="static-card-link" title="Ver todos">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </router-link>
+          </div>
+        </div>
+
+        <div class="inv-card-hero">
+          <span class="inv-card-value">{{ hideValues ? '••••••' : invFmtEur(invHeroValue) }}</span>
+          <div v-if="!hideValues" class="inv-card-hero-sub">
+            <span class="inv-card-return" :class="{ negative: invHeroReturn < 0 }">{{ invFmtSignedEur(invHeroReturn) }}</span>
+            <span v-if="invHeroReturnPct !== null" class="inv-card-pct" :class="{ negative: invHeroReturn < 0 }">{{ invFmtPct(invHeroReturnPct) }}</span>
+          </div>
+          <span class="inv-card-date">{{ invHeroDate }}</span>
+        </div>
+
+        <div class="inv-card-chart">
+          <div v-if="invChartLoading" class="inv-card-chart-state"><div class="spinner"></div></div>
+          <AssetsChart
+            v-else-if="invShowChart"
+            :points="invChartPoints"
+            currency="EUR"
+            :year-ticks="invChartYearTicks"
+            @hover="onInvChartHover"
+          />
+          <div v-else class="inv-card-chart-state">
+            <p class="inv-card-chart-empty">Sem dados de evolução</p>
+          </div>
+        </div>
       </div>
 
       <!-- ═══ TENDÊNCIAS — Card dedicado com seletor tipo patrimônio ═══ -->
@@ -2422,6 +2650,270 @@ html.dark .daily-avg-banner-progress-bar {
 .trend-charts-inner {
   position: relative;
   height: 280px;
+}
+
+/* ═══ CARD DE INVESTIMENTOS (largura total, por baixo dos 3) ═══ */
+.inv-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  margin-bottom: 1rem;
+}
+
+.inv-card-top .section-title {
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.inv-card-top-right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 0.625rem;
+}
+
+/* Dropdown de ativos (logo + nome completo) */
+.inv-select {
+  position: relative;
+}
+
+.inv-select-trigger {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 240px;
+  max-width: 52vw;
+  padding: 0.45rem 0.625rem;
+  background: var(--color-input-bg, #fff);
+  border: 1.5px solid var(--color-input-border, #e2e8f0);
+  border-radius: 10px;
+  font-family: inherit;
+  color: var(--color-text);
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.inv-select-trigger:hover,
+.inv-select-trigger.open {
+  border-color: #166534;
+}
+
+html.dark .inv-select-trigger:hover,
+html.dark .inv-select-trigger.open {
+  border-color: #4ade80;
+}
+
+.inv-select-label {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inv-select-chevron {
+  flex-shrink: 0;
+  color: var(--color-text-muted);
+  transition: transform 0.2s;
+}
+
+.inv-select-trigger.open .inv-select-chevron {
+  transform: rotate(180deg);
+}
+
+.inv-select-all-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  border-radius: 6px;
+  color: var(--color-text-muted);
+  background: var(--color-table-row-hover);
+}
+
+.inv-select-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 60;
+  width: 320px;
+  max-width: 80vw;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 0.375rem;
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.14);
+}
+
+html.dark .inv-select-menu {
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+}
+
+.inv-select-opt {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  width: 100%;
+  padding: 0.5rem 0.625rem;
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.inv-select-opt:hover {
+  background: var(--color-table-row-hover);
+}
+
+.inv-select-opt.active {
+  background: rgba(22, 101, 52, 0.08);
+}
+
+html.dark .inv-select-opt.active {
+  background: rgba(74, 222, 128, 0.1);
+}
+
+.inv-select-opt-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.inv-select-opt-name {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inv-select-opt-sub {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--color-text-muted);
+}
+
+.inv-select-check {
+  flex-shrink: 0;
+  color: #166534;
+}
+
+html.dark .inv-select-check {
+  color: #4ade80;
+}
+
+.inv-card-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.inv-card-value {
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: #166534;
+  letter-spacing: -0.02em;
+}
+
+html.dark .inv-card-value {
+  color: #4ade80;
+}
+
+.inv-card-hero-sub {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.inv-card-return {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #166534;
+}
+
+html.dark .inv-card-return {
+  color: #4ade80;
+}
+
+.inv-card-return.negative,
+.inv-card-pct.negative {
+  color: #dc2626;
+}
+
+html.dark .inv-card-return.negative,
+html.dark .inv-card-pct.negative {
+  color: #f87171;
+}
+
+.inv-card-pct {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  color: #166534;
+  background: rgba(22, 101, 52, 0.1);
+  padding: 0.08rem 0.4rem;
+  border-radius: 999px;
+}
+
+html.dark .inv-card-pct {
+  color: #4ade80;
+  background: rgba(74, 222, 128, 0.12);
+}
+
+.inv-card-pct.negative {
+  background: rgba(220, 38, 38, 0.1);
+}
+
+.inv-card-date {
+  font-size: 0.6875rem;
+  color: var(--color-text-muted);
+}
+
+.inv-card-chart {
+  position: relative;
+  height: 200px;
+  margin-top: 0.75rem;
+}
+
+/* O AssetsChart tem altura própria (240px); forçamo-la à do contentor para não transbordar. */
+.inv-card-chart :deep(.assets-chart) {
+  height: 200px;
+}
+
+@media (max-width: 560px) {
+  .inv-select-trigger {
+    width: 180px;
+  }
+}
+
+.inv-card-chart-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
+
+.inv-card-chart-empty {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  margin: 0;
 }
 
 

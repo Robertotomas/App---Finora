@@ -678,6 +678,12 @@ export function primaryLogoUrl(domain: string): string {
   return logoDevEnabled() ? logoDevUrl(domain) : faviconUrl(domain)
 }
 
+/** Logo de um instrumento por ticker (Logo.dev `/ticker/{SÍMBOLO}`). `fallback=404` quando não existe. */
+export function logoDevTickerUrl(ticker: string): string {
+  const token = import.meta.env.VITE_LOGODEV_TOKEN as string | undefined
+  return `https://img.logo.dev/ticker/${encodeURIComponent(ticker.toUpperCase())}?token=${token}&size=128&format=png&fallback=404`
+}
+
 /** Dominios dos bancos globais/PT principais -- usados para warm-up de cache. */
 export const POPULAR_BANK_DOMAINS: string[] = BRANDS.filter((b) => b.type === 'bank' && b.popular)
   .slice(0, 12)
