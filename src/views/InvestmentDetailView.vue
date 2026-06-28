@@ -44,17 +44,21 @@ onMounted(async () => {
 /* ── Gráfico de evolução da posição (valor diário em EUR) ── */
 const DAY = 86_400_000
 const historyPoints = ref<AssetChartPoint[]>([])
+const historyLoading = ref(true)
 let historySeq = 0
 
 async function fetchHistory() {
   if (!holdingId.value) return
   const seq = ++historySeq
+  historyLoading.value = true
   try {
     const { data } = await investmentsApi.holdingHistory(holdingId.value)
     if (seq !== historySeq) return
     historyPoints.value = data.points.map((p) => ({ date: p.date, value: p.value, cost: p.cost }))
   } catch {
     if (seq === historySeq) historyPoints.value = []
+  } finally {
+    if (seq === historySeq) historyLoading.value = false
   }
 }
 
@@ -64,7 +68,8 @@ const chartYearTicks = computed(() => {
   if (pts.length < 2) return false
   const span =
     (new Date(pts[pts.length - 1].date + 'T00:00:00').getTime() - new Date(pts[0].date + 'T00:00:00').getTime()) / DAY
-  return span > 760
+  // > ~18 meses: anos comprimidos à esquerda + meses do ano atual (igual à vista "Tudo" da lista).
+  return span > 540
 })
 
 const fixedInstrument = computed(() => {
@@ -226,7 +231,8 @@ async function confirmDeletePosition() {
           <p class="hero-date">Hoje</p>
 
           <div class="hero-chart">
-            <AssetsChart v-if="showChart" :points="historyPoints" currency="EUR" :year-ticks="chartYearTicks" />
+            <div v-if="historyLoading" class="hero-chart-loading"><div class="spinner"></div></div>
+            <AssetsChart v-else-if="showChart" :points="historyPoints" currency="EUR" :year-ticks="chartYearTicks" cost-label="Investido" />
             <div v-else class="chart-placeholder">
               <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
               <p>O gráfico aparece quando houver histórico de cotações suficiente</p>
@@ -497,6 +503,13 @@ html.dark .hero-pct {
 
 .hero-chart {
   margin-top: 1.25rem;
+}
+
+.hero-chart-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 240px;
 }
 
 .chart-placeholder {

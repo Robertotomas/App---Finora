@@ -31,6 +31,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   close: []
   submit: [payload: AddTransactionRequest]
+  import: []
 }>()
 
 const isEdit = computed(() => !!props.transaction)
@@ -142,6 +143,12 @@ function handleClose() {
         <label>Produto</label>
         <InstrumentAutocomplete :error="!!errors.instrument" @select="onSelect" />
         <span v-if="errors.instrument" class="error-text">{{ errors.instrument }}</span>
+
+        <div class="import-divider"><span>ou</span></div>
+        <button type="button" class="import-btn" @click="emit('import')">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+          Importar de corretora (Excel/CSV)
+        </button>
       </div>
 
       <!-- Instrumento escolhido -->
@@ -461,6 +468,56 @@ html.dark .input:focus {
 .error-text {
   font-size: 0.75rem;
   color: #dc2626;
+}
+
+.import-divider {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  margin: 0.75rem 0 0.25rem;
+  color: var(--color-text-muted);
+  font-size: 0.6875rem;
+}
+
+.import-divider::before,
+.import-divider::after {
+  content: '';
+  flex: 1;
+  border-top: 1px solid var(--color-border);
+}
+
+.import-divider span {
+  padding: 0 0.625rem;
+}
+
+.import-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.625rem 0.875rem;
+  background: transparent;
+  border: 1.5px solid var(--color-border);
+  border-radius: 10px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  font-family: inherit;
+  color: var(--color-text);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+
+.import-btn:hover {
+  border-color: #166534;
+  color: #166534;
+  background: rgba(22, 101, 52, 0.04);
+}
+
+html.dark .import-btn:hover {
+  border-color: #4ade80;
+  color: #4ade80;
+  background: rgba(74, 222, 128, 0.06);
 }
 
 .hint {

@@ -56,6 +56,41 @@ export function etfIssuerDomain(name: string): string | null {
 }
 
 /**
+ * Ticker de ETF UCITS → domínio do emissor. Útil quando o instrumento foi importado
+ * e o "nome" é só o ticker (ex.: "VUAA"), por isso o emissor não se deteta pelo nome.
+ */
+const ETF_TICKER_DOMAINS: Record<string, string> = {
+  // Vanguard
+  VWCE: 'vanguard.com', VWRL: 'vanguard.com', VWRP: 'vanguard.com', VWCG: 'vanguard.com', VUAA: 'vanguard.com',
+  VUSA: 'vanguard.com', VUSD: 'vanguard.com', VUAG: 'vanguard.com', VFEM: 'vanguard.com', VFEG: 'vanguard.com',
+  VHYL: 'vanguard.com', VHVG: 'vanguard.com', VEUR: 'vanguard.com', VEVE: 'vanguard.com', VNRT: 'vanguard.com',
+  VMID: 'vanguard.com', VJPN: 'vanguard.com', VGEK: 'vanguard.com', VAGP: 'vanguard.com', VDEV: 'vanguard.com',
+  // iShares / BlackRock
+  IWDA: 'ishares.com', EUNL: 'ishares.com', SWDA: 'ishares.com', CSPX: 'ishares.com', SXR8: 'ishares.com',
+  CSP1: 'ishares.com', IUSA: 'ishares.com', SXRV: 'ishares.com', QDVE: 'ishares.com', IS3N: 'ishares.com',
+  EUNM: 'ishares.com', EIMI: 'ishares.com', EMIM: 'ishares.com', SUSW: 'ishares.com', IMAE: 'ishares.com',
+  SXRG: 'ishares.com', IUSQ: 'ishares.com', AGGH: 'ishares.com', IUSN: 'ishares.com', ISAC: 'ishares.com',
+  SGLN: 'ishares.com', IGLN: 'ishares.com', EUNA: 'ishares.com', IBTA: 'ishares.com', IS3R: 'ishares.com',
+  // Xtrackers / DWS
+  XDWD: 'xtrackers.com', XESC: 'xtrackers.com', XMME: 'xtrackers.com', XDEW: 'xtrackers.com', XNAS: 'xtrackers.com',
+  XMWO: 'xtrackers.com', XDWT: 'xtrackers.com', XDWL: 'xtrackers.com', XMEU: 'xtrackers.com',
+  // Amundi / Lyxor
+  CW8: 'amundietf.com', MWRD: 'amundietf.com', WLDA: 'amundietf.com', LCWD: 'amundietf.com', PRAW: 'amundietf.com',
+  AMEM: 'amundietf.com', ESE: 'amundietf.com', LYP6: 'amundietf.com', CD9: 'amundietf.com',
+  // SPDR / State Street
+  SPYY: 'ssga.com', SPY5: 'ssga.com', SPPW: 'ssga.com', ZPRV: 'ssga.com', ZPRX: 'ssga.com', SPYI: 'ssga.com',
+  // Invesco
+  EQQQ: 'invesco.com', SPXP: 'invesco.com', SP5: 'invesco.com', MXIS: 'invesco.com',
+}
+
+/** Domínio do emissor de um ETF a partir do TICKER (ex.: "VUAA" → vanguard.com), ou null. */
+export function etfTickerDomain(symbol: string): string | null {
+  if (!symbol) return null
+  const base = symbol.split('.')[0].toUpperCase()
+  return ETF_TICKER_DOMAINS[base] ?? null
+}
+
+/**
  * Empresas (sobretudo europeias/PT) → domínio da marca, para o logo correto.
  * Útil porque o logo por ticker do Logo.dev é orientado aos EUA e erra em tickers europeus.
  */
@@ -189,6 +224,45 @@ export interface InstrumentPricePoint {
 
 export interface InstrumentPriceHistory {
   points: InstrumentPricePoint[]
+}
+
+/** Uma transação parseada no cliente (Excel/CSV da corretora), pronta a importar. */
+export interface BrokerTrade {
+  providerSymbol: string
+  baseSymbol: string
+  isin?: string | null
+  name: string
+  currency: string
+  exchange: string
+  type: InstrumentType
+  operation: InvestmentOperation
+  date: string
+  quantity: number
+  unitPrice: number
+  fxRateToEur: number | null
+  externalId: string
+}
+
+/** Resultado da importação de um extrato de corretora (XTB). */
+export interface InvestmentImportItem {
+  providerSymbol: string
+  name: string
+  operation: string // "Compra" | "Venda"
+  date: string
+  quantity: number
+  unitPrice: number
+  currency: string
+  status: 'new' | 'duplicate'
+}
+
+export interface InvestmentImportResult {
+  dryRun: boolean
+  detected: number
+  created: number
+  skipped: number
+  hasUnparsedRows: boolean
+  error?: string | null
+  items: InvestmentImportItem[]
 }
 
 export interface InstrumentSearchResult {

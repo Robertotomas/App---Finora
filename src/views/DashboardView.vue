@@ -385,7 +385,7 @@ onMounted(async () => {
               trendChartData.value = fillMissingMonths(trend, trendChartMonths.value)
             }),
             accountsStore.fetchAccounts(),
-            assetsStore.fetchAssets().catch(() => {}),
+            assetsStore.ensureLoaded().catch(() => {}),
             investmentsStore.fetchHoldings().catch(() => {}),
             loadObjectivesPreview(),
             subscriptionStore.fetchSubscription(),
@@ -575,11 +575,14 @@ const accountCategoryGroups = computed(() => {
   if (investmentsTotal !== 0) rows.push({ label: 'Investimentos', sum: investmentsTotal })
   if (assetsTotal !== 0) rows.push({ label: 'Bens e valores', sum: assetsTotal })
 
-  return rows.map((g) => ({
-    label: g.label,
-    value: g.sum,
-    percent: total > 0 ? (Math.abs(g.sum) / total) * 100 : 0,
-  }))
+  return rows
+    .map((g) => ({
+      label: g.label,
+      value: g.sum,
+      percent: total > 0 ? (Math.abs(g.sum) / total) * 100 : 0,
+    }))
+    // Esconde categorias a 0 € (ex.: "Ações e fundos"/"Outros" sem saldo) — só aparecem se tiverem valor.
+    .filter((g) => Math.abs(g.value) >= 0.005)
 })
 
 const totalAllocatedToObjectives = computed(() => objectivesReserved.value)
@@ -740,14 +743,22 @@ const chartPeriods: ChartPeriod[] = ['YTD', '3M', '6M', '1A', '5A']
 const dailyBalancePoints = ref<DailyBalancePoint[]>([])
 const chartLoading = ref(false)
 
+// Início de cada período (rolling, alinhado ao mês):
+//  YTD = 1 Jan deste ano; 3M = mês atual + 2 anteriores; 6M = mês atual + 5 anteriores;
+//  1A = este mês há 1 ano; 5A = este mês há 5 anos (5 anos exatos).
+function periodStart(p: string, now: Date): Date {
+  if (p === '3M') return new Date(now.getFullYear(), now.getMonth() - 2, 1)
+  if (p === '6M') return new Date(now.getFullYear(), now.getMonth() - 5, 1)
+  if (p === '1A') return new Date(now.getFullYear() - 1, now.getMonth(), 1)
+  if (p === '5A') return new Date(now.getFullYear() - 5, now.getMonth(), 1)
+  return new Date(now.getFullYear(), 0, 1) // YTD
+}
+
 const chartDays = computed(() => {
-  if (chartPeriod.value === 'YTD') {
-    const now = new Date()
-    const start = new Date(now.getFullYear(), 0, 1)
-    return Math.ceil((now.getTime() - start.getTime()) / 86400000)
-  }
-  const map: Record<string, number> = { '3M': 90, '6M': 180, '1A': 365, '5A': 1825 }
-  return map[chartPeriod.value] ?? 180
+  const now = new Date()
+  const today0 = new Date(now.getFullYear(), now.getMonth(), now.getDate()) // sem hora → nº de dias exato
+  const start = periodStart(chartPeriod.value, now)
+  return Math.round((today0.getTime() - start.getTime()) / 86400000)
 })
 
 async function fetchDailyBalance() {
@@ -917,11 +928,11 @@ const invHover = ref<{ date: string; value: number; cost: number } | null>(null)
 let invSeq = 0
 
 const showInvestmentsCard = computed(
-  () => subscriptionStore.canAccessInvestments && investmentsStore.holdings.length > 0,
+  () => subscriptionStore.canAccessInvestments && investmentsStore.activeHoldings.length > 0,
 )
 
 const invSortedHoldings = computed(() =>
-  [...investmentsStore.holdings].sort(
+  [...investmentsStore.activeHoldings].sort(
     (a, b) => (b.currentValueEur ?? b.investedEur) - (a.currentValueEur ?? a.investedEur),
   ),
 )
@@ -931,16 +942,10 @@ const invSelectedHolding = computed(() =>
 )
 
 function invRangeFor(p: InvPeriod): { from: string; to: string } {
-  const to = new Date()
+  const now = new Date()
   // "Tudo" = desde a 1ª compra (from vazio → o backend usa a transação mais antiga).
-  if (p === 'Tudo') return { from: '', to: localDateStr(to) }
-  const from = new Date()
-  if (p === 'YTD') from.setMonth(0, 1)
-  else if (p === '3M') from.setMonth(from.getMonth() - 3)
-  else if (p === '6M') from.setMonth(from.getMonth() - 6)
-  else if (p === '1A') from.setFullYear(from.getFullYear() - 1)
-  else from.setFullYear(from.getFullYear() - 5)
-  return { from: localDateStr(from), to: localDateStr(to) }
+  if (p === 'Tudo') return { from: '', to: localDateStr(now) }
+  return { from: localDateStr(periodStart(p, now)), to: localDateStr(now) }
 }
 
 async function loadInvestmentsChart() {
@@ -1016,7 +1021,8 @@ const invChartYearTicks = computed(() => {
   if (pts.length < 2) return false
   const span =
     (new Date(pts[pts.length - 1].date + 'T00:00:00').getTime() - new Date(pts[0].date + 'T00:00:00').getTime()) / 86400000
-  return span > 760
+  // > ~18 meses: anos comprimidos + meses do ano atual (alinhado com a página de Investimentos).
+  return span > 540
 })
 
 function invFmtEur(v: number): string {
@@ -1411,6 +1417,7 @@ const showContent = computed(() =>
             :points="invChartPoints"
             currency="EUR"
             :year-ticks="invChartYearTicks"
+            cost-label="Investido"
             @hover="onInvChartHover"
           />
           <div v-else class="inv-card-chart-state">
@@ -2888,7 +2895,8 @@ html.dark .inv-card-pct {
 
 .inv-card-chart {
   position: relative;
-  height: 200px;
+  /* 200px do gráfico + ~24px para a legenda (Valor/Investido) por cima. */
+  height: 224px;
   margin-top: 0.75rem;
 }
 

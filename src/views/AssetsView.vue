@@ -22,6 +22,7 @@ const subscriptionStore = useSubscriptionStore()
 const createModalOpen = ref(false)
 const actionLoading = ref(false)
 const sortDir = ref<'asc' | 'desc'>('desc')
+const initialLoading = ref(true) // cobre desde o 1.º render até os dados chegarem (evita o card vazio a "piscar")
 
 // Intervalo do gráfico (yyyy-MM-dd locais; vazios = sem limite → aquisição mais antiga / hoje).
 const rangeFrom = ref('')
@@ -35,18 +36,17 @@ const canAccess = computed(() => subscriptionStore.canAccessAssets)
 
 onMounted(async () => {
   try {
-    await Promise.all([
-      householdStore.fetchHousehold().then(() => {
-        if (householdStore.household && subscriptionStore.canAccessAssets) return assetsStore.fetchAssets()
-      }),
-      subscriptionStore.fetchSubscription(),
-    ])
-    if (householdStore.household && subscriptionStore.canAccessAssets && assetsStore.assets.length === 0) {
-      await assetsStore.fetchAssets().catch(() => {})
+    // household + subscrição em paralelo; depois (uma vez) garante os ativos via ensureLoaded
+    // (não repete o GET se já estiverem em memória de uma visita anterior).
+    await Promise.all([householdStore.fetchHousehold(), subscriptionStore.fetchSubscription()])
+    if (householdStore.household && subscriptionStore.canAccessAssets) {
+      await assetsStore.ensureLoaded().catch(() => {})
+      if (route.query.action === 'new') openCreateModal()
     }
-    if (route.query.action === 'new' && subscriptionStore.canAccessAssets) openCreateModal()
   } catch {
     // erros tratados nas stores
+  } finally {
+    initialLoading.value = false
   }
 })
 
@@ -121,7 +121,8 @@ const chartYearTicks = computed(() => {
   const pts = chartPoints.value
   if (pts.length < 2) return false
   const spanDays = (new Date(pts[pts.length - 1].date + 'T00:00:00').getTime() - new Date(pts[0].date + 'T00:00:00').getTime()) / DAY
-  return spanDays > 760
+  // > ~18 meses: anos comprimidos + meses do ano atual (mesmo critério dos gráficos de Investimentos).
+  return spanDays > 540
 })
 
 /* ── Hero (segue o hover do gráfico) ── */
@@ -220,9 +221,14 @@ function openAsset(asset: Asset) {
         </button>
       </div>
 
+      <div v-if="initialLoading" class="loading-state">
+        <div class="spinner"></div>
+        <p>A carregar bens...</p>
+      </div>
+
       <!-- Gating -->
       <PlanUpsellCard
-        v-if="!canAccess"
+        v-else-if="!canAccess"
         title="Bens e valores nos planos Pro e Couple"
         description="Registe imóveis, arte, veículos e outros bens, e veja como valorizam ao longo do tempo no seu património."
         :features="[
@@ -239,13 +245,8 @@ function openAsset(asset: Asset) {
       <template v-else>
         <div v-if="assetsStore.error" class="global-error">{{ assetsStore.error }}</div>
 
-        <div v-if="assetsStore.loading && assetsStore.assets.length === 0" class="loading-state">
-          <div class="spinner"></div>
-          <p>A carregar bens...</p>
-        </div>
-
         <!-- Empty -->
-        <div v-else-if="assetsStore.assets.length === 0" class="empty-card">
+        <div v-if="assetsStore.assets.length === 0" class="empty-card">
           <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" class="empty-icon"><path d="M6 3h12l4 6-10 13L2 9z"/><path d="M2 9h20"/><path d="m10 3 2 6"/><path d="m14 3-2 6"/></svg>
           <p class="empty-text">Ainda não tem bens registados</p>
           <p class="empty-hint">Adicione o seu primeiro ativo para começar a acompanhar o seu valor.</p>
@@ -273,7 +274,7 @@ function openAsset(asset: Asset) {
             </div>
 
             <div class="hero-chart">
-              <AssetsChart :points="chartPoints" currency="EUR" :year-ticks="chartYearTicks" @hover="onChartHover" />
+              <AssetsChart :points="chartPoints" currency="EUR" :year-ticks="chartYearTicks" cost-label="Custo" @hover="onChartHover" />
             </div>
           </div>
 

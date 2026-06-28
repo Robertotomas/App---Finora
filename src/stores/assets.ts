@@ -44,6 +44,7 @@ export const useAssetsStore = defineStore('assets', () => {
   const assets = ref<Asset[]>([])
   const loading = ref(true)
   const error = ref<string | null>(null)
+  const loaded = ref(false)
 
   const totalCurrentValue = computed(() => assets.value.reduce((sum, a) => sum + a.currentValue, 0))
 
@@ -57,19 +58,35 @@ export const useAssetsStore = defineStore('assets', () => {
     }
   }
 
-  async function fetchAssets() {
+  // Deduplica pedidos concorrentes (ex.: dashboard + lista a montar ao mesmo tempo).
+  let inFlight: Promise<Asset[]> | null = null
+
+  function fetchAssets() {
+    if (inFlight) return inFlight
     loading.value = true
     error.value = null
-    try {
-      const { data } = await assetsApi.getAll()
-      assets.value = data.map(mapAsset)
-      return assets.value
-    } catch (e: unknown) {
-      error.value = extractError(e)
-      throw e
-    } finally {
-      loading.value = false
-    }
+    inFlight = (async () => {
+      try {
+        const { data } = await assetsApi.getAll()
+        assets.value = data.map(mapAsset)
+        loaded.value = true
+        return assets.value
+      } catch (e: unknown) {
+        error.value = extractError(e)
+        throw e
+      } finally {
+        loading.value = false
+        inFlight = null
+      }
+    })()
+    return inFlight
+  }
+
+  // Carrega só se ainda não houver dados (evita refetch a cada navegação Dashboard↔Bens↔detalhe).
+  // As mutações atualizam a store, por isso os dados mantêm-se coerentes sem repedir.
+  function ensureLoaded() {
+    if (loaded.value) return Promise.resolve(assets.value)
+    return fetchAssets()
   }
 
   async function fetchAsset(id: string) {
@@ -169,8 +186,10 @@ export const useAssetsStore = defineStore('assets', () => {
     assets,
     loading,
     error,
+    loaded,
     totalCurrentValue,
     fetchAssets,
+    ensureLoaded,
     fetchAsset,
     createAsset,
     updateAsset,

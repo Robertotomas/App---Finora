@@ -3,6 +3,8 @@ import type {
   InvestmentHolding,
   InvestmentHistory,
   InstrumentPriceHistory,
+  InvestmentImportResult,
+  BrokerTrade,
   InstrumentSearchResult,
   AddTransactionRequest,
   UpdateTransactionRequest,
@@ -45,6 +47,10 @@ export const investmentsApi = {
     api.get<InvestmentHistory>(`/api/investments/${id}/history`, {
       params: { from: range.from || undefined, to: range.to || undefined },
     }),
+
+  // Importa transações já parseadas no cliente (Excel/CSV). dryRun=true → só pré-visualização.
+  import: (items: BrokerTrade[], hasUnparsedRows: boolean, dryRun: boolean) =>
+    api.post<InvestmentImportResult>('/api/investments/import', { items, hasUnparsedRows }, { params: { dryRun } }),
 
   // Cotação histórica de um ticker (preço real), para a pré-visualização no modal.
   quoteHistory: (symbol: string, range: HistoryRange = {}) =>

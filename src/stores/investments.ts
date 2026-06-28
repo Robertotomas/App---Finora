@@ -55,10 +55,13 @@ export const useInvestmentsStore = defineStore('investments', () => {
   const loading = ref(true)
   const error = ref<string | null>(null)
 
+  // Posições abertas (quantidade > 0); as fechadas/negativas não entram na lista nem nos totais.
+  const activeHoldings = computed(() => holdings.value.filter((h) => h.quantity > 1e-9))
+
   const totalCurrentValueEur = computed(() =>
-    holdings.value.reduce((sum, h) => sum + (h.currentValueEur ?? h.investedEur), 0),
+    activeHoldings.value.reduce((sum, h) => sum + (h.currentValueEur ?? h.investedEur), 0),
   )
-  const totalInvestedEur = computed(() => holdings.value.reduce((sum, h) => sum + h.investedEur, 0))
+  const totalInvestedEur = computed(() => activeHoldings.value.reduce((sum, h) => sum + h.investedEur, 0))
 
   function upsert(h: InvestmentHolding) {
     const idx = holdings.value.findIndex((x) => x.id === h.id)
@@ -74,19 +77,28 @@ export const useInvestmentsStore = defineStore('investments', () => {
     holdings.value = holdings.value.filter((h) => h.id !== id)
   }
 
-  async function fetchHoldings() {
+  // Deduplica pedidos concorrentes (ex.: o card do dashboard e a página a montar ao mesmo tempo):
+  // enquanto um getAll está em curso, os outros recebem a mesma Promise em vez de um novo GET.
+  let inFlight: Promise<InvestmentHolding[]> | null = null
+
+  function fetchHoldings() {
+    if (inFlight) return inFlight
     loading.value = true
     error.value = null
-    try {
-      const { data } = await investmentsApi.getAll()
-      holdings.value = data.map(mapHolding)
-      return holdings.value
-    } catch (e: unknown) {
-      error.value = extractError(e)
-      throw e
-    } finally {
-      loading.value = false
-    }
+    inFlight = (async () => {
+      try {
+        const { data } = await investmentsApi.getAll()
+        holdings.value = data.map(mapHolding)
+        return holdings.value
+      } catch (e: unknown) {
+        error.value = extractError(e)
+        throw e
+      } finally {
+        loading.value = false
+        inFlight = null
+      }
+    })()
+    return inFlight
   }
 
   async function addTransaction(request: AddTransactionRequest) {
@@ -159,6 +171,7 @@ export const useInvestmentsStore = defineStore('investments', () => {
 
   return {
     holdings,
+    activeHoldings,
     loading,
     error,
     totalCurrentValueEur,

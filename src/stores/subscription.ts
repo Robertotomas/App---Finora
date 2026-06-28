@@ -17,20 +17,29 @@ export const useSubscriptionStore = defineStore('subscription', () => {
   const loading = ref(false)
   const error = ref<string | null>(null)
 
-  async function fetchSubscription() {
+  // Deduplica pedidos concorrentes (várias views montam e pedem a subscrição ao mesmo tempo).
+  // Não altera quando é refrescada: cada chamada nova (após a anterior terminar) volta a ir à API.
+  let inFlight: Promise<SubscriptionMe> | null = null
+
+  function fetchSubscription() {
+    if (inFlight) return inFlight
     loading.value = true
     error.value = null
-    try {
-      const { data } = await subscriptionApi.getMySubscription()
-      subscription.value = data
-      return data
-    } catch (e: unknown) {
-      const err = e as { response?: { data?: { message?: string } } }
-      error.value = err.response?.data?.message ?? 'Erro ao carregar subscrição.'
-      throw e
-    } finally {
-      loading.value = false
-    }
+    inFlight = (async () => {
+      try {
+        const { data } = await subscriptionApi.getMySubscription()
+        subscription.value = data
+        return data
+      } catch (e: unknown) {
+        const err = e as { response?: { data?: { message?: string } } }
+        error.value = err.response?.data?.message ?? 'Erro ao carregar subscrição.'
+        throw e
+      } finally {
+        loading.value = false
+        inFlight = null
+      }
+    })()
+    return inFlight
   }
 
   async function upgrade(plan: SubscriptionPlan) {

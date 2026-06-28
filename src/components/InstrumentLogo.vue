@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { logoDevTickerUrl, logoDevUrl, logoDevEnabled } from '@/types/brandLogos'
-import { InstrumentType, instrumentBrandDomain } from '@/types/investment'
+import { InstrumentType, instrumentBrandDomain, etfTickerDomain } from '@/types/investment'
 
 const props = withDefaults(
   defineProps<{
@@ -26,9 +26,14 @@ const candidates = computed<string[]>(() => {
   const list: string[] = []
   // 1) Domínio resolvido no backend (Logo.dev search) — prioritário.
   if (props.domain) list.push(logoDevUrl(props.domain))
-  // 2) Mapa curado (ETF → emissor; ação → empresa).
+  // 2) Mapa curado (ETF → emissor pelo nome; ação → empresa).
   const mapped = props.type !== undefined ? instrumentBrandDomain(props.name, props.type) : null
   if (mapped && mapped !== props.domain) list.push(logoDevUrl(mapped))
+  // 2b) ETF: emissor pelo TICKER (o nome importado costuma ser só o ticker, ex.: "VUAA").
+  if (props.type === InstrumentType.Etf) {
+    const td = etfTickerDomain(props.symbol)
+    if (td && td !== props.domain && td !== mapped) list.push(logoDevUrl(td))
+  }
   // 3) Ações: logo por ticker como reserva (bom para EUA). ETFs não, para evitar logos errados.
   if (props.type !== InstrumentType.Etf) list.push(logoDevTickerUrl(props.symbol))
   return list

@@ -38,10 +38,11 @@ const asset = computed<Asset | undefined>(() => assetsStore.assets.find((a) => a
 
 onMounted(async () => {
   try {
-    await subscriptionStore.fetchSubscription()
-    await assetsStore.fetchAsset(assetId.value)
-  } catch {
-    notFound.value = true
+    // Reutiliza a lista já carregada (vinda da página de Bens) — o ativo, com as avaliações, já lá está.
+    // Só vai à rede buscar o ativo individual se não estiver em memória (ex.: acesso direto por URL).
+    await Promise.all([subscriptionStore.fetchSubscription(), assetsStore.ensureLoaded().catch(() => {})])
+    if (!asset.value) await assetsStore.fetchAsset(assetId.value).catch(() => {})
+    if (!asset.value) notFound.value = true
   } finally {
     loading.value = false
   }
@@ -108,7 +109,8 @@ const chartYearTicks = computed(() => {
   const pts = chartPoints.value
   if (pts.length < 2) return false
   const span = (new Date(pts[pts.length - 1].date + 'T00:00:00').getTime() - new Date(pts[0].date + 'T00:00:00').getTime()) / DAY
-  return span > 760
+  // > ~18 meses: anos comprimidos + meses do ano atual (mesmo critério dos gráficos de Investimentos).
+  return span > 540
 })
 
 function formatCurrency(value: number): string {
@@ -257,7 +259,7 @@ async function handleDeleteValuation() {
           <p class="hero-date">Última avaliação: {{ formatLongDate(asset.lastValuationDate) }}</p>
 
           <div class="hero-chart">
-            <AssetsChart v-if="showChart" :points="chartPoints" currency="EUR" :year-ticks="chartYearTicks" />
+            <AssetsChart v-if="showChart" :points="chartPoints" currency="EUR" :year-ticks="chartYearTicks" cost-label="Custo" />
             <div v-else class="chart-placeholder">
               <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
               <p>O gráfico aparece quando tiver mais do que uma avaliação</p>
