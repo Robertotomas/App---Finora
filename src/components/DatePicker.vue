@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import BaseSelect from './BaseSelect.vue'
 
 const props = defineProps<{
@@ -7,6 +7,8 @@ const props = defineProps<{
   error?: boolean
   placeholder?: string
   disabled?: boolean
+  /** Permite escrever a data à mão (dd/mm/aaaa); o calendário só abre pelo ícone. */
+  editable?: boolean
 }>()
 
 const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
@@ -47,6 +49,65 @@ const displayLabel = computed(() => {
   return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`
 })
 
+/* ── Modo escrevível (dd/mm/aaaa) ── */
+const inputText = ref(displayLabel.value)
+const isTyping = ref(false)
+
+function isValidDate(y: number, m: number, d: number): boolean {
+  if (m < 1 || m > 12 || d < 1) return false
+  return d <= new Date(y, m, 0).getDate()
+}
+
+/** Converte "dd/mm/aaaa" (aceita - . / e ano de 2 dígitos) em ISO yyyy-MM-dd, ou null. */
+function parseTyped(text: string): string | null {
+  const m = text.trim().match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})$/)
+  if (!m) return null
+  const d = Number(m[1])
+  const mo = Number(m[2])
+  let y = Number(m[3])
+  if (y < 100) y += 2000
+  if (!isValidDate(y, mo, d)) return null
+  return `${y}-${pad(mo)}-${pad(d)}`
+}
+
+/** Formata os dígitos como dd/mm/aaaa, inserindo as barras automaticamente. */
+function maskDate(raw: string): string {
+  const digits = raw.replace(/\D/g, '').slice(0, 8)
+  if (digits.length <= 2) return digits
+  if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`
+  return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`
+}
+
+function onTypedInput(e: Event) {
+  isTyping.value = true
+  const el = e.target as HTMLInputElement
+  const masked = maskDate(el.value)
+  el.value = masked // garante a máscara no DOM mesmo quando o valor "lógico" não muda
+  inputText.value = masked
+  // Só aplica quando a data está completa (8 dígitos), para não emitir valores parciais.
+  if (masked.replace(/\D/g, '').length === 8) {
+    const iso = parseTyped(masked)
+    if (iso) emit('update:modelValue', iso)
+  }
+}
+
+function onTypedBlur() {
+  isTyping.value = false
+  const iso = parseTyped(inputText.value)
+  if (iso) emit('update:modelValue', iso)
+  // Normaliza para o formato canónico (ou reverte ao último valor válido).
+  inputText.value = displayLabel.value
+}
+
+// Mantém o texto sincronizado quando o valor muda por fora (ex.: escolha no calendário),
+// sem mexer enquanto o utilizador está a escrever.
+watch(
+  () => props.modelValue,
+  () => {
+    if (!isTyping.value) inputText.value = displayLabel.value
+  },
+)
+
 function calendarDays(year: number, month: number): (number | null)[] {
   const firstDay = new Date(year, month, 1).getDay()
   const startOffset = firstDay === 0 ? 6 : firstDay - 1
@@ -81,7 +142,7 @@ function nextMonth() {
 }
 
 function updatePosition() {
-  const trigger = root.value?.querySelector('.dp-trigger') as HTMLElement | undefined
+  const trigger = (root.value?.querySelector('.dp-trigger') ?? root.value?.querySelector('.dp-input-wrap')) as HTMLElement | undefined
   if (!trigger) return
   const r = trigger.getBoundingClientRect()
   const width = 330
@@ -138,7 +199,28 @@ onUnmounted(() => {
 
 <template>
   <div ref="root" class="date-picker" :class="{ 'is-error': error, 'is-disabled': disabled }">
-    <button type="button" class="dp-trigger" :disabled="disabled" @click.stop="toggle">
+    <!-- Modo escrevível: campo de texto + ícone para abrir o calendário -->
+    <div v-if="editable" class="dp-input-wrap">
+      <input
+        type="text"
+        class="dp-input"
+        :value="inputText"
+        :placeholder="placeholder || 'dd/mm/aaaa'"
+        :disabled="disabled"
+        inputmode="numeric"
+        autocomplete="off"
+        @input="onTypedInput"
+        @focus="isTyping = true"
+        @blur="onTypedBlur"
+        @keydown.enter.prevent="onTypedBlur"
+      />
+      <button type="button" class="dp-cal-btn" :disabled="disabled" title="Abrir calendário" @click.stop="toggle">
+        <svg class="dp-cal-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
+      </button>
+    </div>
+
+    <!-- Modo botão (default): abre o calendário ao clicar -->
+    <button v-else type="button" class="dp-trigger" :disabled="disabled" @click.stop="toggle">
       <span class="dp-value" :class="{ 'is-placeholder': !displayLabel }">
         {{ displayLabel || placeholder || 'Selecione uma data' }}
       </span>
@@ -219,6 +301,75 @@ onUnmounted(() => {
 
 .date-picker.is-error .dp-trigger {
   border-color: #dc2626;
+}
+
+/* Modo escrevível */
+.dp-input-wrap {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  background: var(--color-input-bg, #fff);
+  border: 1px solid var(--color-input-border, #e2e8f0);
+  border-radius: 8px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.dp-input-wrap:focus-within {
+  border-color: #166534;
+  box-shadow: 0 0 0 2px rgba(22, 101, 52, 0.18);
+}
+
+html.dark .dp-input-wrap:focus-within {
+  border-color: #4ade80;
+  box-shadow: 0 0 0 2px rgba(74, 222, 128, 0.18);
+}
+
+.date-picker.is-error .dp-input-wrap {
+  border-color: #dc2626;
+}
+
+.dp-input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.625rem 0.875rem;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 0.9375rem;
+  font-family: inherit;
+  color: var(--color-text, #0f172a);
+}
+
+.dp-input::placeholder {
+  color: var(--color-text-muted, #94a3b8);
+}
+
+.dp-cal-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: 0 0.75rem;
+  align-self: stretch;
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted, #64748b);
+  cursor: pointer;
+  border-radius: 0 8px 8px 0;
+  transition: color 0.15s, background 0.15s;
+}
+
+.dp-cal-btn:hover:not(:disabled) {
+  color: #166534;
+}
+
+html.dark .dp-cal-btn:hover:not(:disabled) {
+  color: #4ade80;
+}
+
+.dp-cal-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
 }
 
 .date-picker.is-disabled .dp-trigger {

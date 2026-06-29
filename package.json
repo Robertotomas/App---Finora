@@ -16,7 +16,8 @@
     "pinia": "^2.1.0",
     "vue": "^3.4.0",
     "vue-chartjs": "^5.3.3",
-    "vue-router": "^4.2.0"
+    "vue-router": "^4.2.0",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
