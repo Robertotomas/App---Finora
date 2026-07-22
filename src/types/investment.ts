@@ -243,6 +243,38 @@ export interface BrokerTrade {
   externalId: string
 }
 
+/** Movimento de tesouraria (depósito/levantamento) do extrato da corretora. */
+export interface BrokerDeposit {
+  date: string
+  amount: number // depósito positivo, levantamento negativo
+  currency: string
+  externalId: string
+}
+
+/** Um movimento de depósito/levantamento. */
+export interface InvestmentDepositItem {
+  id: string
+  date: string
+  amount: number
+  currency: string
+  source: 'import' | 'manual'
+  accountId?: string | null
+}
+
+/** Resumo dos depósitos do agregado (total líquido em EUR + lista). */
+export interface InvestmentDeposits {
+  totalEur: number
+  count: number
+  items: InvestmentDepositItem[]
+}
+
+/** Adicionar um depósito à mão; accountId opcional debita essa conta. */
+export interface AddDepositRequest {
+  date: string
+  amount: number
+  accountId?: string | null
+}
+
 /** Resultado da importação de um extrato de corretora (XTB). */
 export interface InvestmentImportItem {
   providerSymbol: string
@@ -262,6 +294,7 @@ export interface InvestmentImportResult {
   skipped: number
   hasUnparsedRows: boolean
   error?: string | null
+  depositsImported: number
   items: InvestmentImportItem[]
 }
 

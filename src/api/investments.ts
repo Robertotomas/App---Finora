@@ -4,10 +4,13 @@ import type {
   InvestmentHistory,
   InstrumentPriceHistory,
   InvestmentImportResult,
+  InvestmentDeposits,
   BrokerTrade,
+  BrokerDeposit,
   InstrumentSearchResult,
   AddTransactionRequest,
   UpdateTransactionRequest,
+  AddDepositRequest,
 } from '@/types/investment'
 
 /** Intervalo opcional para as séries (yyyy-MM-dd). Vazio = desde a 1ª compra / até hoje. */
@@ -49,8 +52,23 @@ export const investmentsApi = {
     }),
 
   // Importa transações já parseadas no cliente (Excel/CSV). dryRun=true → só pré-visualização.
-  import: (items: BrokerTrade[], hasUnparsedRows: boolean, dryRun: boolean) =>
-    api.post<InvestmentImportResult>('/api/investments/import', { items, hasUnparsedRows }, { params: { dryRun } }),
+  import: (items: BrokerTrade[], hasUnparsedRows: boolean, dryRun: boolean, deposits: BrokerDeposit[] = []) =>
+    api.post<InvestmentImportResult>('/api/investments/import', { items, deposits, hasUnparsedRows }, { params: { dryRun } }),
+
+  // Total líquido depositado na corretora (EUR) — métrica "Depósitos".
+  deposits: () => api.get<InvestmentDeposits>('/api/investments/deposits'),
+
+  // Adiciona um depósito à mão (debita opcionalmente uma conta). Devolve o total atualizado.
+  addDeposit: (data: AddDepositRequest) =>
+    api.post<InvestmentDeposits>('/api/investments/deposits', data),
+
+  // Edita um depósito (reconcilia o saldo da conta). Devolve o total atualizado.
+  updateDeposit: (id: string, data: AddDepositRequest) =>
+    api.put<InvestmentDeposits>(`/api/investments/deposits/${id}`, data),
+
+  // Elimina um depósito (devolve ao saldo o que debitou). Devolve o total atualizado.
+  deleteDeposit: (id: string) =>
+    api.delete<InvestmentDeposits>(`/api/investments/deposits/${id}`),
 
   // Cotação histórica de um ticker (preço real), para a pré-visualização no modal.
   quoteHistory: (symbol: string, range: HistoryRange = {}) =>

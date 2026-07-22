@@ -4,8 +4,10 @@ import { useRoute, useRouter } from 'vue-router'
 import { useInvestmentsStore } from '@/stores/investments'
 import { useHouseholdStore } from '@/stores/household'
 import { useSubscriptionStore } from '@/stores/subscription'
+import { useAccountsStore } from '@/stores/accounts'
 import InvestmentFormModal from '@/components/InvestmentFormModal.vue'
 import ImportStatementModal from '@/components/ImportStatementModal.vue'
+import DepositFormModal from '@/components/DepositFormModal.vue'
 import ConfirmDeleteModal from '@/components/ConfirmDeleteModal.vue'
 import InstrumentLogo from '@/components/InstrumentLogo.vue'
 import PlanUpsellCard from '@/components/PlanUpsellCard.vue'
@@ -13,16 +15,19 @@ import AssetsChart from '@/components/charts/AssetsChart.vue'
 import type { AssetChartPoint } from '@/components/charts/AssetsChart.vue'
 import { investmentsApi } from '@/api/investments'
 import { INSTRUMENT_TYPE_LABELS } from '@/types/investment'
-import type { InvestmentHolding, AddTransactionRequest } from '@/types/investment'
+import type { InvestmentHolding, AddTransactionRequest, AddDepositRequest, InvestmentDepositItem } from '@/types/investment'
 
 const route = useRoute()
 const router = useRouter()
 const investmentsStore = useInvestmentsStore()
 const householdStore = useHouseholdStore()
 const subscriptionStore = useSubscriptionStore()
+const accountsStore = useAccountsStore()
 
 const formModalOpen = ref(false)
 const importModalOpen = ref(false)
+const depositModalOpen = ref(false)
+const depositLoading = ref(false)
 const actionLoading = ref(false)
 const refreshing = ref(false)
 const initialLoading = ref(true) // cobre desde o 1.º render até os dados chegarem (evita o card vazio a "piscar")
@@ -74,6 +79,8 @@ onMounted(async () => {
     await Promise.all([householdStore.fetchHousehold(), subscriptionStore.fetchSubscription()])
     if (householdStore.household && subscriptionStore.canAccessInvestments) {
       await investmentsStore.fetchHoldings().catch(() => {})
+      investmentsStore.fetchDeposits()
+      accountsStore.fetchAccounts().catch(() => {}) // para o dropdown de débito do depósito
       if (investmentsStore.holdings.length > 0) fetchHistory()
       if (route.query.action === 'new') openAdd()
     }
@@ -203,6 +210,45 @@ const closedHoldings = computed(() =>
 )
 const displayedHoldings = computed(() => [...sortedHoldings.value, ...closedHoldings.value])
 
+/* ── Chips de vista: Todos / Ativos / Fechadas / Depósitos (como nos objetivos) ── */
+type InvTab = 'all' | 'active' | 'closed' | 'deposits'
+const tab = ref<InvTab>((['active', 'closed', 'deposits'].includes(String(route.query.tab)) ? route.query.tab : 'all') as InvTab)
+function selectTab(t: InvTab) {
+  tab.value = t
+  router.replace({ query: { ...route.query, tab: t === 'all' ? undefined : t } })
+}
+const visibleActive = computed(() => (tab.value === 'all' || tab.value === 'active' ? sortedHoldings.value : []))
+const visibleClosed = computed(() => (tab.value === 'all' || tab.value === 'closed' ? closedHoldings.value : []))
+
+/* ── Depósitos (gestão) ── */
+const deposits = computed(() => investmentsStore.deposits)
+const editingDeposit = ref<InvestmentDepositItem | null>(null)
+const depositDeleteId = ref<string | null>(null)
+const depositActionLoading = ref(false)
+const accountName = (id?: string | null) => accountsStore.accounts.find((a) => a.id === id)?.name ?? null
+
+function openAddDeposit() {
+  editingDeposit.value = null
+  depositModalOpen.value = true
+}
+function openEditDeposit(d: InvestmentDepositItem) {
+  editingDeposit.value = d
+  depositModalOpen.value = true
+}
+async function confirmDeleteDeposit() {
+  if (!depositDeleteId.value) return
+  depositActionLoading.value = true
+  try {
+    await investmentsStore.deleteDeposit(depositDeleteId.value)
+    await accountsStore.fetchAccounts().catch(() => {})
+    depositDeleteId.value = null
+  } catch {
+    // erro na store
+  } finally {
+    depositActionLoading.value = false
+  }
+}
+
 function formatEur(v: number): string {
   return new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(v)
 }
@@ -286,7 +332,24 @@ function openImport() {
 async function handleImportDone() {
   importModalOpen.value = false
   await investmentsStore.fetchHoldings()
+  investmentsStore.fetchDeposits()
   reloadHistory()
+}
+
+async function handleDepositSubmit(payload: AddDepositRequest) {
+  depositLoading.value = true
+  try {
+    if (editingDeposit.value) await investmentsStore.updateDeposit(editingDeposit.value.id, payload)
+    else await investmentsStore.addDeposit(payload)
+    // O saldo de contas pode ter mudado (débito/reversão).
+    await accountsStore.fetchAccounts().catch(() => {})
+    depositModalOpen.value = false
+    editingDeposit.value = null
+  } catch {
+    // erro na store
+  } finally {
+    depositLoading.value = false
+  }
 }
 </script>
 
@@ -359,6 +422,13 @@ async function handleImportDone() {
                   Investido: {{ formatEur(heroInvested) }}
                   <span v-if="heroDateLabel" class="hero-date">· {{ heroDateLabel }}</span>
                 </p>
+                <p class="hero-sub hero-deposits">
+                  <span v-if="investmentsStore.depositsTotalEur > 0">Depósitos: {{ formatEur(investmentsStore.depositsTotalEur) }}</span>
+                  <span v-else>Depósitos</span>
+                  <button type="button" class="deposit-add" title="Adicionar depósito" @click="openAddDeposit">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="5" y2="19"/><line x1="5" x2="19" y1="12" y2="12"/></svg>
+                  </button>
+                </p>
               </div>
               <div class="hero-controls">
                 <div class="period-chips">
@@ -390,7 +460,14 @@ async function handleImportDone() {
             </div>
           </div>
 
-          <div v-if="selectedIds.length > 0" class="bulk-bar">
+          <div class="inv-tabs">
+            <button type="button" class="inv-tab" :class="{ active: tab === 'all' }" @click="selectTab('all')">Todos</button>
+            <button type="button" class="inv-tab" :class="{ active: tab === 'active' }" @click="selectTab('active')">Ativos</button>
+            <button type="button" class="inv-tab" :class="{ active: tab === 'closed' }" @click="selectTab('closed')">Fechadas</button>
+            <button type="button" class="inv-tab" :class="{ active: tab === 'deposits' }" @click="selectTab('deposits')">Depósitos</button>
+          </div>
+
+          <div v-if="tab !== 'deposits' && selectedIds.length > 0" class="bulk-bar">
             <span class="bulk-count">{{ selectedIds.length }} {{ selectedIds.length === 1 ? 'selecionada' : 'selecionadas' }}</span>
             <div class="bulk-actions">
               <button type="button" class="bulk-clear" @click="clearSelection">Limpar</button>
@@ -401,7 +478,48 @@ async function handleImportDone() {
             </div>
           </div>
 
-          <div class="table-card">
+          <!-- Vista de Depósitos -->
+          <div v-if="tab === 'deposits'" class="table-card">
+            <div class="dep-head">
+              <span class="dep-total">Total: {{ formatEur(investmentsStore.depositsTotalEur) }}</span>
+              <button type="button" class="dep-add-btn" @click="openAddDeposit">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="5" y2="19"/><line x1="5" x2="19" y1="12" y2="12"/></svg>
+                Adicionar
+              </button>
+            </div>
+            <table class="inv-table">
+              <thead>
+                <tr>
+                  <th>Data</th>
+                  <th>Origem</th>
+                  <th>Conta</th>
+                  <th class="num">Montante</th>
+                  <th class="chev"></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="d in deposits" :key="d.id" class="inv-row">
+                  <td>{{ formatDate(d.date) }}</td>
+                  <td><span class="dep-source" :class="d.source">{{ d.source === 'import' ? 'Importado' : 'Manual' }}</span></td>
+                  <td><span :class="{ muted: !accountName(d.accountId) }">{{ accountName(d.accountId) ?? '—' }}</span></td>
+                  <td class="num strong" :class="d.amount < 0 ? 'neg' : ''">{{ formatSignedEur(d.amount) }}</td>
+                  <td class="chev dep-actions" @click.stop>
+                    <button type="button" class="dep-icon" title="Editar" @click="openEditDeposit(d)">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+                    </button>
+                    <button type="button" class="dep-icon dep-icon--danger" title="Eliminar" @click="depositDeleteId = d.id">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                    </button>
+                  </td>
+                </tr>
+                <tr v-if="deposits.length === 0" class="inv-empty-row">
+                  <td :colspan="5">Ainda não há depósitos. Adicione um ou importe o extrato da corretora.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div v-else class="table-card">
             <table class="inv-table">
               <thead>
                 <tr>
@@ -425,7 +543,7 @@ async function handleImportDone() {
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="h in sortedHoldings" :key="h.id" class="inv-row" :class="{ 'row-selected': isSelected(h.id) }" @click="openPosition(h)">
+                <tr v-for="h in visibleActive" :key="h.id" class="inv-row" :class="{ 'row-selected': isSelected(h.id) }" @click="openPosition(h)">
                   <td class="check-col" @click.stop>
                     <input
                       type="checkbox"
@@ -470,18 +588,18 @@ async function handleImportDone() {
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
                   </td>
                 </tr>
-                <tr v-if="sortedHoldings.length === 0" class="inv-empty-row">
-                  <td :colspan="8">Sem posições abertas.</td>
+                <tr v-if="visibleActive.length === 0 && visibleClosed.length === 0" class="inv-empty-row">
+                  <td :colspan="8">{{ tab === 'closed' ? 'Sem posições fechadas.' : 'Sem posições.' }}</td>
                 </tr>
               </tbody>
 
               <!-- Posições fechadas (quantidade ≤ 0) -->
-              <tbody v-if="closedHoldings.length > 0">
-                <tr class="closed-sep">
+              <tbody v-if="visibleClosed.length > 0">
+                <tr v-if="tab === 'all'" class="closed-sep">
                   <td :colspan="8">Fechadas</td>
                 </tr>
                 <tr
-                  v-for="h in closedHoldings"
+                  v-for="h in visibleClosed"
                   :key="h.id"
                   class="inv-row inv-row--closed"
                   :class="{ 'row-selected': isSelected(h.id) }"
@@ -536,6 +654,24 @@ async function handleImportDone() {
       :open="importModalOpen"
       @close="importModalOpen = false"
       @done="handleImportDone"
+    />
+
+    <DepositFormModal
+      :open="depositModalOpen"
+      :accounts="accountsStore.accounts"
+      :deposit="editingDeposit"
+      :loading="depositLoading"
+      @close="depositModalOpen = false; editingDeposit = null"
+      @submit="handleDepositSubmit"
+    />
+
+    <ConfirmDeleteModal
+      :open="depositDeleteId !== null"
+      title="Eliminar depósito"
+      message="Tem a certeza que deseja eliminar este depósito? Se tiver debitado uma conta, o montante é devolvido ao saldo."
+      :loading="depositActionLoading"
+      @close="depositDeleteId = null"
+      @confirm="confirmDeleteDeposit"
     />
 
     <ConfirmDeleteModal
@@ -762,6 +898,167 @@ html.dark .hero-pct {
 
 .hero-date {
   margin-left: 0.25rem;
+}
+
+.hero-deposits {
+  margin-top: 0.15rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.deposit-add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  border: 1px solid var(--color-border, #e2e8f0);
+  background: var(--color-input-bg, #fff);
+  color: #166534;
+  cursor: pointer;
+  padding: 0;
+}
+
+.deposit-add:hover {
+  background: rgba(22, 101, 52, 0.08);
+}
+
+html.dark .deposit-add {
+  color: #4ade80;
+}
+
+html.dark .deposit-add:hover {
+  background: rgba(74, 222, 128, 0.12);
+}
+
+/* ── Chips de vista (Todos/Ativos/Fechadas/Depósitos) ── */
+.inv-tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.inv-tab {
+  padding: 0.4rem 0.9rem;
+  border-radius: 999px;
+  border: 1px solid var(--color-border, #e2e8f0);
+  background: var(--color-card-bg, #fff);
+  color: var(--color-text-muted, #64748b);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.inv-tab:hover {
+  background: var(--color-table-row-hover, #f1f5f9);
+}
+
+.inv-tab.active {
+  background: #166534;
+  border-color: #166534;
+  color: #fff;
+}
+
+html.dark .inv-tab.active {
+  background: #15803d;
+  border-color: #15803d;
+}
+
+/* ── Vista de Depósitos ── */
+.dep-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.875rem 1rem;
+  border-bottom: 1px solid var(--color-border, #e2e8f0);
+}
+
+.dep-total {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--color-text, #0f172a);
+}
+
+.dep-add-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.8rem;
+  border-radius: 8px;
+  border: none;
+  background: linear-gradient(135deg, #166534 0%, #15803d 100%);
+  color: #fff;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.dep-add-btn:hover {
+  opacity: 0.95;
+}
+
+.dep-source {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.dep-source.import {
+  background: rgba(22, 101, 52, 0.1);
+  color: #166534;
+}
+
+.dep-source.manual {
+  background: rgba(100, 116, 139, 0.12);
+  color: #475569;
+}
+
+html.dark .dep-source.import {
+  background: rgba(74, 222, 128, 0.15);
+  color: #4ade80;
+}
+
+html.dark .dep-source.manual {
+  background: rgba(148, 163, 184, 0.15);
+  color: #cbd5e1;
+}
+
+.dep-actions {
+  display: flex;
+  gap: 0.25rem;
+  justify-content: flex-end;
+}
+
+.dep-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid var(--color-border, #e2e8f0);
+  background: var(--color-card-bg, #fff);
+  color: var(--color-text-muted, #64748b);
+  cursor: pointer;
+  padding: 0;
+}
+
+.dep-icon:hover {
+  background: var(--color-table-row-hover, #f1f5f9);
+  color: var(--color-text, #0f172a);
+}
+
+.dep-icon--danger:hover {
+  background: rgba(220, 38, 38, 0.1);
+  color: #dc2626;
+  border-color: rgba(220, 38, 38, 0.3);
 }
 
 .btn-refresh {
