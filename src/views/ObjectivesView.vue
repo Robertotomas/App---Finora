@@ -39,6 +39,7 @@ const showHistory = computed(() => sectionFilter.value !== 'active')
 const overview = ref<SavingsObjectivesOverview>({
   totalSavings: 0,
   reservedByCompletedObjectives: 0,
+  investedFromSavings: 0,
   availableForActiveObjectives: 0,
   activeObjectives: [],
   historyObjectives: [],
@@ -54,16 +55,20 @@ const statTooltips = computed(() =>
           'Receitas − Despesas\nTotal que pouparam desde o início até ao último mês.\nPode ser negativo se as despesas forem superiores às receitas.',
         reserved:
           'Valor reservado para objetivos concluídos mas ainda não liquidados. Não está disponível para outros objetivos.',
+        invested:
+          'Depósitos na corretora debitados de uma conta. É poupança que já foi investida, por isso não está disponível para objetivos.',
         available:
-          'Poupança disponível para distribuir pelos objetivos ativos, depois de descontado o valor reservado.',
+          'Poupança disponível para distribuir pelos objetivos ativos, depois de descontado o valor reservado e o enviado para investimentos.',
       }
     : {
         savings:
-          'Receitas − Despesas\nTotal que poupaste desde o início até ao último mês.\nPode ser negativo se as despesas forem superiores às receitas.',
+          'Receitas − Despesas\nTotal que poupou desde o início até ao último mês.\nPode ser negativo se as despesas forem superiores às receitas.',
         reserved:
           'Valor reservado para objetivos concluídos mas ainda não liquidados. Não está disponível para outros objetivos.',
+        invested:
+          'Depósitos na corretora debitados de uma conta. É poupança que já foi investida, por isso não está disponível para objetivos.',
         available:
-          'Poupança disponível para distribuir pelos objetivos ativos, depois de descontado o valor reservado.',
+          'Poupança disponível para distribuir pelos objetivos ativos, depois de descontado o valor reservado e o enviado para investimentos.',
       },
 )
 
@@ -147,6 +152,7 @@ function normalizeOverview(payload: unknown): SavingsObjectivesOverview {
   return {
     totalSavings: Number(pick('totalSavings')) || 0,
     reservedByCompletedObjectives: Number(pick('reservedByCompletedObjectives')) || 0,
+    investedFromSavings: Number(pick('investedFromSavings')) || 0,
     availableForActiveObjectives: Number(pick('availableForActiveObjectives')) || 0,
     activeObjectives: list('activeObjectives').map((x) => {
       const item = x as Record<string, unknown>
@@ -420,6 +426,16 @@ watch(() => route.query.action, (action) => {
               </div>
               <p class="stat-value">{{ formatCurrency(overview.reservedByCompletedObjectives) }}</p>
             </div>
+            <div v-if="overview.investedFromSavings > 0" class="stat-card">
+              <div class="stat-header">
+                <p class="stat-label">Enviado para investimentos</p>
+                <span class="stat-info" tabindex="0" role="button" aria-label="O que é o enviado para investimentos?">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="16" y2="12"/><line x1="12" x2="12.01" y1="8" y2="8"/></svg>
+                  <span class="stat-tooltip" role="tooltip">{{ statTooltips.invested }}</span>
+                </span>
+              </div>
+              <p class="stat-value">{{ formatCurrency(overview.investedFromSavings) }}</p>
+            </div>
             <div class="stat-card">
               <div class="stat-header">
                 <p class="stat-label">Disponível para ativos</p>
@@ -692,7 +708,8 @@ watch(() => route.query.action, (action) => {
 /* ── Stats grid ── */
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  /* 3 cartões, ou 4 quando há "Enviado para investimentos" */
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 0.875rem;
   margin-bottom: 1.5rem;
 }

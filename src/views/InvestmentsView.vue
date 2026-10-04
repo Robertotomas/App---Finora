@@ -428,6 +428,11 @@ async function handleDepositSubmit(payload: AddDepositRequest) {
                   <button type="button" class="deposit-add" title="Adicionar depósito" @click="openAddDeposit">
                     <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="5" y2="19"/><line x1="5" x2="19" y1="12" y2="12"/></svg>
                   </button>
+                  <span
+                    v-if="investmentsStore.uninvestedCashEur > 0"
+                    class="hero-cash"
+                    title="Depositado na corretora e ainda não investido. Conta para o Património Total."
+                  >· Por investir: {{ formatEur(investmentsStore.uninvestedCashEur) }}</span>
                 </p>
               </div>
               <div class="hero-controls">
@@ -905,6 +910,10 @@ html.dark .hero-pct {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
+}
+
+.hero-cash {
+  cursor: help;
 }
 
 .deposit-add {

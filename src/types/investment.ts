@@ -264,6 +264,8 @@ export interface InvestmentDepositItem {
 /** Resumo dos depósitos do agregado (total líquido em EUR + lista). */
 export interface InvestmentDeposits {
   totalEur: number
+  /** Dinheiro parado na corretora (depósitos − compras + vendas, ≥ 0). Conta para o Património. */
+  uninvestedCashEur: number
   count: number
   items: InvestmentDepositItem[]
 }

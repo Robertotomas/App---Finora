@@ -7,6 +7,8 @@ import { useAccountsStore } from '@/stores/accounts'
 import { useHouseholdStore } from '@/stores/household'
 import { useAuthStore } from '@/stores/auth'
 import { useSubscriptionStore } from '@/stores/subscription'
+import { useInvestmentsStore } from '@/stores/investments'
+import { filterDeposits, depositsForPage, mergeRows } from '@/utils/depositRows'
 import { householdApi } from '@/api/household'
 import { transactionsApi } from '@/api/transactions'
 import TransactionFormModal from '@/components/TransactionFormModal.vue'
@@ -36,6 +38,7 @@ const accountsStore = useAccountsStore()
 const householdStore = useHouseholdStore()
 const authStore = useAuthStore()
 const subscriptionStore = useSubscriptionStore()
+const investmentsStore = useInvestmentsStore()
 const router = useRouter()
 const routeRef = useRoute()
 
@@ -638,6 +641,17 @@ const visibleSummaryPages = computed(() => {
 const summaryTotalIncome = computed(() => summaryFiltered.value.filter(t => t.type === TransactionType.Income).reduce((s, t) => s + t.amount, 0))
 const summaryTotalExpenses = computed(() => summaryFiltered.value.filter(t => t.type === TransactionType.Expense).reduce((s, t) => s + t.amount, 0))
 const summaryBalance = computed(() => summaryTotalIncome.value - summaryTotalExpenses.value)
+// Cartão "Investimentos": depósitos na corretora (com conta) no período — para onde foi a poupança.
+// Fica fora dos totais e do Sankey (não é despesa). Escondido com filtro de tipo/categoria, onde o
+// Saldo deixa de ser "o que sobrou" e a comparação não faz sentido.
+const summaryInvested = computed(() => {
+  if (!subscriptionStore.canAccessInvestments || summaryFilterType.value || summaryFilterCategory.value) return 0
+  return filterDeposits(investmentsStore.deposits, {
+    from: summaryDateFrom.value,
+    to: summaryDateTo.value,
+    accountId: summaryFilterAccount.value,
+  }).reduce((s, d) => s + d.amount, 0)
+})
 
 const summaryExpensesByCategory = computed(() => {
   const map = new Map<number, { name: string; total: number }>()
@@ -805,6 +819,33 @@ const filteredTransactions = computed(() => {
 })
 
 const paginatedTransactions = computed(() => filteredTransactions.value)
+
+// Depósitos na corretora que debitaram uma conta: linhas informativas "→ Investimentos" intercaladas
+// com os movimentos (não contam para totais). Ver utils/depositRows.ts para a regra de paginação.
+// Última data de cada página já vista (para o limite superior da página seguinte, sem buracos).
+const pageLastDates = ref<Record<number, string>>({})
+const depositsInFilter = computed(() =>
+  subscriptionStore.canAccessInvestments
+    ? filterDeposits(investmentsStore.deposits, {
+        from: filterFrom.value,
+        to: filterTo.value,
+        accountId: filterAccountId.value,
+        type: filterType.value,
+        category: filterCategory.value,
+      })
+    : [],
+)
+const pageDeposits = computed(() => {
+  const txs = transactionsStore.transactions
+  return depositsForPage(depositsInFilter.value, {
+    page: page.value,
+    totalPages: Math.max(1, totalPages.value),
+    firstDate: txs.length ? txs[0].date.slice(0, 10) : null,
+    lastDate: txs.length ? txs[txs.length - 1].date.slice(0, 10) : null,
+    prevPageLastDate: pageLastDates.value[page.value - 1] ?? null,
+  })
+})
+const movementRows = computed(() => mergeRows(paginatedTransactions.value, pageDeposits.value))
 
 const recurringInRange = computed(() => {
   const fromYM = filterFrom.value ? filterFrom.value.slice(0, 7) : null
@@ -1197,6 +1238,7 @@ onMounted(async () => {
         subscriptionStore.fetchSubscription(),
         loadMembers(),
       ])
+      if (subscriptionStore.canAccessInvestments) investmentsStore.fetchDeposits()
       if (activeTab.value === 'dashboard') await fetchSummaryTransactions()
     } else {
       await subscriptionStore.fetchSubscription()
@@ -1213,7 +1255,10 @@ onMounted(async () => {
 })
 
 async function fetchWithFilters(resetPage = true) {
-  if (resetPage) page.value = 1
+  if (resetPage) {
+    page.value = 1
+    pageLastDates.value = {}
+  }
   const params: { accountId?: string; from?: string; to?: string; page?: number; pageSize?: number } = {
     page: page.value,
     pageSize,
@@ -1224,6 +1269,8 @@ async function fetchWithFilters(resetPage = true) {
 
   try {
     await transactionsStore.fetchTransactionsPaged(params)
+    const txs = transactionsStore.transactions
+    if (txs.length) pageLastDates.value = { ...pageLastDates.value, [page.value]: txs[txs.length - 1].date.slice(0, 10) }
   } catch {
     // Handled in store
   }
@@ -1815,12 +1862,7 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
 
         <!-- Summary cards -->
         <div v-show="!summaryLoading" class="summary-totals">
-          <div class="summary-total-card">
-            <span class="summary-total-label">Saldo</span>
-            <span class="summary-total-value" :class="summaryBalance >= 0 ? 'positive' : 'negative'">
-              {{ summaryBalance >= 0 ? '+' : '' }}{{ formatCurrencySummary(summaryBalance) }}
-            </span>
-          </div>
+          <!-- Ordem conta a história do período: entrou → saiu → sobrou → desse saldo, investido -->
           <div class="summary-total-card">
             <span class="summary-total-label">Receitas</span>
             <span class="summary-total-value positive">+{{ formatCurrencySummary(summaryTotalIncome) }}</span>
@@ -1828,6 +1870,24 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
           <div class="summary-total-card">
             <span class="summary-total-label">Despesas</span>
             <span class="summary-total-value negative">-{{ formatCurrencySummary(summaryTotalExpenses) }}</span>
+          </div>
+          <div class="summary-total-card">
+            <span class="summary-total-label">Saldo</span>
+            <span class="summary-total-value" :class="summaryBalance >= 0 ? 'positive' : 'negative'">
+              {{ summaryBalance >= 0 ? '+' : '' }}{{ formatCurrencySummary(summaryBalance) }}
+            </span>
+          </div>
+          <div
+            v-if="summaryInvested > 0"
+            class="summary-total-card summary-total-card--link"
+            role="link"
+            tabindex="0"
+            title="Depósitos na corretora neste período. Não contam como despesa."
+            @click="router.push({ name: 'investimentos', query: { tab: 'deposits' } })"
+            @keydown.enter="router.push({ name: 'investimentos', query: { tab: 'deposits' } })"
+          >
+            <span class="summary-total-label">Investimentos</span>
+            <span class="summary-total-value invest">{{ formatCurrencySummary(summaryInvested) }}</span>
           </div>
         </div>
 
@@ -2095,14 +2155,14 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
         <p>A carregar transações...</p>
       </div>
 
-      <div v-else-if="transactionsStore.transactions.length === 0" class="empty-state">
+      <div v-else-if="transactionsStore.transactions.length === 0 && movementRows.length === 0" class="empty-state">
         <p>Nenhum movimento ainda. Crie o seu primeiro movimento.</p>
         <button type="button" class="btn-add" @click="openCreateModal">
           + Novo movimento
         </button>
       </div>
 
-      <div v-else-if="filteredTransactions.length === 0" class="empty-state">
+      <div v-else-if="movementRows.length === 0" class="empty-state">
         <p>Nenhum movimento encontrado com os filtros selecionados.</p>
       </div>
 
@@ -2121,43 +2181,62 @@ function isRecurringAccountLocked(r: RecurringTransaction): boolean {
             </tr>
           </thead>
           <tbody>
-            <tr
-              v-for="tx in paginatedTransactions"
-              :key="tx.id"
-              class="table-row"
-            >
-              <td>{{ formatDate(tx.date) }}</td>
-              <td class="td-logo"><BrandLogo :name="tx.entityName || tx.description" :size="24" :show-fallback="false" /></td>
-              <td class="td-name">{{ tx.description || '—' }}</td>
+            <template v-for="row in movementRows" :key="row.key">
+            <tr v-if="row.kind === 'deposit'" class="table-row deposit-row" title="Dinheiro enviado para a corretora. Não conta como despesa.">
+              <td>{{ formatDate(row.dep.date) }}</td>
+              <td class="td-logo">
+                <span class="deposit-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+                </span>
+              </td>
+              <td class="td-name">Depósito na corretora</td>
               <td>
-                {{ TRANSACTION_CATEGORY_LABELS[tx.category] }}
-                <span v-if="tx.type === TransactionType.Transfer" class="transfer-accounts-hint">
-                  {{ getAccountName(tx.accountId) }} → {{ getAccountName(tx.destinationAccountId ?? '') }}
+                Investimentos
+                <span class="transfer-accounts-hint">{{ getAccountName(row.dep.accountId ?? '') }} → Investimentos</span>
+              </td>
+              <td><span class="type-badge type-invest">Investimento</span></td>
+              <td class="amount-col amount-invest">{{ formatAmount(row.dep.amount, TransactionType.Transfer) }}</td>
+              <td>-</td>
+              <td class="actions-col">
+                <button type="button" class="btn-icon" @click="router.push({ name: 'investimentos', query: { tab: 'deposits' } })">
+                  Ver
+                </button>
+              </td>
+            </tr>
+            <tr v-else class="table-row">
+              <td>{{ formatDate(row.tx.date) }}</td>
+              <td class="td-logo"><BrandLogo :name="row.tx.entityName || row.tx.description" :size="24" :show-fallback="false" /></td>
+              <td class="td-name">{{ row.tx.description || '—' }}</td>
+              <td>
+                {{ TRANSACTION_CATEGORY_LABELS[row.tx.category] }}
+                <span v-if="row.tx.type === TransactionType.Transfer" class="transfer-accounts-hint">
+                  {{ getAccountName(row.tx.accountId) }} → {{ getAccountName(row.tx.destinationAccountId ?? '') }}
                 </span>
               </td>
               <td>
-                <span :class="['type-badge', tx.type === TransactionType.Income ? 'type-income' : tx.type === TransactionType.Transfer ? 'type-transfer' : 'type-expense']">
-                  {{ TRANSACTION_TYPE_LABELS[tx.type] }}
+                <span :class="['type-badge', row.tx.type === TransactionType.Income ? 'type-income' : row.tx.type === TransactionType.Transfer ? 'type-transfer' : 'type-expense']">
+                  {{ TRANSACTION_TYPE_LABELS[row.tx.type] }}
                 </span>
               </td>
-              <td class="amount-col" :class="{ 'amount-income': tx.type === TransactionType.Income, 'amount-expense': tx.type === TransactionType.Expense, 'amount-transfer': tx.type === TransactionType.Transfer }">
-                {{ formatAmount(tx.amount, tx.type) }}
+              <td class="amount-col" :class="{ 'amount-income': row.tx.type === TransactionType.Income, 'amount-expense': row.tx.type === TransactionType.Expense, 'amount-transfer': row.tx.type === TransactionType.Transfer }">
+                {{ formatAmount(row.tx.amount, row.tx.type) }}
               </td>
-              <td>{{ getResponsibleDisplay(tx) }}</td>
+              <td>{{ getResponsibleDisplay(row.tx) }}</td>
                 <td class="actions-col">
                 <button
                   type="button"
                   class="btn-icon"
-                  :disabled="isTxAccountLocked(tx)"
-                  @click="openEditModal(tx)"
+                  :disabled="isTxAccountLocked(row.tx)"
+                  @click="openEditModal(row.tx)"
                 >
                   Editar
                 </button>
-                <button type="button" class="btn-icon btn-delete" @click="openDeleteModal(tx)">
+                <button type="button" class="btn-icon btn-delete" @click="openDeleteModal(row.tx)">
                   Eliminar
                 </button>
               </td>
             </tr>
+            </template>
           </tbody>
         </table>
 
@@ -3069,6 +3148,42 @@ html.dark .amount-transfer {
   color: #60a5fa;
 }
 
+/* Depósito na corretora (linha informativa, não conta para totais) — âmbar, como o "Investido" dos gráficos */
+.type-invest {
+  background: rgba(217, 119, 6, 0.1);
+  color: #d97706;
+}
+
+html.dark .type-invest {
+  background: rgba(251, 191, 36, 0.14);
+  color: #fbbf24;
+}
+
+.amount-invest {
+  color: #d97706;
+  font-weight: 600;
+}
+
+html.dark .amount-invest {
+  color: #fbbf24;
+}
+
+.deposit-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  background: rgba(217, 119, 6, 0.1);
+  color: #d97706;
+}
+
+html.dark .deposit-icon {
+  background: rgba(251, 191, 36, 0.14);
+  color: #fbbf24;
+}
+
 .transfer-accounts-hint {
   display: block;
   font-size: 0.75rem;
@@ -3513,7 +3628,8 @@ html.dark .dr-day.is-end {
 /* Summary cards */
 .summary-totals {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  /* 3 cartões, ou 4 quando há "Investimentos" */
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 1rem;
   margin-bottom: 1.5rem;
 }
@@ -3544,6 +3660,24 @@ html.dark .dr-day.is-end {
 .summary-total-value.negative { color: #dc2626; }
 html.dark .summary-total-value.positive { color: #4ade80; }
 html.dark .summary-total-value.negative { color: #f87171; }
+.summary-total-value.invest { color: #d97706; }
+html.dark .summary-total-value.invest { color: #fbbf24; }
+
+.summary-total-card--link {
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.summary-total-card--link:hover,
+.summary-total-card--link:focus-visible {
+  border-color: #d97706;
+  outline: none;
+}
+
+html.dark .summary-total-card--link:hover,
+html.dark .summary-total-card--link:focus-visible {
+  border-color: #fbbf24;
+}
 
 /* Category breakdown */
 /* ═══ Sankey Diagram ═══ */

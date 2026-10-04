@@ -57,6 +57,7 @@ export const useInvestmentsStore = defineStore('investments', () => {
   const loading = ref(true)
   const error = ref<string | null>(null)
   const depositsTotalEur = ref(0)
+  const uninvestedCashEur = ref(0)
   const deposits = ref<InvestmentDepositItem[]>([])
 
   // Posições abertas (quantidade > 0); as fechadas/negativas não entram na lista nem nos totais.
@@ -66,6 +67,8 @@ export const useInvestmentsStore = defineStore('investments', () => {
     activeHoldings.value.reduce((sum, h) => sum + (h.currentValueEur ?? h.investedEur), 0),
   )
   const totalInvestedEur = computed(() => activeHoldings.value.reduce((sum, h) => sum + h.investedEur, 0))
+  // O que os investimentos valem no Património Total: posições + dinheiro parado na corretora.
+  const patrimonyValueEur = computed(() => totalCurrentValueEur.value + uninvestedCashEur.value)
 
   function upsert(h: InvestmentHolding) {
     const idx = holdings.value.findIndex((x) => x.id === h.id)
@@ -111,6 +114,7 @@ export const useInvestmentsStore = defineStore('investments', () => {
       const { data } = await investmentsApi.addTransaction(request)
       const h = mapHolding(data)
       upsert(h)
+      void fetchDeposits() // compras/vendas mexem no dinheiro por investir
       return h
     } catch (e: unknown) {
       error.value = extractError(e)
@@ -124,6 +128,7 @@ export const useInvestmentsStore = defineStore('investments', () => {
       const { data } = await investmentsApi.updateTransaction(txId, request)
       const h = mapHolding(data)
       upsert(h)
+      void fetchDeposits()
       return h
     } catch (e: unknown) {
       error.value = extractError(e)
@@ -140,6 +145,7 @@ export const useInvestmentsStore = defineStore('investments', () => {
       } else {
         remove(holdingId)
       }
+      void fetchDeposits()
     } catch (e: unknown) {
       error.value = extractError(e)
       throw e
@@ -151,14 +157,16 @@ export const useInvestmentsStore = defineStore('investments', () => {
     try {
       await investmentsApi.delete(id)
       remove(id)
+      void fetchDeposits()
     } catch (e: unknown) {
       error.value = extractError(e)
       throw e
     }
   }
 
-  function applyDeposits(data: { totalEur: number; items: InvestmentDepositItem[] }) {
+  function applyDeposits(data: { totalEur: number; uninvestedCashEur?: number; items: InvestmentDepositItem[] }) {
     depositsTotalEur.value = Number(data.totalEur) || 0
+    uninvestedCashEur.value = Number(data.uninvestedCashEur) || 0
     deposits.value = Array.isArray(data.items)
       ? data.items.map((d) => ({ ...d, amount: Number(d.amount) }))
       : []
@@ -232,9 +240,11 @@ export const useInvestmentsStore = defineStore('investments', () => {
     loading,
     error,
     depositsTotalEur,
+    uninvestedCashEur,
     deposits,
     totalCurrentValueEur,
     totalInvestedEur,
+    patrimonyValueEur,
     fetchHoldings,
     fetchDeposits,
     addDeposit,

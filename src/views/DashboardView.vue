@@ -35,6 +35,7 @@ import PlanUpsellModal from '@/components/PlanUpsellModal.vue'
 import BrandLogo from '@/components/BrandLogo.vue'
 import InstrumentLogo from '@/components/InstrumentLogo.vue'
 import { investmentsApi } from '@/api/investments'
+import { filterDeposits, mergeRows } from '@/utils/depositRows'
 
 const router = useRouter()
 const householdStore = useHouseholdStore()
@@ -387,6 +388,7 @@ onMounted(async () => {
             accountsStore.fetchAccounts(),
             assetsStore.ensureLoaded().catch(() => {}),
             investmentsStore.fetchHoldings().catch(() => {}),
+            investmentsStore.fetchDeposits(), // dinheiro por investir → Património
             loadObjectivesPreview(),
             subscriptionStore.fetchSubscription(),
             transactionsStore.fetchTransactions({ limit: 5 }),
@@ -424,7 +426,12 @@ const formattedIncome = computed(() => formatCurrency(dashboard.monthlyIncome.va
 const formattedExpenses = computed(() => formatCurrency(dashboard.monthlyExpenses.value, dashboard.currency.value))
 const formattedSavings = computed(() => formatCurrency(dashboard.monthlySavings.value, dashboard.currency.value))
 
-const recentTransactions = computed(() => transactionsStore.transactions.slice(0, 5))
+// Últimos movimentos + depósitos na corretora que debitaram uma conta (linha informativa
+// "Depósito na corretora", tal como na lista de Movimentos — não é despesa).
+const recentRows = computed(() => {
+  const deps = subscriptionStore.canAccessInvestments ? filterDeposits(investmentsStore.deposits, {}) : []
+  return mergeRows(transactionsStore.transactions.slice(0, 5), deps).slice(0, 5)
+})
 
 const expensesForChart = computed<ExpenseByCategory[]>(() => dashboard.expensesForChart?.value ?? [])
 const incomeForChart = computed<IncomeByCategory[]>(() => dashboard.incomeForChart?.value ?? [])
@@ -454,7 +461,7 @@ const accountsToShow = computed(() =>
 const currentTotalBalance = computed(() =>
   accountsStore.accounts.reduce((sum, a) => sum + a.balance, 0)
   + assetsStore.totalCurrentValue
-  + investmentsStore.totalCurrentValueEur
+  + investmentsStore.patrimonyValueEur
 )
 
 const hasChartData = computed(
@@ -543,7 +550,7 @@ const dailyAverage = computed(() => {
 const accountCategoryGroups = computed(() => {
   const accs = accountsToShow.value
   const assetsTotal = assetsStore.totalCurrentValue
-  const investmentsTotal = investmentsStore.totalCurrentValueEur
+  const investmentsTotal = investmentsStore.patrimonyValueEur
   const total = accs.reduce((s, a) => s + Math.abs(a.balance), 0) + Math.abs(assetsTotal) + Math.abs(investmentsTotal)
 
   const groups = [
@@ -1302,31 +1309,51 @@ const showContent = computed(() =>
               <router-link v-else :to="{ name: 'movimentos' }" class="static-card-link" title="Ver todos"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></router-link>
             </div>
           </div>
-          <div v-if="recentTransactions.length > 0" class="movements-list">
+          <div v-if="recentRows.length > 0" class="movements-list">
+            <template v-for="row in recentRows" :key="row.key">
             <router-link
-              v-for="tx in recentTransactions"
-              :key="tx.id"
+              v-if="row.kind === 'deposit'"
+              :to="{ name: 'investimentos', query: { tab: 'deposits' } }"
+              class="movement-row"
+              title="Dinheiro enviado para a corretora. Não conta como despesa."
+            >
+              <div class="movement-row-left">
+                <span class="movement-row-icon invest">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+                </span>
+                <div>
+                  <p class="movement-row-desc">Depósito na corretora</p>
+                  <span class="movement-row-date">{{ new Date(row.dep.date).toLocaleDateString('pt-PT', { day: '2-digit', month: 'short' }) }}</span>
+                </div>
+              </div>
+              <span class="movement-row-amount invest">
+                {{ hideValues ? '••••• €' : `→ ${formatCurrency(row.dep.amount, dashboard.currency.value)}` }}
+              </span>
+            </router-link>
+            <router-link
+              v-else
               :to="{ name: 'movimentos' }"
               class="movement-row"
             >
               <div class="movement-row-left">
-                <BrandLogo :name="tx.entityName || tx.description" :size="28">
+                <BrandLogo :name="row.tx.entityName || row.tx.description" :size="28">
                   <template #fallback>
-                    <span class="movement-row-icon" :class="tx.type === TransactionType.Income ? 'income' : 'expense'">
-                      <svg v-if="tx.type === TransactionType.Income" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 11 12 6 7 11"/><line x1="12" x2="12" y1="6" y2="18"/></svg>
+                    <span class="movement-row-icon" :class="row.tx.type === TransactionType.Income ? 'income' : 'expense'">
+                      <svg v-if="row.tx.type === TransactionType.Income" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 11 12 6 7 11"/><line x1="12" x2="12" y1="6" y2="18"/></svg>
                       <svg v-else xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="7 13 12 18 17 13"/><line x1="12" x2="12" y1="18" y2="6"/></svg>
                     </span>
                   </template>
                 </BrandLogo>
                 <div>
-                  <p class="movement-row-desc">{{ tx.description || TRANSACTION_CATEGORY_LABELS[tx.category] || 'Transação' }}</p>
-                  <span class="movement-row-date">{{ new Date(tx.date).toLocaleDateString('pt-PT', { day: '2-digit', month: 'short' }) }}</span>
+                  <p class="movement-row-desc">{{ row.tx.description || TRANSACTION_CATEGORY_LABELS[row.tx.category] || 'Transação' }}</p>
+                  <span class="movement-row-date">{{ new Date(row.tx.date).toLocaleDateString('pt-PT', { day: '2-digit', month: 'short' }) }}</span>
                 </div>
               </div>
-              <span class="movement-row-amount" :class="tx.type === TransactionType.Income ? 'income' : 'expense'">
-                {{ hideValues ? '••••• €' : `${tx.type === TransactionType.Income ? '+' : '-'} ${formatCurrency(tx.amount, dashboard.currency.value)}` }}
+              <span class="movement-row-amount" :class="row.tx.type === TransactionType.Income ? 'income' : 'expense'">
+                {{ hideValues ? '••••• €' : `${row.tx.type === TransactionType.Income ? '+' : '-'} ${formatCurrency(row.tx.amount, dashboard.currency.value)}` }}
               </span>
             </router-link>
+            </template>
           </div>
           <div v-else class="static-card-empty">
             <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="static-card-empty-icon"><line x1="7" x2="7" y1="18" y2="6"/><polyline points="3 10 7 6 11 10"/><line x1="17" x2="17" y1="6" y2="18"/><polyline points="13 14 17 18 21 14"/></svg>
@@ -3223,6 +3250,17 @@ html.dark .movement-row-icon.expense {
   color: #f87171;
 }
 
+/* Depósito na corretora — âmbar, como o "Investido" dos gráficos e a linha nos Movimentos */
+.movement-row-icon.invest {
+  background: rgba(217, 119, 6, 0.1);
+  color: #d97706;
+}
+
+html.dark .movement-row-icon.invest {
+  background: rgba(251, 191, 36, 0.14);
+  color: #fbbf24;
+}
+
 .movement-row-desc {
   margin: 0;
   font-size: 0.8125rem;
@@ -3260,6 +3298,14 @@ html.dark .movement-row-amount.income {
 
 html.dark .movement-row-amount.expense {
   color: #f87171;
+}
+
+.movement-row-amount.invest {
+  color: #d97706;
+}
+
+html.dark .movement-row-amount.invest {
+  color: #fbbf24;
 }
 
 @media (max-width: 768px) {
