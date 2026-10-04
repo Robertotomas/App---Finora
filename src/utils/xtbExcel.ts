@@ -1,5 +1,5 @@
 import { InstrumentType, InvestmentOperation } from '@/types/investment'
-import type { BrokerTrade } from '@/types/investment'
+import type { BrokerTrade, BrokerDeposit } from '@/types/investment'
 
 /**
  * Adaptador da XTB (Excel/CSV): lê a folha "CASH OPERATION HISTORY" — o ledger completo de
@@ -23,6 +23,7 @@ const COMMENT = /(OPEN|CLOSE)\s+(BUY|SELL)\s+([\d.]+)(?:\/[\d.]+)?\s*@\s*([\d.]+
 
 export interface XtbParseResult {
   items: BrokerTrade[]
+  deposits: BrokerDeposit[]
   hasUnparsedRows: boolean
   error?: string
 }
@@ -50,27 +51,44 @@ export async function parseXtbWorkbook(file: File): Promise<XtbParseResult> {
   try {
     wb = XLSX.read(await file.arrayBuffer(), { cellDates: true })
   } catch {
-    return { items: [], hasUnparsedRows: false, error: 'Não foi possível ler o ficheiro. Confirme que é um Excel (.xlsx) da XTB.' }
+    return { items: [], deposits: [], hasUnparsedRows: false, error: 'Não foi possível ler o ficheiro. Confirme que é um Excel (.xlsx) da XTB.' }
   }
 
   const ws = wb.Sheets['CASH OPERATION HISTORY']
   if (!ws) {
-    return { items: [], hasUnparsedRows: false, error: 'O ficheiro não tem a folha "CASH OPERATION HISTORY" da XTB.' }
+    return { items: [], deposits: [], hasUnparsedRows: false, error: 'O ficheiro não tem a folha "CASH OPERATION HISTORY" da XTB.' }
   }
 
   const rows = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, raw: true, defval: null })
   const headerIdx = rows.findIndex((r) => String(r[0]).trim() === 'ID' && String(r[1]).trim() === 'Type')
   if (headerIdx < 0) {
-    return { items: [], hasUnparsedRows: false, error: 'Formato inesperado: cabeçalho de operações não encontrado.' }
+    return { items: [], deposits: [], hasUnparsedRows: false, error: 'Formato inesperado: cabeçalho de operações não encontrado.' }
   }
 
   const data = rows.slice(headerIdx + 1).filter((r) => r[0] != null && String(r[0]).trim() !== '')
   const items: BrokerTrade[] = []
+  const deposits: BrokerDeposit[] = []
   let failed = 0
 
   for (const r of data) {
     const type = String(r[1] ?? '').trim()
-    if (!/^Stock (purchase|sale)$/i.test(type)) continue // só compras/vendas (ignora dividendos, taxas, depósitos…)
+
+    // Depósitos/levantamentos (dinheiro para/da corretora) → métrica "Depósitos".
+    if (/^deposit$/i.test(type) || /withdrawal/i.test(type)) {
+      const amtRaw = r[5]
+      const amt = typeof amtRaw === 'number' ? amtRaw : parseFloat(String(amtRaw))
+      if (Number.isFinite(amt) && amt !== 0) {
+        deposits.push({
+          date: toDateStr(r[2]),
+          amount: amt, // depósito positivo, levantamento negativo (já vem com sinal)
+          currency: 'EUR', // a conta XTB é em EUR
+          externalId: `xtb:${String(r[0]).trim()}`,
+        })
+      }
+      continue
+    }
+
+    if (!/^Stock (purchase|sale)$/i.test(type)) continue // só compras/vendas (ignora dividendos, taxas…)
 
     const m = String(r[3] ?? '').match(COMMENT)
     const sym = String(r[4] ?? '').toUpperCase()
@@ -112,5 +130,5 @@ export async function parseXtbWorkbook(file: File): Promise<XtbParseResult> {
     })
   }
 
-  return { items, hasUnparsedRows: failed > 0 }
+  return { items, deposits, hasUnparsedRows: failed > 0 }
 }

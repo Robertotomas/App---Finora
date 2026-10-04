@@ -4,8 +4,10 @@ import { investmentsApi } from '@/api/investments'
 import type {
   InvestmentHolding,
   InvestmentTransaction,
+  InvestmentDepositItem,
   AddTransactionRequest,
   UpdateTransactionRequest,
+  AddDepositRequest,
 } from '@/types/investment'
 
 function extractError(e: unknown): string {
@@ -54,6 +56,8 @@ export const useInvestmentsStore = defineStore('investments', () => {
   const holdings = ref<InvestmentHolding[]>([])
   const loading = ref(true)
   const error = ref<string | null>(null)
+  const depositsTotalEur = ref(0)
+  const deposits = ref<InvestmentDepositItem[]>([])
 
   // Posições abertas (quantidade > 0); as fechadas/negativas não entram na lista nem nos totais.
   const activeHoldings = computed(() => holdings.value.filter((h) => h.quantity > 1e-9))
@@ -153,6 +157,59 @@ export const useInvestmentsStore = defineStore('investments', () => {
     }
   }
 
+  function applyDeposits(data: { totalEur: number; items: InvestmentDepositItem[] }) {
+    depositsTotalEur.value = Number(data.totalEur) || 0
+    deposits.value = Array.isArray(data.items)
+      ? data.items.map((d) => ({ ...d, amount: Number(d.amount) }))
+      : []
+  }
+
+  async function fetchDeposits() {
+    try {
+      const { data } = await investmentsApi.deposits()
+      applyDeposits(data)
+      return depositsTotalEur.value
+    } catch {
+      return depositsTotalEur.value
+    }
+  }
+
+  async function addDeposit(request: AddDepositRequest) {
+    error.value = null
+    try {
+      const { data } = await investmentsApi.addDeposit(request)
+      applyDeposits(data)
+      return data
+    } catch (e: unknown) {
+      error.value = extractError(e)
+      throw e
+    }
+  }
+
+  async function updateDeposit(id: string, request: AddDepositRequest) {
+    error.value = null
+    try {
+      const { data } = await investmentsApi.updateDeposit(id, request)
+      applyDeposits(data)
+      return data
+    } catch (e: unknown) {
+      error.value = extractError(e)
+      throw e
+    }
+  }
+
+  async function deleteDeposit(id: string) {
+    error.value = null
+    try {
+      const { data } = await investmentsApi.deleteDeposit(id)
+      applyDeposits(data)
+      return data
+    } catch (e: unknown) {
+      error.value = extractError(e)
+      throw e
+    }
+  }
+
   async function refresh() {
     error.value = null
     try {
@@ -174,9 +231,15 @@ export const useInvestmentsStore = defineStore('investments', () => {
     activeHoldings,
     loading,
     error,
+    depositsTotalEur,
+    deposits,
     totalCurrentValueEur,
     totalInvestedEur,
     fetchHoldings,
+    fetchDeposits,
+    addDeposit,
+    updateDeposit,
+    deleteDeposit,
     addTransaction,
     updateTransaction,
     deleteTransaction,

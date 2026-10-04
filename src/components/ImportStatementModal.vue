@@ -8,7 +8,7 @@ import {
   FIELD_DEFS,
 } from '@/utils/brokerImport'
 import type { ColumnMapping, FieldKey } from '@/utils/brokerImport'
-import type { InvestmentImportResult, BrokerTrade } from '@/types/investment'
+import type { InvestmentImportResult, BrokerTrade, BrokerDeposit } from '@/types/investment'
 
 defineProps<{ open: boolean }>()
 const emit = defineEmits<{ close: []; done: [created: number] }>()
@@ -18,6 +18,7 @@ const step = ref<Step>('pick')
 
 const file = ref<File | null>(null)
 const items = ref<BrokerTrade[]>([])
+const deposits = ref<BrokerDeposit[]>([])
 const hasUnparsedRows = ref(false)
 const previewing = ref(false)
 const importing = ref(false)
@@ -37,6 +38,7 @@ function reset() {
   step.value = 'pick'
   file.value = null
   items.value = []
+  deposits.value = []
   hasUnparsedRows.value = false
   preview.value = null
   error.value = null
@@ -81,6 +83,7 @@ async function loadFile(f: File) {
       const xtb = await parseXtbWorkbook(f)
       if (xtb.items.length > 0) {
         items.value = xtb.items
+        deposits.value = xtb.deposits
         hasUnparsedRows.value = xtb.hasUnparsedRows
         await runPreview()
         return
@@ -149,7 +152,7 @@ async function runPreview() {
   previewing.value = true
   error.value = null
   try {
-    const { data } = await investmentsApi.import(items.value, hasUnparsedRows.value, true)
+    const { data } = await investmentsApi.import(items.value, hasUnparsedRows.value, true, deposits.value)
     preview.value = data
     step.value = 'preview'
     if (data.error) error.value = data.error
@@ -161,11 +164,12 @@ async function runPreview() {
 }
 
 async function confirmImport() {
-  if (!preview.value || preview.value.created === 0 || items.value.length === 0) return
+  // Permite importar se há transações novas OU depósitos novos.
+  if (!preview.value || (preview.value.created === 0 && preview.value.depositsImported === 0)) return
   importing.value = true
   error.value = null
   try {
-    const { data } = await investmentsApi.import(items.value, hasUnparsedRows.value, false)
+    const { data } = await investmentsApi.import(items.value, hasUnparsedRows.value, false, deposits.value)
     emit('done', data.created)
     reset()
   } catch {
@@ -276,7 +280,10 @@ function fmtDate(iso: string): string {
         <p v-if="preview.hasUnparsedRows" class="imp-warn">
           Algumas linhas não foram reconhecidas. Confirme os valores antes de importar.
         </p>
-        <p v-if="preview.created === 0" class="imp-note">Não há transações novas para importar.</p>
+        <p v-if="preview.depositsImported > 0" class="imp-note">
+          + {{ preview.depositsImported }} {{ preview.depositsImported === 1 ? 'depósito' : 'depósitos' }} para a métrica de depósitos.
+        </p>
+        <p v-if="preview.created === 0 && preview.depositsImported === 0" class="imp-note">Não há dados novos para importar.</p>
 
         <div class="imp-list">
           <div v-for="(it, i) in preview.items" :key="i" class="imp-row" :class="{ dup: it.status === 'duplicate' }">
