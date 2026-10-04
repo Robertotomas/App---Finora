@@ -120,12 +120,14 @@ function handleClose() {
           placeholder="Não debitar (só registar)"
           @update:model-value="(v) => (accountId = String(v))"
         />
-        <span class="hint">
-          {{
-            selectedAccount
-              ? `O saldo de "${selectedAccount.name}" desce ${amount ? amount.toLocaleString('pt-PT', { style: 'currency', currency: 'EUR' }) : 'o montante'}.`
-              : 'Sem débito: só entra na métrica de Depósitos.'
-          }}
+        <span v-if="selectedAccount" class="hint">
+          O saldo de "{{ selectedAccount.name }}" desce
+          {{ amount ? amount.toLocaleString('pt-PT', { style: 'currency', currency: 'EUR' }) : 'o montante' }}.
+          O Património não muda: o valor passa a dinheiro por investir.
+        </span>
+        <span v-else class="hint hint--warn">
+          Sem conta: o valor conta como dinheiro novo no Património. Se saiu de uma conta registada,
+          escolha-a para não ser contado a dobrar.
         </span>
       </div>
 
@@ -220,6 +222,15 @@ html.dark .input:focus {
 .hint {
   font-size: 0.75rem;
   color: var(--color-text-muted, #64748b);
+}
+
+/* Sem conta → aviso âmbar (risco de contar a dobrar) */
+.hint--warn {
+  color: #b45309;
+}
+
+html.dark .hint--warn {
+  color: #fbbf24;
 }
 
 .modal-actions {
