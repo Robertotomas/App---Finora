@@ -149,7 +149,7 @@ const shouldRender = computed(() => !!currentUrl.value || useSlotFallback.value 
   flex-shrink: 0;
   border-radius: 6px;
   overflow: hidden;
-  background: var(--color-bg, #f1f5f9);
+  background: var(--color-bg, var(--color-surface-muted));
   border: 1px solid var(--color-border);
   color: var(--color-text-muted);
   vertical-align: middle;

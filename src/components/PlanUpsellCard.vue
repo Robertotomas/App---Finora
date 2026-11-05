@@ -10,18 +10,18 @@ defineProps<{
 
 <template>
   <div class="upsell-card">
-    <div class="upsell-card-icon">
+    <div class="upsell-card-icon" aria-hidden="true">
       <slot name="icon">
         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 14.5 9.5 21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5Z"/></svg>
       </slot>
     </div>
 
-    <p class="upsell-card-title">{{ title }}</p>
+    <h2 class="upsell-card-title">{{ title }}</h2>
     <p class="upsell-card-text">{{ description }}</p>
 
     <ul class="upsell-card-features">
       <li v-for="(f, i) in features" :key="i">
-        <svg class="upsell-card-check" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+        <svg class="upsell-card-check" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
         <span>{{ f }}</span>
       </li>
     </ul>
@@ -36,93 +36,94 @@ defineProps<{
   flex-direction: column;
   align-items: center;
   text-align: center;
-  gap: 0.6rem;
-  max-width: 460px;
-  margin: 2.5rem auto;
-  padding: 2.25rem 2rem;
-  background: var(--color-bg-card);
+  max-width: 440px;
+  margin: var(--space-10) auto;
+  padding: var(--space-8) var(--space-6) var(--space-6);
+  background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: 16px;
+  border-radius: var(--radius-lg);
 }
 
 .upsell-card-icon {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 52px;
-  height: 52px;
-  margin-bottom: 0.25rem;
-  border-radius: 12px;
-  background: rgba(22, 101, 52, 0.1);
-  color: #166534;
-}
-
-html.dark .upsell-card-icon {
-  background: rgba(74, 222, 128, 0.12);
-  color: #4ade80;
+  width: 48px;
+  height: 48px;
+  margin-bottom: var(--space-4);
+  border-radius: 50%;
+  background: var(--color-primary-soft);
+  color: var(--color-primary-text);
 }
 
 .upsell-card-title {
   margin: 0;
-  font-size: 1.0625rem;
-  font-weight: 700;
-  color: var(--color-text);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-strong);
 }
 
 .upsell-card-text {
-  margin: 0 0 0.5rem;
-  font-size: 0.875rem;
+  margin: var(--space-2) 0 0;
+  max-width: 36ch;
+  font-size: var(--text-base);
   line-height: 1.5;
   color: var(--color-text-muted);
-  max-width: 36ch;
 }
 
 .upsell-card-features {
   list-style: none;
-  margin: 0 0 0.5rem;
-  padding: 0;
   width: 100%;
+  margin: var(--space-5) 0 0;
+  padding: var(--space-4);
   display: flex;
   flex-direction: column;
-  gap: 0.55rem;
+  gap: var(--space-2);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
 }
 
 .upsell-card-features li {
   display: flex;
   align-items: flex-start;
-  gap: 0.55rem;
+  gap: var(--space-2);
   text-align: left;
-  font-size: 0.8438rem;
-  line-height: 1.4;
-  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+  color: var(--color-text);
 }
 
 .upsell-card-check {
   flex-shrink: 0;
   margin-top: 1px;
-  color: #166534;
+  color: var(--color-primary-text);
 }
 
-html.dark .upsell-card-check {
-  color: #4ade80;
-}
-
+/* Link com o aspeto do UiButton primário (bloco) */
 .upsell-card-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 100%;
-  margin-top: 0.5rem;
-  padding: 0.75rem 1.125rem;
-  text-align: center;
-  background: linear-gradient(135deg, #166534 0%, #15803d 100%);
-  color: #fff;
-  font-size: 0.9375rem;
-  font-weight: 650;
-  border-radius: 12px;
+  height: var(--control-h);
+  margin-top: var(--space-5);
+  padding: 0 var(--space-4);
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  color: var(--color-on-primary);
+  background: var(--color-primary);
+  border-radius: var(--radius-sm);
   text-decoration: none;
-  transition: transform 0.15s, box-shadow 0.15s;
+  transition: background var(--transition-fast);
 }
 
 .upsell-card-cta:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(22, 101, 52, 0.25);
+  background: var(--color-primary-hover);
+}
+
+.upsell-card-cta:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
 }
 </style>

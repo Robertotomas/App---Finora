@@ -4,9 +4,17 @@ import { useHouseholdStore } from '@/stores/household'
 import { useSubscriptionStore } from '@/stores/subscription'
 import { reportsApi, type MonthlyReportListItem } from '@/api/reports'
 import PlanUpsellCard from '@/components/PlanUpsellCard.vue'
+import PageSkeleton from '@/components/PageSkeleton.vue'
+import BaseSelect from '@/components/BaseSelect.vue'
+import PageHeader from '@/components/ui/PageHeader.vue'
+import UiButton from '@/components/ui/UiButton.vue'
+import EmptyState from '@/components/ui/EmptyState.vue'
+import { zipSync } from 'fflate'
+import { useToast } from '@/composables/useToast'
 
 const householdStore = useHouseholdStore()
 const subscriptionStore = useSubscriptionStore()
+const toast = useToast()
 
 const pageReady = ref(false)
 const loading = ref(true)
@@ -51,17 +59,8 @@ function monthLabel(m: number): string {
   return str.charAt(0).toUpperCase() + str.slice(1)
 }
 
-const yearDropOpen = ref(false)
-const monthDropOpen = ref(false)
-const yearDropRef = ref<HTMLElement | null>(null)
-const monthDropRef = ref<HTMLElement | null>(null)
-
-function toggleYearDrop() { yearDropOpen.value = !yearDropOpen.value; monthDropOpen.value = false }
-function toggleMonthDrop() { monthDropOpen.value = !monthDropOpen.value; yearDropOpen.value = false }
-
 function pickYear(val: number | null) {
   filterYear.value = val
-  yearDropOpen.value = false
   if (filterMonth.value && !availableMonths.value.includes(filterMonth.value)) {
     filterMonth.value = null
   }
@@ -69,16 +68,96 @@ function pickYear(val: number | null) {
 
 function pickMonth(val: number | null) {
   filterMonth.value = val
-  monthDropOpen.value = false
 }
 
-const yearLabel = computed(() => filterYear.value ? String(filterYear.value) : 'Todos os anos')
-const monthFilterLabel = computed(() => filterMonth.value ? monthLabel(filterMonth.value) : 'Todos os meses')
+// BaseSelect não aceita null: 0 = "todos".
+const yearSelect = computed<string | number>({
+  get: () => filterYear.value ?? 0,
+  set: (v) => pickYear(Number(v) || null),
+})
+const monthSelect = computed<string | number>({
+  get: () => filterMonth.value ?? 0,
+  set: (v) => pickMonth(Number(v) || null),
+})
+const yearSelectOptions = computed(() => [
+  { value: 0, label: 'Todos os anos' },
+  ...availableYears.value.map((y) => ({ value: y, label: String(y) })),
+])
+const monthSelectOptions = computed(() => [
+  { value: 0, label: 'Todos os meses' },
+  ...availableMonths.value.map((m) => ({ value: m, label: monthLabel(m) })),
+])
 
-function onFilterOutsideClick(e: MouseEvent) {
-  const t = e.target as Node
-  if (yearDropOpen.value && yearDropRef.value && !yearDropRef.value.contains(t)) yearDropOpen.value = false
-  if (monthDropOpen.value && monthDropRef.value && !monthDropRef.value.contains(t)) monthDropOpen.value = false
+function clearFilters() {
+  filterYear.value = null
+  filterMonth.value = null
+}
+
+/* ── Seleção múltipla (só aparece com mais do que um relatório) ── */
+const selectedIds = ref<Set<string>>(new Set())
+const canSelect = computed(() => items.value.length > 1)
+const selectedCount = computed(() => filteredItems.value.filter((r) => selectedIds.value.has(r.id)).length)
+const allSelected = computed(() => filteredItems.value.length > 0 && selectedCount.value === filteredItems.value.length)
+const someSelected = computed(() => selectedCount.value > 0 && !allSelected.value)
+const downloadSelectedLabel = computed(() =>
+  selectedCount.value === 1 ? 'Descarregar PDF' : 'Descarregar ' + selectedCount.value + ' (.zip)',
+)
+
+function toggleRow(id: string) {
+  const next = new Set(selectedIds.value)
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+  selectedIds.value = next
+}
+function toggleAll() {
+  selectedIds.value = allSelected.value ? new Set() : new Set(filteredItems.value.map((r) => r.id))
+}
+function clearSelection() {
+  selectedIds.value = new Set()
+}
+
+function reportFileName(row: MonthlyReportListItem): string {
+  return 'finora-relatorio-' + row.year + '-' + String(row.month).padStart(2, '0') + '.pdf'
+}
+
+function saveBlob(blob: Blob, fileName: string) {
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = fileName
+  a.click()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+const zipping = ref(false)
+
+/** Descarrega os selecionados: 1 → o PDF; vários → um .zip com os PDFs (abre como pasta). */
+async function downloadSelected() {
+  if (reportsLocked.value || zipping.value) return
+  const rows = filteredItems.value.filter((r) => selectedIds.value.has(r.id))
+  if (rows.length === 0) return
+  if (rows.length === 1) {
+    await downloadReport(rows[0])
+    return
+  }
+  zipping.value = true
+  try {
+    const files: Record<string, Uint8Array> = {}
+    // Sequencial: evita rebentar o rate-limit da API com muitos pedidos em simultâneo.
+    for (const row of rows) {
+      const blob = await reportsApi.downloadBlob(row.id)
+      files[reportFileName(row)] = new Uint8Array(await blob.arrayBuffer())
+    }
+    // PDFs já vêm comprimidos: guardar sem recomprimir (level 0) é instantâneo.
+    const zipped = zipSync(files, { level: 0 })
+    saveBlob(new Blob([zipped], { type: 'application/zip' }), 'finora-relatorios-' + rows.length + '.zip')
+    toast.success(rows.length + ' relatórios descarregados')
+    clearSelection()
+  } catch {
+    toast.error('Não foi possível descarregar os relatórios. Tente novamente.')
+  } finally {
+    zipping.value = false
+  }
 }
 
 async function load() {
@@ -123,7 +202,7 @@ async function openPreview(row: MonthlyReportListItem) {
     const blob = await reportsApi.downloadBlob(row.id)
     previewUrl.value = URL.createObjectURL(blob)
   } catch {
-    error.value = 'Não foi possível carregar o PDF.'
+    toast.error('Não foi possível abrir o PDF. Tente novamente.')
     previewOpen.value = false
   } finally {
     previewLoading.value = false
@@ -134,14 +213,9 @@ async function downloadReport(row: MonthlyReportListItem) {
   if (reportsLocked.value) return
   try {
     const blob = await reportsApi.downloadBlob(row.id)
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `finora-relatorio-${row.year}-${String(row.month).padStart(2, '0')}.pdf`
-    a.click()
-    URL.revokeObjectURL(url)
+    saveBlob(blob, reportFileName(row))
   } catch {
-    error.value = 'Não foi possível descarregar o PDF.'
+    toast.error('Não foi possível descarregar o PDF. Tente novamente.')
   }
 }
 
@@ -157,14 +231,15 @@ async function refreshReportPdf(row: MonthlyReportListItem) {
     const idx = items.value.findIndex((x) => x.id === row.id)
     if (idx >= 0) items.value[idx] = updated
     closePreview()
+    toast.success(`Relatório de ${formatMonthYear(row)} atualizado`)
   } catch (e: unknown) {
     const err = e as { rateLimited?: boolean; rateLimitMessage?: string; response?: { status?: number; data?: { message?: string } } }
     if (err.rateLimited) {
-      error.value = err.rateLimitMessage || 'Demasiados pedidos. Tenta novamente dentro de 1 minuto.'
+      toast.error(err.rateLimitMessage || 'Demasiados pedidos. Tente novamente dentro de 1 minuto.')
     } else if (err.response?.status === 403) {
-      error.value = 'Atualizar relatórios está disponível nos planos Pro e Couple.'
+      toast.error('Atualizar relatórios está disponível nos planos Pro e Couple.')
     } else {
-      error.value = err.response?.data?.message ?? 'Não foi possível atualizar o PDF.'
+      toast.error(err.response?.data?.message ?? 'Não foi possível atualizar o PDF.')
     }
   } finally {
     refreshingId.value = null
@@ -201,7 +276,6 @@ function onKeydown(e: KeyboardEvent) {
 
 onMounted(async () => {
   window.addEventListener('keydown', onKeydown)
-  document.addEventListener('click', onFilterOutsideClick, true)
   try {
     await householdStore.fetchHousehold()
     await subscriptionStore.fetchSubscription()
@@ -214,33 +288,26 @@ onMounted(async () => {
 
 onUnmounted(() => {
   window.removeEventListener('keydown', onKeydown)
-  document.removeEventListener('click', onFilterOutsideClick, true)
   closePreview()
 })
 </script>
 
 <template>
   <div class="reports-page">
-    <!-- Loading until household + subscription resolved -->
-    <div v-if="!pageReady" class="loading-state">
-      <div class="spinner"></div>
-      <p>A carregar…</p>
-    </div>
+    <!-- A carregar agregado + subscrição -->
+    <PageSkeleton v-if="!pageReady" variant="table" :rows="5" />
 
-    <!-- No household -->
-    <div v-else-if="!householdStore.household" class="empty-state">
-      <p>Configure primeiro o seu household.</p>
-      <router-link to="/overview" class="link">Ir para o painel</router-link>
-    </div>
+    <!-- Sem agregado -->
+    <EmptyState
+      v-else-if="!householdStore.household"
+      title="Ainda não tem um agregado"
+      description="Configure primeiro o seu agregado para receber relatórios mensais."
+    >
+      <router-link to="/household" class="link-btn">Configurar agregado</router-link>
+    </EmptyState>
 
     <template v-else>
-      <!-- Page header -->
-      <div class="page-header">
-        <div class="page-header-text">
-          <h1 class="page-title">Relatórios</h1>
-          <p class="page-subtitle">Relatórios mensais com resumo de receitas, despesas e gráficos</p>
-        </div>
-      </div>
+      <PageHeader title="Relatórios" />
 
       <PlanUpsellCard
         v-if="reportsLocked"
@@ -257,136 +324,144 @@ onUnmounted(() => {
         </template>
       </PlanUpsellCard>
 
-      <div v-else class="reports-shell-wrap">
-        <div class="reports-shell-inner">
-          <!-- Global error -->
-          <div v-if="error" class="global-error">{{ error }}</div>
+      <div v-else class="ui-stack">
+        <div v-if="error" class="inline-error" role="alert">{{ error }}</div>
 
-          <!-- Loading reports -->
-          <div v-if="loading" class="loading-state">
-            <div class="spinner"></div>
-            <p>A carregar relatórios…</p>
-          </div>
+        <PageSkeleton v-if="loading" variant="table" :rows="5" />
 
-          <!-- Empty state -->
-          <div v-else-if="!loading && items.length === 0" class="empty-card">
-            <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="empty-icon"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><polyline points="14 2 14 8 20 8"/><line x1="16" x2="8" y1="13" y2="13"/><line x1="16" x2="8" y1="17" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-            <p class="empty-text">Ainda não há relatórios</p>
-            <p class="empty-hint">Os relatórios são gerados automaticamente ao fim de cada mês.</p>
-          </div>
-
-          <!-- Reports list -->
-          <template v-else-if="items.length > 0">
-            <div class="reports-toolbar">
-              <div class="section-label" style="margin-bottom:0">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><polyline points="14 2 14 8 20 8"/></svg>
-                Relatórios Mensais
-              </div>
-              <div class="reports-filters">
-                <div ref="yearDropRef" class="custom-dropdown">
-                  <button type="button" class="custom-dropdown-btn" :class="{ active: filterYear !== null }" @click.stop="toggleYearDrop">
-                    <span>{{ yearLabel }}</span>
-                    <svg class="custom-dropdown-chevron" :class="{ open: yearDropOpen }" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
-                  </button>
-                  <Transition name="panel">
-                    <div v-show="yearDropOpen" class="custom-dropdown-panel" @click.stop>
-                      <button type="button" class="custom-dropdown-item" :class="{ selected: filterYear === null }" @click="pickYear(null)">Todos os anos</button>
-                      <button v-for="y in availableYears" :key="y" type="button" class="custom-dropdown-item" :class="{ selected: filterYear === y }" @click="pickYear(y)">{{ y }}</button>
-                    </div>
-                  </Transition>
-                </div>
-                <div ref="monthDropRef" class="custom-dropdown">
-                  <button type="button" class="custom-dropdown-btn" :class="{ active: filterMonth !== null }" @click.stop="toggleMonthDrop">
-                    <span>{{ monthFilterLabel }}</span>
-                    <svg class="custom-dropdown-chevron" :class="{ open: monthDropOpen }" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
-                  </button>
-                  <Transition name="panel">
-                    <div v-show="monthDropOpen" class="custom-dropdown-panel" @click.stop>
-                      <button type="button" class="custom-dropdown-item" :class="{ selected: filterMonth === null }" @click="pickMonth(null)">Todos os meses</button>
-                      <button v-for="m in availableMonths" :key="m" type="button" class="custom-dropdown-item" :class="{ selected: filterMonth === m }" @click="pickMonth(m)">{{ monthLabel(m) }}</button>
-                    </div>
-                  </Transition>
-                </div>
-              </div>
-            </div>
-
-            <div v-if="filteredItems.length === 0" class="empty-card" style="margin-top:0.5rem">
-              <p class="empty-text">Nenhum relatório encontrado</p>
-              <p class="empty-hint">Tenta ajustar os filtros.</p>
-            </div>
-
-            <div v-else class="reports-grid">
-              <div v-for="row in filteredItems" :key="row.id" class="report-card">
-                <div class="report-card__main">
-                  <!-- Icon -->
-                  <div class="card-icon-wrap">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><polyline points="14 2 14 8 20 8"/><line x1="16" x2="8" y1="13" y2="13"/><line x1="16" x2="8" y1="17" y2="17"/></svg>
-                  </div>
-
-                  <!-- Info -->
-                  <div class="card-body">
-                    <h3 class="card-name">{{ formatMonthYear(row) }}</h3>
-                    <p class="card-meta">Gerado em {{ formatGenerated(row.generatedAt) }}</p>
-                    <div class="card-tags">
-                      <span class="card-tag">PDF</span>
-                      <span class="card-tag">{{ formatFileSize(row.fileSizeBytes) }}</span>
-                    </div>
-                  </div>
-
-                  <!-- Actions -->
-                  <div class="card-actions">
-                    <button
-                      type="button"
-                      class="action-btn"
-                      title="Pré-visualizar"
-                      @click="openPreview(row)"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
-                    </button>
-                    <button
-                      type="button"
-                      class="action-btn action-btn--download"
-                      title="Descarregar PDF"
-                      @click="downloadReport(row)"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
-                    </button>
-                  </div>
-                </div>
-
-                <!-- Footer: refresh row -->
-                <div class="report-card__footer">
-                  <p class="card-hint">Alterou transações? Atualize o PDF.</p>
-                  <button
-                    type="button"
-                    class="action-btn action-btn--refresh"
-                    title="Atualizar PDF"
-                    :disabled="refreshingId === row.id"
-                    @click="refreshReportPdf(row)"
-                  >
-                    <svg v-if="refreshingId !== row.id" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.22-8.56"/><polyline points="21 3 21 9 15 9"/></svg>
-                    <div v-else class="spinner-sm"></div>
-                  </button>
-                </div>
-              </div>
-            </div>
+        <EmptyState
+          v-else-if="items.length === 0"
+          class="empty-card"
+          title="Ainda não há relatórios"
+          description="Os relatórios são gerados automaticamente no fim de cada mês. O primeiro aparece aqui assim que o mês fechar."
+        >
+          <template #icon>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><polyline points="14 2 14 8 20 8"/><line x1="16" x2="8" y1="13" y2="13"/><line x1="16" x2="8" y1="17" y2="17"/></svg>
           </template>
-        </div>
+        </EmptyState>
+
+        <section v-else class="reports-card">
+          <header class="reports-card-head">
+            <div class="reports-card-text">
+              <h2 class="card-title">Relatórios mensais</h2>
+              <p class="card-subtitle">Alterou movimentos de um mês já fechado? Atualize o PDF para refletir as mudanças.</p>
+            </div>
+            <div class="reports-filters">
+              <BaseSelect v-model="yearSelect" :options="yearSelectOptions" class="filter-select" />
+              <BaseSelect v-model="monthSelect" :options="monthSelectOptions" class="filter-select" />
+            </div>
+          </header>
+
+          <!-- Barra de seleção: aparece quando há relatórios selecionados -->
+          <div v-if="canSelect && selectedCount > 0" class="selection-bar" role="region" aria-label="Relatórios selecionados">
+            <span class="selection-count">{{ selectedCount }} {{ selectedCount === 1 ? 'selecionado' : 'selecionados' }}</span>
+            <div class="selection-actions">
+              <UiButton variant="ghost" size="sm" @click="clearSelection">Limpar</UiButton>
+              <UiButton variant="primary" size="sm" :loading="zipping" @click="downloadSelected">
+                <template #icon>
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+                </template>
+                {{ downloadSelectedLabel }}
+              </UiButton>
+            </div>
+          </div>
+
+          <EmptyState
+            v-if="filteredItems.length === 0"
+            compact
+            title="Nenhum relatório encontrado"
+            description="Não há relatórios para os filtros escolhidos."
+          >
+            <UiButton variant="secondary" size="sm" @click="clearFilters">Limpar filtros</UiButton>
+          </EmptyState>
+
+          <div v-else class="ui-table-wrap">
+            <table class="ui-table reports-table">
+              <thead>
+                <tr>
+                  <th v-if="canSelect" class="col-check">
+                    <input
+                      type="checkbox"
+                      class="row-check"
+                      :checked="allSelected"
+                      :indeterminate.prop="someSelected"
+                      aria-label="Selecionar todos"
+                      @change="toggleAll"
+                    />
+                  </th>
+                  <th>Mês</th>
+                  <th class="col-status">Estado</th>
+                  <th class="num"><span class="sr-only">Ações</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in filteredItems" :key="row.id" :class="{ 'is-selected': selectedIds.has(row.id) }">
+                  <td v-if="canSelect" class="col-check">
+                    <input
+                      type="checkbox"
+                      class="row-check"
+                      :checked="selectedIds.has(row.id)"
+                      :aria-label="'Selecionar ' + formatMonthYear(row)"
+                      @change="toggleRow(row.id)"
+                    />
+                  </td>
+                  <td>
+                    <div class="report-cell">
+                      <span class="report-icon" aria-hidden="true">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><polyline points="14 2 14 8 20 8"/><line x1="16" x2="8" y1="13" y2="13"/><line x1="16" x2="8" y1="17" y2="17"/></svg>
+                      </span>
+                      <div class="report-text">
+                        <span class="report-name">{{ formatMonthYear(row) }}</span>
+                        <span class="report-meta">
+                          Gerado a {{ formatGenerated(row.generatedAt) }}<template v-if="row.fileSizeBytes"> · PDF, {{ formatFileSize(row.fileSizeBytes) }}</template>
+                        </span>
+                      </div>
+                    </div>
+                  </td>
+                  <td class="col-status">
+                    <span v-if="refreshingId === row.id" class="ui-badge ui-badge--warning">A atualizar</span>
+                    <span v-else class="ui-badge ui-badge--success">Disponível</span>
+                  </td>
+                  <td class="num">
+                    <div class="row-actions">
+                      <button type="button" class="icon-action" title="Ver" :aria-label="'Ver ' + formatMonthYear(row)" @click="openPreview(row)">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>
+                      </button>
+                      <button
+                        type="button"
+                        class="icon-action"
+                        title="Atualizar PDF"
+                        :aria-label="'Atualizar PDF de ' + formatMonthYear(row)"
+                        :disabled="refreshingId !== null"
+                        @click="refreshReportPdf(row)"
+                      >
+                        <svg :class="{ spinning: refreshingId === row.id }" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 0 1-15.5 6.2L3 16"/><path d="M3 21v-5h5"/><path d="M3 12a9 9 0 0 1 15.5-6.2L21 8"/><path d="M21 3v5h-5"/></svg>
+                      </button>
+                      <button type="button" class="icon-action" title="Descarregar PDF" :aria-label="'Descarregar PDF de ' + formatMonthYear(row)" @click="downloadReport(row)">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
       </div>
     </template>
 
-    <!-- Generating overlay -->
+    <!-- A gerar -->
     <Teleport to="body">
-      <div v-if="generatingOverlay" class="generating-overlay">
+      <div v-if="generatingOverlay" class="generating-overlay" role="status" aria-live="polite">
         <div class="generating-panel">
-          <div class="spinner"></div>
+          <span class="spinner" aria-hidden="true" />
           <p class="generating-title">A gerar relatório…</p>
-          <p class="generating-hint">Isto pode demorar alguns segundos. Não feches nem mudes de página.</p>
+          <p class="generating-hint">Isto pode demorar alguns segundos. Não feche nem mude de página.</p>
         </div>
       </div>
     </Teleport>
 
-    <!-- PDF Preview modal -->
+    <!-- Pré-visualização do PDF -->
     <Teleport to="body">
       <div
         v-if="previewOpen"
@@ -403,13 +478,15 @@ onUnmounted(() => {
         >
           <div class="pdf-preview-header">
             <h2 id="pdf-preview-title" class="pdf-preview-title">{{ previewTitle }}</h2>
-            <button type="button" class="action-btn" aria-label="Fechar pré-visualização" @click="closePreview">
-              <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" x2="6" y1="6" y2="18"/><line x1="6" x2="18" y1="6" y2="18"/></svg>
-            </button>
+            <UiButton variant="ghost" size="sm" icon-only aria-label="Fechar pré-visualização" @click="closePreview">
+              <template #icon>
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" x2="6" y1="6" y2="18"/><line x1="6" x2="18" y1="6" y2="18"/></svg>
+              </template>
+            </UiButton>
           </div>
           <div class="pdf-preview-body">
-            <div v-if="previewLoading" class="preview-inline-loading">
-              <div class="spinner"></div>
+            <div v-if="previewLoading" class="preview-inline-loading" role="status">
+              <span class="spinner" aria-hidden="true" />
               <p>A carregar PDF…</p>
             </div>
             <iframe
@@ -427,426 +504,151 @@ onUnmounted(() => {
 
 <style scoped>
 .reports-page {
-  max-width: min(860px, 100%);
+  max-width: var(--page-max);
   margin: 0 auto;
-  padding: 0 0 3rem;
+  padding: 0 0 var(--space-12);
 }
 
-/* ── Page header ── */
-.page-header {
+.inline-error {
+  padding: 10px var(--space-4);
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+  border: 1px solid var(--color-danger-border);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+}
+
+.empty-card {
+  background: var(--color-surface);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+/* ── Cartão da lista ── */
+.reports-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.reports-card-head {
   display: flex;
-  align-items: flex-end;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 1.5rem;
-}
-
-.page-header-text {
-  min-width: 0;
-}
-
-.page-title {
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: var(--color-text);
-  margin: 0;
-  letter-spacing: -0.02em;
-}
-
-.page-subtitle {
-  font-size: 0.8125rem;
-  color: var(--color-text-muted);
-  margin: 0.25rem 0 0;
-}
-
-/* ── Section label ── */
-.section-label {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: var(--color-text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  margin-bottom: 0.75rem;
-}
-
-/* ── Reports toolbar ── */
-.reports-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 0.75rem;
+  gap: var(--space-4);
   flex-wrap: wrap;
+  padding: var(--space-5);
 }
-
+.reports-card-text {
+  min-width: 0;
+  flex: 1 1 260px;
+}
+.card-title {
+  margin: 0;
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-strong);
+}
+.card-subtitle {
+  margin: 2px 0 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  line-height: 1.5;
+}
 .reports-filters {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: var(--space-2);
+}
+.filter-select {
+  width: 160px;
 }
 
-/* ── Custom dropdowns (same as TransactionsView) ── */
-.custom-dropdown {
-  position: relative;
+/* ── Tabela ── */
+.reports-table th:first-child,
+.reports-table td:first-child {
+  padding-left: var(--space-5);
 }
-
-.custom-dropdown-btn {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.4375rem 0.75rem;
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  font-size: 0.8125rem;
-  font-family: inherit;
-  font-weight: 500;
-  background: var(--color-input-bg);
-  color: var(--color-text);
-  cursor: pointer;
-  transition: border-color 0.15s, background 0.15s;
+.reports-table th:last-child,
+.reports-table td:last-child {
+  padding-right: var(--space-5);
+}
+.col-status {
+  width: 1%;
   white-space: nowrap;
 }
-
-.custom-dropdown-btn:hover {
-  border-color: var(--color-text-muted);
-}
-
-.custom-dropdown-btn.active {
-  border-color: var(--color-text-muted);
-  color: var(--color-text);
-}
-
-.custom-dropdown-chevron {
-  flex-shrink: 0;
-  color: var(--color-text-muted);
-  transition: transform 0.2s ease;
-}
-
-.custom-dropdown-chevron.open {
-  transform: rotate(180deg);
-}
-
-.custom-dropdown-panel {
-  position: absolute;
-  top: calc(100% + 0.375rem);
-  left: 0;
-  z-index: 50;
-  min-width: 100%;
-  max-height: 260px;
-  overflow-y: auto;
-  padding: 0.375rem;
-  border: 1px solid var(--color-border);
-  border-radius: 10px;
-  background: var(--color-bg-card);
-  box-shadow: 0 8px 24px -4px rgba(15, 23, 42, 0.12);
-}
-
-.custom-dropdown-item {
-  display: block;
-  width: 100%;
-  padding: 0.4375rem 0.625rem;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--color-text);
-  font-size: 0.8125rem;
-  font-family: inherit;
-  text-align: left;
-  cursor: pointer;
-  transition: background 0.12s;
-  white-space: nowrap;
-}
-
-.custom-dropdown-item:hover {
-  background: var(--color-table-row-hover);
-}
-
-.custom-dropdown-item.selected {
-  background: rgba(22, 101, 52, 0.1);
-  color: #166534;
-  font-weight: 600;
-}
-
-html.dark .custom-dropdown-item.selected {
-  background: rgba(74, 222, 128, 0.12);
-  color: #4ade80;
-}
-
-.panel-enter-active,
-.panel-leave-active {
-  transition: opacity 0.15s ease, transform 0.15s ease;
-}
-
-.panel-enter-from,
-.panel-leave-to {
-  opacity: 0;
-  transform: translateY(-4px);
-}
-
-/* ── Reports grid ── */
-.reports-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 0.875rem;
-}
-
-.report-card {
-  background: var(--color-bg-card);
-  border: 1px solid var(--color-border);
-  border-radius: 14px;
-  overflow: hidden;
-  transition: box-shadow 0.2s, transform 0.2s;
-  box-shadow: var(--app-shadow-card, 0 1px 3px rgba(0, 0, 0, 0.06));
-}
-
-.report-card:hover {
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
-  transform: translateY(-1px);
-}
-
-.report-card__main {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.875rem;
-  padding: 1.125rem 1.25rem;
-}
-
-.report-card__footer {
+.report-cell {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0.625rem 1.25rem;
-  border-top: 1px solid var(--color-border);
-  background: var(--color-table-row-hover);
-}
-
-/* ── Card icon ── */
-.card-icon-wrap {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  flex-shrink: 0;
-  border-radius: 10px;
-  background: #ecfdf5;
-  color: #166534;
-}
-
-html.dark .card-icon-wrap {
-  background: rgba(22, 101, 52, 0.2);
-  color: #4ade80;
-}
-
-/* ── Card body ── */
-.card-body {
-  flex: 1;
+  gap: var(--space-3);
   min-width: 0;
 }
-
-.card-name {
-  font-size: 0.9375rem;
-  font-weight: 600;
-  color: var(--color-text);
-  margin: 0 0 0.25rem;
-}
-
-.card-meta {
-  font-size: 0.75rem;
-  color: var(--color-text-muted);
-  margin: 0 0 0.5rem;
-}
-
-.card-hint {
-  font-size: 0.75rem;
-  color: var(--color-text-muted);
-  margin: 0;
-  line-height: 1.4;
-}
-
-.card-tags {
-  display: flex;
-  gap: 0.375rem;
-}
-
-.card-tag {
-  display: inline-block;
-  font-size: 0.6875rem;
-  font-weight: 500;
-  color: var(--color-text-muted);
-  background: var(--color-table-row-hover);
-  padding: 0.15rem 0.5rem;
-  border-radius: 999px;
-}
-
-/* ── Card actions ── */
-.card-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 0.375rem;
-  flex-shrink: 0;
-}
-
-.action-btn {
+.report-icon {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
-  padding: 0;
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  background: transparent;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-muted);
+  color: var(--color-text-secondary);
+}
+.report-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.report-name {
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-strong);
+}
+.report-meta {
+  font-size: var(--text-xs);
   color: var(--color-text-muted);
-  cursor: pointer;
-  transition: all 0.15s;
 }
-
-.action-btn:hover {
-  background: var(--color-table-row-hover);
-  color: var(--color-text);
-  border-color: var(--color-text-muted);
-}
-
-.action-btn:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-}
-
-.action-btn--download:hover {
-  color: #166534;
-  border-color: #bbf7d0;
-  background: #f0fdf4;
-}
-
-html.dark .action-btn--download:hover {
-  color: #4ade80;
-  border-color: rgba(74, 222, 128, 0.3);
-  background: rgba(74, 222, 128, 0.1);
-}
-
-.action-btn--refresh:hover:not(:disabled) {
-  color: #2563eb;
-  border-color: #bfdbfe;
-  background: #eff6ff;
-}
-
-html.dark .action-btn--refresh:hover:not(:disabled) {
-  color: #4ade80;
-  border-color: rgba(74, 222, 128, 0.3);
-  background: rgba(74, 222, 128, 0.1);
-}
-
-.spinner-sm {
-  width: 14px;
-  height: 14px;
-  border: 2px solid var(--color-border);
-  border-top-color: #2563eb;
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-
-/* ── Buttons ── */
-.btn-confirm {
+.row-actions {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  padding: 0.5rem 1rem;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: #fff;
-  background: #166534;
-  border: none;
-  border-radius: 10px;
-  cursor: pointer;
-  text-decoration: none;
-  transition: background 0.15s, transform 0.15s;
+  justify-content: flex-end;
+  gap: var(--space-1);
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
 }
 
-.btn-confirm:hover {
-  background: #15803d;
-  transform: translateY(-1px);
-}
-
-/* ── Empty state ── */
-.empty-card {
-  display: flex;
-  flex-direction: column;
+.link-btn {
+  display: inline-flex;
   align-items: center;
-  padding: 3rem 1.5rem;
-  background: var(--color-bg-card);
-  border: 1px dashed var(--color-border);
-  border-radius: 14px;
-  text-align: center;
+  height: var(--control-h);
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-sm);
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  text-decoration: none;
 }
-
-.empty-icon {
-  color: var(--color-text-muted);
-  margin-bottom: 1rem;
-  opacity: 0.5;
-}
-
-.empty-text {
-  font-size: 1rem;
-  font-weight: 600;
-  color: var(--color-text);
-  margin: 0 0 0.25rem;
-}
-
-.empty-hint {
-  font-size: 0.8125rem;
-  color: var(--color-text-muted);
-  margin: 0;
-  line-height: 1.5;
-  max-width: 400px;
-}
-
-/* ── Loading / Error ── */
-.loading-state,
-.empty-state {
-  text-align: center;
-  padding: 3rem;
-  color: var(--color-text-muted);
-}
+.link-btn:hover { background: var(--color-primary-hover); }
 
 .spinner {
-  width: 36px;
-  height: 36px;
+  display: block;
+  width: 28px;
+  height: 28px;
   border: 3px solid var(--color-border);
-  border-top-color: #166534;
-  border-radius: 50%;
+  border-top-color: var(--color-primary);
+  border-radius: var(--radius-full);
   animation: spin 0.8s linear infinite;
-  margin: 0 auto 1rem;
 }
+@keyframes spin { to { transform: rotate(360deg); } }
 
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-.global-error {
-  padding: 0.625rem 1rem;
-  background: #fef2f2;
-  color: #dc2626;
-  border-radius: 10px;
-  font-size: 0.8125rem;
-  margin-bottom: 1rem;
-}
-
-html.dark .global-error {
-  background: rgba(220, 38, 38, 0.1);
-  color: #f87171;
-}
-
-.link {
-  color: #166534;
-  font-weight: 600;
-}
-
-/* ── PDF Preview modal ── */
+/* ── Pré-visualização ── */
 .pdf-preview-backdrop {
   position: fixed;
   inset: 0;
@@ -854,55 +656,46 @@ html.dark .global-error {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 1rem;
-  background: rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(2px);
+  padding: var(--space-4);
+  background: var(--color-modal-overlay);
+  backdrop-filter: blur(4px);
 }
-
 .pdf-preview-dialog {
   display: flex;
   flex-direction: column;
   width: min(960px, 100%);
   height: min(88vh, 900px);
   max-height: 100%;
-  background: var(--color-bg-card);
+  background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: 14px;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
   overflow: hidden;
 }
-
 .pdf-preview-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0.875rem 1.25rem;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4) var(--space-3) var(--space-5);
   border-bottom: 1px solid var(--color-border);
   flex-shrink: 0;
 }
-
 .pdf-preview-title {
   margin: 0;
-  font-size: 0.9375rem;
-  font-weight: 600;
-  color: var(--color-text);
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-strong);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
 .pdf-preview-body {
   position: relative;
   flex: 1;
   min-height: 0;
-  background: var(--color-bg-muted, #f5f5f5);
+  background: var(--color-surface-muted);
 }
-
-html.dark .pdf-preview-body {
-  background: #1a1a1a;
-}
-
 .pdf-preview-iframe {
   display: block;
   width: 100%;
@@ -910,20 +703,20 @@ html.dark .pdf-preview-body {
   min-height: 400px;
   border: none;
 }
-
 .preview-inline-loading {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 0.75rem;
+  gap: var(--space-3);
   height: 100%;
   min-height: 280px;
+  font-size: var(--text-sm);
   color: var(--color-text-muted);
 }
+.preview-inline-loading p { margin: 0; }
 
-/* ── Placeholder cards (locked state) ── */
-/* ── Generating overlay ── */
+/* ── A gerar ── */
 .generating-overlay {
   position: fixed;
   inset: 0;
@@ -931,57 +724,120 @@ html.dark .pdf-preview-body {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.5);
+  padding: var(--space-4);
+  background: var(--color-modal-overlay);
   backdrop-filter: blur(4px);
 }
-
 .generating-panel {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.75rem;
+  gap: var(--space-3);
   max-width: 340px;
-  padding: 2.5rem 2rem;
-  background: var(--color-bg-card);
+  padding: var(--space-8) var(--space-6);
+  background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: 16px;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
   text-align: center;
 }
-
 .generating-title {
   margin: 0;
-  font-size: 1rem;
-  font-weight: 700;
-  color: var(--color-text);
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-strong);
 }
-
 .generating-hint {
   margin: 0;
-  font-size: 0.8125rem;
+  font-size: var(--text-sm);
   color: var(--color-text-muted);
   line-height: 1.5;
 }
 
-/* ── Responsive ── */
-@media (max-width: 600px) {
-  .page-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0.75rem;
-  }
+/* ── Responsivo ── */
+@media (max-width: 640px) {
+  .reports-card-head { padding: var(--space-4); }
+  .reports-filters { width: 100%; }
+  .filter-select { flex: 1; width: auto; min-width: 0; }
+  .reports-table th:first-child,
+  .reports-table td:first-child { padding-left: var(--space-4); }
+  .reports-table th:last-child,
+  .reports-table td:last-child { padding-right: var(--space-4); }
+  .col-status { display: none; }
+  .report-icon { display: none; }
+}
 
-  .stat-cards {
-    grid-template-columns: 1fr;
-  }
+/* ── Seleção múltipla ── */
+.col-check {
+  width: 44px;
+}
+.row-check {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  cursor: pointer;
+  accent-color: var(--color-primary);
+}
+.reports-table tr.is-selected td {
+  background: var(--color-surface-hover);
+}
+.selection-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin: 0 var(--space-5) var(--space-3);
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+.selection-count {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-strong);
+}
+.selection-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
 
-  .reports-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .reports-toolbar {
-    flex-direction: column;
-    align-items: flex-start;
+/* ── Ações da linha: ícones sempre visíveis ── */
+.icon-action {
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
+}
+.icon-action svg {
+  width: 17px;
+  height: 17px;
+}
+.icon-action:hover:not(:disabled) {
+  background: var(--color-surface-muted);
+  color: var(--color-text-strong);
+}
+.icon-action:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+.icon-action:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.icon-action .spinning {
+  animation: report-spin 0.9s linear infinite;
+}
+@keyframes report-spin {
+  to {
+    transform: rotate(360deg);
   }
 }
 </style>

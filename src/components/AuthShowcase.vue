@@ -34,8 +34,8 @@ const points: DailyBalancePoint[] = [
 ]
 
 const categories = [
-  { name: 'Dinheiro e poupanças', value: '9.850,00 €', percent: '79,11% do total' },
-  { name: 'Ações e fundos', value: '2.100,80 €', percent: '16,87% do total' },
+  { name: 'Dinheiro e poupanças', value: '9 850,00 €', percent: '79,11% do total' },
+  { name: 'Ações e fundos', value: '2 100,80 €', percent: '16,87% do total' },
   { name: 'Outros', value: '500,00 €', percent: '4,02% do total' },
 ]
 </script>
@@ -59,7 +59,7 @@ const categories = [
         <div class="dash-mock-body">
           <div class="dm-hero">
             <p class="dm-label">Património Total</p>
-            <p class="dm-value">12.450,80 €</p>
+            <p class="dm-value">12 450,80 €</p>
             <p class="dm-trend">▲ 3,2% este mês</p>
           </div>
           <div class="dm-chart">
@@ -88,7 +88,7 @@ const categories = [
   align-items: flex-start;
   justify-content: center;
   overflow: hidden;
-  background: linear-gradient(150deg, #166534 0%, #15803d 55%, #14532d 100%);
+  background: linear-gradient(150deg, #075E46 0%, #0A7A5B 55%, #054A37 100%);
   padding: 5rem 2rem 3rem;
 }
 
@@ -131,8 +131,8 @@ const categories = [
 
 /* ── Cartão Património ── */
 .dash-mock {
-  background: #ffffff;
-  border-radius: 16px;
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
   box-shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.45), 0 8px 24px -12px rgba(0, 0, 0, 0.3);
   overflow: hidden;
 }
@@ -142,15 +142,15 @@ const categories = [
   align-items: center;
   gap: 0.4rem;
   padding: 0.75rem 1rem;
-  background: #f1f5f9;
-  border-bottom: 1px solid #e2e8f0;
+  background: var(--color-surface-muted);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .dash-mock-chrome .dot {
   width: 0.6rem;
   height: 0.6rem;
   border-radius: 50%;
-  background: #cbd5e1;
+  background: var(--color-border-strong);
 }
 
 .dash-mock-periods {
@@ -162,14 +162,14 @@ const categories = [
 .dmp {
   font-size: 0.625rem;
   font-weight: 700;
-  color: #94a3b8;
+  color: var(--color-text-subtle);
   padding: 0.125rem 0.4375rem;
   border-radius: 6px;
 }
 
 .dmp--active {
-  color: #166534;
-  background: rgba(22, 101, 52, 0.1);
+  color: var(--color-primary-text);
+  background: var(--color-primary-soft);
 }
 
 .dash-mock-body {
@@ -186,7 +186,7 @@ const categories = [
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: #94a3b8;
+  color: var(--color-text-subtle);
 }
 
 .dm-value {
@@ -194,14 +194,14 @@ const categories = [
   font-size: 1.875rem;
   font-weight: 800;
   letter-spacing: -0.03em;
-  color: #0f172a;
+  color: var(--color-text-strong);
 }
 
 .dm-trend {
   margin: 0;
   font-size: 0.8125rem;
   font-weight: 600;
-  color: #16a34a;
+  color: var(--color-success);
 }
 
 .dm-chart {
@@ -223,13 +223,14 @@ const categories = [
   align-items: center;
   justify-content: space-between;
   padding: 0.625rem 0.75rem;
-  background: #f8fafc;
-  border-radius: 10px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
   font-size: 0.8125rem;
 }
 
 .dm-row-name {
-  color: #475569;
+  color: var(--color-text-secondary);
   font-weight: 500;
 }
 
@@ -241,55 +242,14 @@ const categories = [
 }
 
 .dm-row-value {
-  color: #0f172a;
+  color: var(--color-text-strong);
   font-weight: 700;
 }
 
 .dm-row-percent {
   font-size: 0.6875rem;
-  color: #94a3b8;
+  color: var(--color-text-subtle);
   font-weight: 500;
-}
-
-/* ── Dark mode: cartão preto neutro como no dashboard real ── */
-html.dark .dash-mock {
-  background: #161616;
-  box-shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.7);
-}
-
-html.dark .dash-mock-chrome {
-  background: #1f1f1f;
-  border-bottom-color: #2a2a2a;
-}
-
-html.dark .dash-mock-chrome .dot {
-  background: #3a3a3a;
-}
-
-html.dark .dmp--active {
-  color: #4ade80;
-  background: rgba(74, 222, 128, 0.14);
-}
-
-html.dark .dm-value,
-html.dark .dm-row-value {
-  color: #ffffff;
-}
-
-html.dark .dm-trend {
-  color: #4ade80;
-}
-
-html.dark .dm-row {
-  background: #1f1f1f;
-}
-
-html.dark .dm-row-name {
-  color: #a3a3a3;
-}
-
-html.dark .dm-row-percent {
-  color: #737373;
 }
 
 /* Esconder o painel em ecrãs estreitos (form ocupa tudo) */

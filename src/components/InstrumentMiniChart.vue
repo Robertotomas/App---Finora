@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import { PT_GROUPING } from '@/utils/numberFormat'
+import { ref, computed, watch, onMounted } from 'vue'
 import { Line } from 'vue-chartjs'
 import {
   Chart as ChartJS,
@@ -11,6 +12,8 @@ import {
   Filler,
 } from 'chart.js'
 import { investmentsApi } from '@/api/investments'
+import { chartColors, baseTooltip, heroYScale, lineDataset, crosshairPlugin, formatChartDate } from './charts/chartTheme'
+import { useChartTheme } from './charts/useChartTheme'
 import type { InstrumentPricePoint } from '@/types/investment'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Filler)
@@ -34,17 +37,10 @@ const loading = ref(false)
 const points = ref<InstrumentPricePoint[]>([])
 let reqSeq = 0
 
-const isDark = ref(document.documentElement.classList.contains('dark'))
-let observer: MutationObserver | null = null
+const { isDark } = useChartTheme()
+const plugins = [crosshairPlugin]
 
-onMounted(() => {
-  observer = new MutationObserver(() => {
-    isDark.value = document.documentElement.classList.contains('dark')
-  })
-  observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
-  fetchData()
-})
-onBeforeUnmount(() => observer?.disconnect())
+onMounted(() => fetchData())
 
 function pad(n: number): string {
   return String(n).padStart(2, '0')
@@ -98,12 +94,13 @@ const change = computed(() => {
 })
 
 const lineColor = computed(() => {
-  if (change.value.up) return isDark.value ? '#4ade80' : '#166534'
-  return isDark.value ? '#f87171' : '#dc2626'
+  void isDark.value
+  const c = chartColors()
+  return change.value.up ? c.primary : c.expense
 })
 
 function fmtPrice(v: number): string {
-  return new Intl.NumberFormat('pt-PT', { style: 'currency', currency: props.currency || 'EUR' }).format(v)
+  return new Intl.NumberFormat('pt-PT', { ...PT_GROUPING, style: 'currency', currency: props.currency || 'EUR' }).format(v)
 }
 function fmtPct(pct: number): string {
   return `${pct >= 0 ? '+' : ''}${pct.toFixed(2).replace('.', ',')}%`
@@ -115,70 +112,35 @@ const chartKey = computed(() => `${isDark.value}-${period.value}-${points.value.
 
 const chartData = computed(() => {
   const pts = points.value
-  const color = lineColor.value
   return {
     labels: pts.map((p) => p.date),
     datasets: [
       {
-        label: 'Preço',
-        data: pts.map((p) => p.value),
+        ...lineDataset(lineColor.value, pts.map((p) => p.value), { label: 'Preço', tension: 0.15 }),
         clip: false as const,
-        borderColor: color,
-        borderWidth: 2,
-        backgroundColor: (ctx: { chart: { ctx: CanvasRenderingContext2D; chartArea?: { top: number; bottom: number } } }) => {
-          const chart = ctx.chart
-          if (!chart.chartArea) return 'transparent'
-          const g = chart.ctx.createLinearGradient(0, chart.chartArea.top, 0, chart.chartArea.bottom)
-          const up = change.value.up
-          if (up) {
-            g.addColorStop(0, isDark.value ? 'rgba(74, 222, 128, 0.22)' : 'rgba(22, 101, 52, 0.14)')
-            g.addColorStop(1, isDark.value ? 'rgba(74, 222, 128, 0.01)' : 'rgba(22, 101, 52, 0.01)')
-          } else {
-            g.addColorStop(0, isDark.value ? 'rgba(248, 113, 113, 0.22)' : 'rgba(220, 38, 38, 0.12)')
-            g.addColorStop(1, isDark.value ? 'rgba(248, 113, 113, 0.01)' : 'rgba(220, 38, 38, 0.01)')
-          }
-          return g
-        },
-        fill: true,
-        tension: 0.18,
-        pointRadius: 0,
-        pointHoverRadius: 5,
-        pointHoverBackgroundColor: color,
-        pointHoverBorderColor: isDark.value ? '#0a0a0a' : '#fff',
-        pointHoverBorderWidth: 2,
       },
     ],
   }
 })
 
 const chartOptions = computed(() => {
-  const dark = isDark.value
+  void isDark.value
   const pts = points.value
+  const y = heroYScale('8%')
   return {
     responsive: true,
     maintainAspectRatio: false,
-    layout: { padding: { top: 12, right: 6, left: 2, bottom: 0 } },
+    animation: { duration: 300 },
+    layout: { padding: { top: 8, right: 6, left: 2, bottom: 0 } },
     interaction: { mode: 'index' as const, intersect: false },
     plugins: {
       legend: { display: false },
       tooltip: {
-        backgroundColor: dark ? '#161616' : '#fff',
-        titleColor: dark ? '#d4d4d4' : '#334155',
-        bodyColor: dark ? '#fafafa' : '#0f172a',
-        borderColor: dark ? '#2a2a2a' : '#e2e8f0',
-        borderWidth: 1,
-        padding: 10,
-        cornerRadius: 8,
-        titleFont: { size: 11, weight: 'normal' as const },
-        bodyFont: { size: 12, weight: 'bold' as const },
-        displayColors: false,
+        ...baseTooltip(),
         callbacks: {
           title: (items: { dataIndex: number }[]) => {
             if (items.length === 0) return ''
-            const ds = pts[items[0].dataIndex]?.date
-            if (!ds) return ''
-            const d = new Date(ds + 'T00:00:00')
-            return d.toLocaleDateString('pt-PT', { day: 'numeric', month: 'short', year: 'numeric' })
+            return formatChartDate(pts[items[0].dataIndex]?.date ?? '')
           },
           label: (ctx: { raw: unknown }) => fmtPrice(Number(ctx.raw)),
         },
@@ -186,7 +148,7 @@ const chartOptions = computed(() => {
     },
     scales: {
       x: { display: false, grid: { display: false } },
-      y: { display: false, grace: '8%' },
+      y: { ...y, grid: { ...y.grid, display: true } },
     },
   }
 })
@@ -226,7 +188,7 @@ const chartOptions = computed(() => {
       <div v-else-if="!hasData" class="mini-state">
         <span class="mini-empty">Sem cotações para este período</span>
       </div>
-      <Line v-else :key="chartKey" :data="chartData" :options="chartOptions" />
+      <Line v-else :key="chartKey" :data="chartData" :options="chartOptions" :plugins="plugins" />
     </div>
   </div>
 </template>
@@ -234,87 +196,79 @@ const chartOptions = computed(() => {
 <style scoped>
 .mini {
   border: 1px solid var(--color-border);
-  border-radius: 10px;
-  padding: 0.75rem 0.875rem 0.5rem;
-  background: var(--color-bg-card);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-3) var(--space-2);
+  background: var(--color-surface);
 }
 
 .mini-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.5rem;
+  gap: var(--space-2);
   flex-wrap: wrap;
 }
 
 .mini-meta {
   display: flex;
   align-items: baseline;
-  gap: 0.5rem;
+  gap: var(--space-2);
   min-height: 1.25rem;
 }
 
 .mini-price {
-  font-size: 0.9375rem;
-  font-weight: 700;
-  color: var(--color-text);
+  font-size: var(--text-md);
+  font-weight: var(--weight-bold);
+  color: var(--color-text-strong);
+  font-variant-numeric: tabular-nums;
 }
 
 .mini-change {
-  font-size: 0.75rem;
-  font-weight: 700;
-  color: #166534;
-}
-
-html.dark .mini-change {
-  color: #4ade80;
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  color: var(--color-primary-text);
+  font-variant-numeric: tabular-nums;
 }
 
 .mini-change.neg {
-  color: #dc2626;
-}
-
-html.dark .mini-change.neg {
-  color: #f87171;
+  color: var(--color-danger);
 }
 
 .mini-chips {
   display: flex;
-  gap: 0.2rem;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-muted);
 }
 
 .mini-chip {
-  padding: 0.2rem 0.45rem;
-  font-size: 0.6875rem;
-  font-weight: 600;
+  padding: 3px 8px;
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
   font-family: inherit;
-  border: 1px solid transparent;
+  border: none;
   border-radius: 6px;
   background: transparent;
   color: var(--color-text-muted);
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  transition: background var(--transition-fast), color var(--transition-fast);
 }
 
 .mini-chip:hover {
   color: var(--color-text);
-  background: var(--color-table-row-hover);
 }
 
 .mini-chip.active {
-  color: #166534;
-  background: rgba(22, 101, 52, 0.1);
-}
-
-html.dark .mini-chip.active {
-  color: #4ade80;
-  background: rgba(74, 222, 128, 0.12);
+  color: var(--color-text-strong);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-xs);
 }
 
 .mini-body {
   height: 130px;
   position: relative;
-  margin-top: 0.25rem;
+  margin-top: var(--space-2);
 }
 
 .mini-state {
@@ -325,15 +279,15 @@ html.dark .mini-chip.active {
 }
 
 .mini-empty {
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   color: var(--color-text-muted);
 }
 
 .mini-spinner {
-  width: 22px;
-  height: 22px;
-  border: 2.5px solid var(--color-border);
-  border-top-color: #166534;
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--color-border);
+  border-top-color: var(--color-primary-text);
   border-radius: 50%;
   animation: mini-spin 0.7s linear infinite;
 }

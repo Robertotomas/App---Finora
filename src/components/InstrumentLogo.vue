@@ -48,7 +48,7 @@ function onError() {
 
 const initials = computed(() => (props.symbol || '?').slice(0, 2).toUpperCase())
 const bg = computed(() => {
-  const palette = ['#166534', '#2563eb', '#db2777', '#ca8a04', '#0891b2', '#7c3aed', '#dc2626', '#0d9488']
+  const palette = ['#075E46', '#2563eb', '#db2777', '#ca8a04', '#0891b2', '#7c3aed', '#dc2626', '#0d9488']
   let h = 0
   for (const ch of props.symbol || '') h = (h * 31 + ch.charCodeAt(0)) >>> 0
   return palette[h % palette.length]
@@ -61,7 +61,7 @@ watch(
 </script>
 
 <template>
-  <span class="inst-logo" :style="{ width: size + 'px', height: size + 'px' }">
+  <span class="inst-logo" :style="{ width: size + 'px', height: size + 'px', borderRadius: Math.round(size * 0.26) + 'px' }">
     <img
       v-if="showImg"
       :key="currentSrc"
@@ -80,20 +80,29 @@ watch(
 
 <style scoped>
 .inst-logo {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  border-radius: 9px;
   overflow: hidden;
-  background: var(--color-table-row-hover);
+  background: var(--color-surface-muted);
+}
+
+/* contorno subtil por cima da imagem (logos brancos não se perdem no cartão) */
+.inst-logo::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px var(--color-border-subtle);
+  pointer-events: none;
 }
 
 .inst-logo img {
   width: 100%;
   height: 100%;
   object-fit: contain;
-  border-radius: 9px;
 }
 
 .inst-logo-fallback {
@@ -102,8 +111,8 @@ watch(
   justify-content: center;
   width: 100%;
   height: 100%;
-  color: #fff;
-  font-weight: 700;
+  color: #fff; /* sobre a cor de dados do fallback */
+  font-weight: var(--weight-bold);
   letter-spacing: -0.02em;
 }
 </style>

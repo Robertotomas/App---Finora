@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import PageSkeleton from '@/components/PageSkeleton.vue'
+import { PT_GROUPING } from '@/utils/numberFormat'
 import { onMounted, onUnmounted, computed, ref, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import type { ExpenseByCategory, IncomeByCategory, MonthlyTrend } from '@/types/dashboard'
@@ -27,15 +29,23 @@ function accountTypeLabel(type: number): string {
 import ExpensesPieChart from '@/components/charts/ExpensesPieChart.vue'
 import IncomePieChart from '@/components/charts/IncomePieChart.vue'
 import MonthlyLineChart from '@/components/charts/MonthlyLineChart.vue'
-import NetWorthChart from '@/components/charts/NetWorthChart.vue'
+import ValueHeroCard from '@/components/charts/ValueHeroCard.vue'
+import HeroStat from '@/components/charts/HeroStat.vue'
 import IncomeVsExpensesBarChart from '@/components/charts/IncomeVsExpensesBarChart.vue'
-import AssetsChart from '@/components/charts/AssetsChart.vue'
 import type { AssetChartPoint } from '@/components/charts/AssetsChart.vue'
 import PlanUpsellModal from '@/components/PlanUpsellModal.vue'
 import BrandLogo from '@/components/BrandLogo.vue'
 import InstrumentLogo from '@/components/InstrumentLogo.vue'
 import { investmentsApi } from '@/api/investments'
 import { filterDeposits, mergeRows } from '@/utils/depositRows'
+import PageHeader from '@/components/ui/PageHeader.vue'
+import UiButton from '@/components/ui/UiButton.vue'
+import UiCard from '@/components/ui/UiCard.vue'
+import SegmentedControl from '@/components/ui/SegmentedControl.vue'
+import EmptyState from '@/components/ui/EmptyState.vue'
+import { useAuthStore } from '@/stores/auth'
+import { useThemeStore } from '@/stores/theme'
+import { seriesColors } from '@/components/charts/chartTheme'
 
 const router = useRouter()
 const householdStore = useHouseholdStore()
@@ -44,6 +54,8 @@ const assetsStore = useAssetsStore()
 const investmentsStore = useInvestmentsStore()
 const subscriptionStore = useSubscriptionStore()
 const transactionsStore = useTransactionsStore()
+const authStore = useAuthStore()
+const themeStore = useThemeStore()
 const dashboard = useDashboard()
 const budget = useMonthlyBudget()
 const mounted = ref(false)
@@ -367,7 +379,7 @@ function onDashDatePickerOutsideClick(e: MouseEvent) {
 onMounted(() => document.addEventListener('click', onDashDatePickerOutsideClick, true))
 onUnmounted(() => document.removeEventListener('click', onDashDatePickerOutsideClick, true))
 
-onMounted(async () => {
+async function loadDashboard() {
   try {
     const timeout = (ms: number) =>
       new Promise<never>((_, reject) =>
@@ -400,22 +412,39 @@ onMounted(async () => {
     ])
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Erro desconhecido'
-    if (msg === 'Timeout') {
-      loadError.value = 'O pedido demorou demasiado. Verifique se a API está a correr em http://localhost:5000'
-    } else {
-      const dashErr = dashboard.error.value
-      const houseErr = householdStore.error && typeof householdStore.error === 'object' && 'value' in householdStore.error
-        ? (householdStore.error as { value: string }).value
-        : ''
-      loadError.value = dashErr || houseErr || 'Erro ao carregar o dashboard.'
-    }
+    if (isDev) console.error('[Dashboard] falha ao carregar', msg, dashboard.error.value, householdStore.error)
+    loadError.value = msg === 'Timeout'
+      ? 'O servidor está a demorar mais do que o habitual a responder.'
+      : 'Não foi possível carregar os seus dados neste momento.'
   } finally {
     mounted.value = true
   }
+}
+
+onMounted(loadDashboard)
+
+const retrying = ref(false)
+async function retryLoad() {
+  retrying.value = true
+  loadError.value = null
+  mounted.value = false
+  try {
+    await loadDashboard()
+  } finally {
+    retrying.value = false
+  }
+}
+
+/* ── Cabeçalho: saudação (é o título da página) ── */
+const greeting = computed(() => {
+  const h = new Date().getHours()
+  const hello = h < 6 ? 'Boa noite' : h < 13 ? 'Bom dia' : h < 20 ? 'Boa tarde' : 'Boa noite'
+  const first = (authStore.user?.firstName ?? '').trim()
+  return first ? `${hello}, ${first}` : hello
 })
 
 function formatCurrency(value: number, currency: string): string {
-  return new Intl.NumberFormat('pt-PT', {
+  return new Intl.NumberFormat('pt-PT', { ...PT_GROUPING,
     style: 'currency',
     currency: currency || 'EUR',
     minimumFractionDigits: 2,
@@ -546,51 +575,38 @@ const dailyAverage = computed(() => {
   }
 })
 
-/* ── Património Total: account category groups ── */
-const accountCategoryGroups = computed(() => {
-  const accs = accountsToShow.value
-  const assetsTotal = assetsStore.totalCurrentValue
-  const investmentsTotal = investmentsStore.patrimonyValueEur
-  const total = accs.reduce((s, a) => s + Math.abs(a.balance), 0) + Math.abs(assetsTotal) + Math.abs(investmentsTotal)
-
-  const groups = [
-    {
-      label: 'Dinheiro e poupanças',
-      types: [AccountType.Bank, AccountType.Cash, AccountType.Savings],
-      sum: 0,
-    },
-    {
-      label: 'Ações e fundos',
-      types: [AccountType.Investment],
-      sum: 0,
-    },
-    {
-      label: 'Outros',
-      types: [AccountType.CreditCard, AccountType.Other],
-      sum: 0,
-    },
-  ]
-
-  for (const acc of accs) {
-    const g = groups.find((g) => g.types.includes(acc.type as AccountType))
-    if (g) g.sum += acc.balance
-    else groups[2].sum += acc.balance
+/* ── Património Total: repartição do rodapé do hero (Dinheiro e poupanças / Investimentos / Bens e valores) ── */
+const heroGroups = computed(() => {
+  let cash = 0
+  let invested = investmentsStore.patrimonyValueEur
+  for (const acc of accountsStore.accounts) {
+    // Contas do tipo investimento ("Ações e fundos") juntam-se aos Investimentos; o resto é dinheiro.
+    if (acc.type === AccountType.Investment) invested += acc.balance
+    else cash += acc.balance
   }
-
-  const rows = groups.map((g) => ({ label: g.label, sum: g.sum }))
-  // Investimentos e Bens e valores entram no Património Total como categorias próprias.
-  if (investmentsTotal !== 0) rows.push({ label: 'Investimentos', sum: investmentsTotal })
-  if (assetsTotal !== 0) rows.push({ label: 'Bens e valores', sum: assetsTotal })
-
-  return rows
-    .map((g) => ({
-      label: g.label,
-      value: g.sum,
-      percent: total > 0 ? (Math.abs(g.sum) / total) * 100 : 0,
-    }))
-    // Esconde categorias a 0 € (ex.: "Ações e fundos"/"Outros" sem saldo) — só aparecem se tiverem valor.
-    .filter((g) => Math.abs(g.value) >= 0.005)
+  const assets = assetsStore.totalCurrentValue
+  const rows = [
+    { label: 'Dinheiro e poupanças', value: cash },
+    { label: 'Investimentos', value: invested },
+    { label: 'Bens e valores', value: assets },
+  ]
+  const total = rows.reduce((sum, r) => sum + Math.abs(r.value), 0)
+  return rows.map((r) => ({ ...r, percent: total > 0 ? (Math.abs(r.value) / total) * 100 : 0 }))
 })
+
+/* Cores das categorias do património (paleta categórica dos gráficos, mesma ordem). */
+const categoryColors = computed(() => {
+  void themeStore.isDark // recalcula ao mudar de tema
+  return seriesColors()
+})
+function categoryColor(i: number): string {
+  const c = categoryColors.value
+  return c[i % c.length]
+}
+
+function formatGroupPct(pct: number): string {
+  return `${pct.toLocaleString('pt-PT', { ...PT_GROUPING, minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`
+}
 
 const totalAllocatedToObjectives = computed(() => objectivesReserved.value)
 
@@ -790,50 +806,27 @@ async function fetchDailyBalance() {
 
 watch(chartPeriod, () => fetchDailyBalance())
 
-const chartHoverPoint = ref<{ date: string; balance: number } | null>(null)
-
-function onChartHover(point: { date: string; balance: number } | null) {
-  chartHoverPoint.value = point
+/* ── Hero do Património: pontos no formato do ValueHeroCard (sem custo → variação simples do valor) ── */
+function localTodayStr(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
-
-const heroDisplayBalance = computed(() => {
-  if (chartHoverPoint.value) return chartHoverPoint.value.balance
-  return currentTotalBalance.value
+const heroPoints = computed<AssetChartPoint[]>(() => {
+  const pts = dailyBalancePoints.value.map((p) => ({ date: p.date, value: p.balance, cost: 0 }))
+  // Último ponto (hoje) ancorado ao total atual → número grande == fim do gráfico.
+  const last = pts[pts.length - 1]
+  if (last && last.date === localTodayStr()) last.value = currentTotalBalance.value
+  return pts
 })
 
-const heroDisplayDate = computed(() => {
-  if (chartHoverPoint.value) {
-    const today = new Date()
-    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
-    if (chartHoverPoint.value.date === todayStr) return 'Hoje'
-    const d = new Date(chartHoverPoint.value.date + 'T00:00:00')
-    return d.toLocaleDateString('pt-PT', { day: 'numeric', month: 'long', year: 'numeric' })
-  }
-  return 'Hoje'
-})
-
-/* ── Variação do património vs. fim do mês anterior ── */
-const monthChange = computed<{ pct: number; positive: boolean } | null>(() => {
-  const pts = dailyBalancePoints.value
-  if (pts.length === 0) return null
-  const now = new Date()
-  // Último dia do mês anterior = dia 0 do mês atual
-  const endPrev = new Date(now.getFullYear(), now.getMonth(), 0)
-  const target = `${endPrev.getFullYear()}-${String(endPrev.getMonth() + 1).padStart(2, '0')}-${String(endPrev.getDate()).padStart(2, '0')}`
-  // Saldo no fim do mês anterior = último ponto (série ascendente) com data <= alvo
-  let prevBalance: number | null = null
-  for (const p of pts) {
-    if (p.date <= target) prevBalance = p.balance
-    else break
-  }
-  if (prevBalance === null || prevBalance === 0) return null
-  const pct = ((currentTotalBalance.value - prevBalance) / Math.abs(prevBalance)) * 100
-  return { pct, positive: pct >= 0 }
-})
-
-function formatPct(pct: number): string {
-  return Math.abs(pct).toFixed(1).replace('.', ',') + '%'
+const HERO_PERIOD_TEXT: Record<ChartPeriod, string> = {
+  YTD: 'este ano',
+  '3M': 'em 3 meses',
+  '6M': 'em 6 meses',
+  '1A': 'em 1 ano',
+  '5A': 'em 5 anos',
 }
+const heroPeriodLabel = computed(() => HERO_PERIOD_TEXT[chartPeriod.value])
 
 /* ── Seletor de período para gráficos de tendência (line + bar) ── */
 type TrendChartPeriod = 'YTD' | '3M' | '6M' | '1A' | '5A'
@@ -913,6 +906,8 @@ const periodUpsellOpen = ref(false)
 function isPeriodLocked(p: string): boolean {
   return subscriptionStore.isFree && (p === '1A' || p === '5A')
 }
+const chartPeriodOptions = computed(() => chartPeriods.map((p) => ({ value: p, label: p, locked: isPeriodLocked(p) })))
+const trendPeriodOptions = computed(() => trendChartPeriods.map((p) => ({ value: p, label: p, locked: isPeriodLocked(p) })))
 function selectChartPeriod(p: ChartPeriod) {
   if (isPeriodLocked(p)) { periodUpsellOpen.value = true; return }
   chartPeriod.value = p
@@ -931,7 +926,6 @@ const invDropdownOpen = ref(false)
 const invDropdownRef = ref<HTMLElement | null>(null)
 const invChartPoints = ref<AssetChartPoint[]>([])
 const invChartLoading = ref(false)
-const invHover = ref<{ date: string; value: number; cost: number } | null>(null)
 let invSeq = 0
 
 const showInvestmentsCard = computed(
@@ -959,7 +953,6 @@ async function loadInvestmentsChart() {
   if (!showInvestmentsCard.value) return
   const seq = ++invSeq
   invChartLoading.value = true
-  invHover.value = null
   try {
     const range = invRangeFor(invPeriod.value)
     const { data } = invSelectedId.value
@@ -981,6 +974,7 @@ function onInvSelect(val: string | null) {
   invSelectedId.value = next
   loadInvestmentsChart()
 }
+const invPeriodOptions = invPeriods.map((p) => ({ value: p, label: p }))
 function selectInvPeriod(p: InvPeriod) {
   if (invPeriod.value === p) return
   invPeriod.value = p
@@ -992,11 +986,16 @@ function onInvDropdownOutsideClick(e: MouseEvent) {
 }
 onMounted(() => document.addEventListener('click', onInvDropdownOutsideClick, true))
 onUnmounted(() => document.removeEventListener('click', onInvDropdownOutsideClick, true))
-function onInvChartHover(p: { date: string; value: number; cost: number } | null) {
-  invHover.value = p
+/** Texto do período na linha de variação do cartão ("+X € (+Y%) em 6 meses"). */
+const INV_PERIOD_LABELS: Record<InvPeriod, string> = {
+  YTD: 'este ano',
+  '3M': 'em 3 meses',
+  '6M': 'em 6 meses',
+  '1A': 'em 1 ano',
+  '5A': 'em 5 anos',
+  Tudo: 'desde o início',
 }
-
-const invShowChart = computed(() => invChartPoints.value.length >= 2)
+const invPeriodLabel = computed(() => INV_PERIOD_LABELS[invPeriod.value])
 
 const invBaseValue = computed(() => {
   const h = invSelectedHolding.value
@@ -1008,21 +1007,6 @@ const invBaseInvested = computed(() => {
   if (h) return h.investedEur
   return investmentsStore.totalInvestedEur
 })
-const invHeroValue = computed(() => invHover.value?.value ?? invBaseValue.value)
-const invHeroInvested = computed(() => invHover.value?.cost ?? invBaseInvested.value)
-const invHeroReturn = computed(() => invHeroValue.value - invHeroInvested.value)
-const invHeroReturnPct = computed(() =>
-  invHeroInvested.value !== 0 ? (invHeroReturn.value / Math.abs(invHeroInvested.value)) * 100 : null,
-)
-const invHeroDate = computed(() => {
-  if (!invHover.value) return 'Hoje'
-  const today = new Date()
-  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
-  if (invHover.value.date === todayStr) return 'Hoje'
-  const d = new Date(invHover.value.date + 'T00:00:00')
-  return d.toLocaleDateString('pt-PT', { day: 'numeric', month: 'long', year: 'numeric' })
-})
-
 const invChartYearTicks = computed(() => {
   const pts = invChartPoints.value
   if (pts.length < 2) return false
@@ -1059,109 +1043,129 @@ const showContent = computed(() =>
     <!-- Overlay loading -->
     <transition name="fade">
       <div v-if="!mounted || (householdStore.loading && !householdStore.household) || (dashboard.loading && !dashboard.data)" class="loading-overlay">
-        <div class="spinner"></div>
-        <p>A carregar...</p>
+        <PageSkeleton variant="dashboard" />
       </div>
     </transition>
 
-    <div v-if="loadError" class="error-state">
-      <p>{{ loadError }}</p>
-      <p class="error-hint">Abra a consola do browser (F12) e o separador Network para verificar os pedidos à API.</p>
-    </div>
+    <PageHeader :title="greeting">
+      <template v-if="showContent" #actions>
+        <template v-if="cardEditMode">
+          <UiButton variant="ghost" size="sm" @click="cancelCardEdit">Cancelar</UiButton>
+          <UiButton variant="primary" size="sm" @click="toggleCardEditMode">
+            <template #icon><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></template>
+            Concluído
+          </UiButton>
+        </template>
+        <UiButton v-else variant="secondary" size="sm" title="Reorganizar cartões" @click="toggleCardEditMode">
+          <template #icon><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg></template>
+          Editar
+        </UiButton>
+      </template>
+    </PageHeader>
 
-    <div v-else-if="!householdStore.household && !householdStore.loading && mounted" class="empty-state">
-      <p>Configure primeiro o seu household.</p>
-      <router-link to="/household" class="link">Ir para Household</router-link>
-    </div>
+    <UiCard v-if="loadError || (dashboard.error.value && mounted && !showContent)" class="state-card">
+      <EmptyState
+        title="Não foi possível carregar a visão geral"
+        :description="loadError || 'Ocorreu um problema ao obter os seus dados. Verifique a ligação e tente novamente.'"
+      >
+        <template #icon>
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/><polyline points="21 3 21 9 15 9"/></svg>
+        </template>
+        <UiButton variant="primary" :loading="retrying" @click="retryLoad">Tentar novamente</UiButton>
+      </EmptyState>
+    </UiCard>
 
-    <div v-else-if="dashboard.error" class="error-state">
-      <p>{{ dashboard.error }}</p>
-    </div>
+    <UiCard v-else-if="!householdStore.household && !householdStore.loading && mounted" class="state-card">
+      <EmptyState
+        title="Configure o seu agregado"
+        description="Para começar a acompanhar as suas finanças, configure primeiro o seu agregado."
+      >
+        <template #icon>
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+        </template>
+        <router-link v-slot="{ navigate }" to="/household" custom>
+          <UiButton variant="primary" @click="navigate">Configurar agregado</UiButton>
+        </router-link>
+      </EmptyState>
+    </UiCard>
 
     <div v-if="showContent" ref="dashboardContentRef" class="dashboard-content">
 
-      <!-- ═══ PATRIMÔNIO TOTAL — Hero Section ═══ -->
-      <div class="patrimonio-hero">
-        <div class="patrimonio-top">
-          <div class="patrimonio-info">
-            <span class="patrimonio-label-row">
-              <span class="patrimonio-label">PATRIMÔNIO TOTAL</span>
-              <span class="card-info card-info--inline card-info--right" tabindex="0" role="button" aria-label="O que inclui o património total?"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="16" y2="12"/><line x1="12" x2="12.01" y1="8" y2="8"/></svg><span class="card-tooltip" role="tooltip">Soma dos saldos atuais de todas as contas. O valor reservado para objetivos está incluído (não é descontado). Investimentos e Bens e Valores serão somados em breve.</span></span>
-              <button class="patrimonio-eye-btn" @click="hideValues = !hideValues" :title="hideValues ? 'Mostrar valores' : 'Esconder valores'">
-                <svg v-if="!hideValues" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>
-                <svg v-else xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/></svg>
-              </button>
-            </span>
-            <p class="patrimonio-value">{{ hideValues ? '••••••' : formatCurrency(heroDisplayBalance, dashboard.currency.value) }}</p>
-            <span
-              v-if="monthChange && !hideValues"
-              class="patrimonio-trend"
-              :class="{ 'patrimonio-trend--down': !monthChange.positive }"
-            >{{ monthChange.positive ? '▲' : '▼' }} {{ formatPct(monthChange.pct) }} este mês</span>
-            <span class="patrimonio-date">{{ heroDisplayDate }}</span>
-            <span v-if="totalAllocatedToObjectives > 0" class="patrimonio-reserved">
-              {{ hideValues ? '•••••' : formatCurrency(totalAllocatedToObjectives, dashboard.currency.value) }} reservado para objetivos
-              <button type="button" class="settle-btn" @click="openSettleModal" title="Liquidar objetivos concluídos">
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="m9 12 2 2 4-4"/></svg>
-              </button>
-            </span>
-          </div>
-          <div class="patrimonio-periods">
-            <button
-              v-for="p in chartPeriods"
-              :key="p"
-              class="patrimonio-period-btn"
-              :class="{ active: chartPeriod === p }"
-              @click="selectChartPeriod(p)"
-            >{{ p }}</button>
-          </div>
-        </div>
-
-        <div class="patrimonio-body">
-          <div class="patrimonio-categories">
-            <div
-              v-for="group in accountCategoryGroups"
-              :key="group.label"
-              class="patrimonio-cat-row"
-            >
-              <span class="patrimonio-cat-name">{{ group.label }}</span>
-              <div class="patrimonio-cat-values">
-                <span class="patrimonio-cat-amount">{{ hideValues ? '••••• €' : formatCurrency(group.value, dashboard.currency.value) }}</span>
-                <span class="patrimonio-cat-percent">{{ group.percent.toFixed(2) }}% do total</span>
-              </div>
-            </div>
-          </div>
-          <div class="patrimonio-chart-area">
-            <div v-if="chartLoading" class="patrimonio-chart-loading">
-              <div class="spinner"></div>
-            </div>
-            <NetWorthChart
-              v-else-if="dailyBalancePoints.length > 0"
-              :points="dailyBalancePoints"
-              :currency="dashboard.currency.value"
-              :hide-values="hideValues"
-              :period="chartPeriod"
-              @hover="onChartHover"
-            />
-            <div v-else class="patrimonio-chart-empty">
-              <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="patrimonio-chart-empty-icon"><line x1="3" x2="3" y1="3" y2="21"/><line x1="3" x2="21" y1="21" y2="21"/><line x1="7" x2="7" y1="17" y2="13"/><line x1="12" x2="12" y1="17" y2="8"/><line x1="17" x2="17" y1="17" y2="11"/></svg>
-              <p>Sem dados de evolução disponíveis para mostrar</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- ═══ STATIC GRID: Contas + Objetivos (dados atuais) ═══ -->
-      <div class="static-grid-header">
-        <template v-if="cardEditMode">
-          <button type="button" class="card-cancel-btn" @click="cancelCardEdit">Cancelar</button>
-          <button type="button" class="card-done-btn" @click="toggleCardEditMode">Concluído</button>
+      <!-- ═══ PATRIMÓNIO TOTAL — Hero ═══ -->
+      <ValueHeroCard
+        title="Património total"
+        :points="heroPoints"
+        :current-value="currentTotalBalance"
+        :current-cost="0"
+        :period-label="heroPeriodLabel"
+        :year-ticks="chartPeriod === '5A'"
+        :loading="chartLoading"
+        :currency="dashboard.currency.value"
+        :hide-values="hideValues"
+      >
+        <template #title-extra>
+          <span class="card-info card-info--inline card-info--right" tabindex="0" role="button" aria-label="O que inclui o património total?"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="16" y2="12"/><line x1="12" x2="12.01" y1="8" y2="8"/></svg><span class="card-tooltip" role="tooltip">Soma dos saldos de todas as contas, dos investimentos (incluindo o dinheiro por investir) e dos bens e valores. O valor reservado para objetivos está incluído (não é descontado).</span></span>
+          <button type="button" class="icon-btn" :title="hideValues ? 'Mostrar valores' : 'Esconder valores'" :aria-label="hideValues ? 'Mostrar valores' : 'Esconder valores'" @click="hideValues = !hideValues">
+            <svg v-if="!hideValues" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>
+            <svg v-else xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/></svg>
+          </button>
         </template>
-        <button v-else type="button" class="card-edit-btn" @click="toggleCardEditMode" title="Reorganizar cards">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
-          <span>Editar</span>
-        </button>
-      </div>
+
+        <template #actions>
+          <SegmentedControl
+            :model-value="chartPeriod"
+            :options="chartPeriodOptions"
+            size="sm"
+            aria-label="Período do gráfico do património"
+            @update:model-value="selectChartPeriod"
+          />
+        </template>
+
+        <template #empty>
+          <EmptyState
+            compact
+            title="Sem dados de evolução"
+            description="A evolução do seu património aparece aqui assim que houver movimentos."
+          >
+            <template #icon>
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="m19 9-5 5-4-4-3 3"/></svg>
+            </template>
+          </EmptyState>
+        </template>
+
+        <template #footer>
+          <div class="hero-alloc">
+            <div class="alloc-bar" aria-hidden="true">
+              <template v-for="(group, i) in heroGroups" :key="group.label">
+                <span
+                  v-if="group.percent > 0"
+                  class="alloc-seg"
+                  :style="{ width: `${group.percent}%`, background: categoryColor(i) }"
+                />
+              </template>
+            </div>
+            <div class="hero-alloc-stats">
+              <HeroStat v-for="(group, i) in heroGroups" :key="group.label" :label="group.label">
+                <span class="alloc-dot" :style="{ background: categoryColor(i) }" aria-hidden="true" />
+                <span>{{ hideValues ? '••••• €' : formatCurrency(group.value, dashboard.currency.value) }}</span>
+                <span class="alloc-pct">{{ formatGroupPct(group.percent) }}</span>
+              </HeroStat>
+              <HeroStat
+                v-if="totalAllocatedToObjectives > 0"
+                label="Reservado para objetivos"
+                hint="Incluído no património total (não é descontado)."
+              >
+                <span>{{ hideValues ? '••••• €' : formatCurrency(totalAllocatedToObjectives, dashboard.currency.value) }}</span>
+                <button type="button" class="icon-btn icon-btn--sm" title="Liquidar objetivos concluídos" aria-label="Liquidar objetivos concluídos" @click="openSettleModal">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="m9 12 2 2 4-4"/></svg>
+                </button>
+              </HeroStat>
+            </div>
+          </div>
+        </template>
+      </ValueHeroCard>
+
+      <!-- ═══ GRELHA ESTÁTICA: Contas + Objetivos + Movimentos (dados atuais) ═══ -->
       <div ref="staticGridRef" class="static-grid" :class="{ editing: cardEditMode }">
         <template v-for="cardId in cardOrder" :key="cardId">
 
@@ -1173,45 +1177,49 @@ const showContent = computed(() =>
           @pointerdown="onCardPointerDown($event, 'accounts')"
         >
           <div class="static-card-header">
-            <h2 class="section-title">Contas bancárias</h2>
+            <h2 class="dash-card-title">Contas bancárias</h2>
             <div class="static-card-header-actions">
               <span v-if="cardEditMode" class="card-drag-handle" title="Arrastar para reordenar">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="5" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="19" r="1"/></svg>
               </span>
-              <router-link v-else :to="{ name: 'contas' }" class="static-card-link" title="Ver todas"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></router-link>
+              <router-link v-else :to="{ name: 'contas' }" class="see-all">
+                Ver tudo
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+              </router-link>
             </div>
           </div>
-          <div v-if="accountsToShow.length > 0" class="accounts-list">
+          <div v-if="accountsToShow.length > 0" class="row-list">
             <router-link
               v-for="account in accountsToShow.slice(0, 4)"
               :key="account.id"
               :to="{ name: 'contas' }"
-              class="account-row"
+              class="row"
             >
-              <div class="account-row-info">
-                <BrandLogo :name="account.name" :domain="account.logoDomain" :size="30" class="account-row-logo">
-                  <template #fallback>
-                    <span class="account-row-fallback" aria-hidden="true">
-                      <svg v-if="isCreditCard(account.type)" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
-                      <svg v-else xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" x2="21" y1="22" y2="22"/><line x1="6" x2="6" y1="18" y2="11"/><line x1="10" x2="10" y1="18" y2="11"/><line x1="14" x2="14" y1="18" y2="11"/><line x1="18" x2="18" y1="18" y2="11"/><polygon points="12 2 20 7 4 7"/></svg>
-                    </span>
-                  </template>
-                </BrandLogo>
-                <div>
-                  <p class="account-row-name">{{ account.name }}</p>
-                  <span class="account-row-type">{{ accountTypeLabel(account.type) }}</span>
-                </div>
-              </div>
-              <span class="account-row-balance" :class="{ negative: !hideValues && account.balance < 0 }">
+              <BrandLogo :name="account.name" :domain="account.logoDomain" :size="36" class="row-logo">
+                <template #fallback>
+                  <span class="row-icon" aria-hidden="true">
+                    <svg v-if="isCreditCard(account.type)" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
+                    <svg v-else xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" x2="21" y1="22" y2="22"/><line x1="6" x2="6" y1="18" y2="11"/><line x1="10" x2="10" y1="18" y2="11"/><line x1="14" x2="14" y1="18" y2="11"/><line x1="18" x2="18" y1="18" y2="11"/><polygon points="12 2 20 7 4 7"/></svg>
+                  </span>
+                </template>
+              </BrandLogo>
+              <span class="row-text">
+                <span class="row-name">{{ account.name }}</span>
+                <span class="row-sub">{{ accountTypeLabel(account.type) }}</span>
+              </span>
+              <span class="row-amount ui-amount" :class="{ 'ui-amount--neg': !hideValues && account.balance < 0 }">
                 {{ hideValues ? '••••• €' : formatCurrency(account.balance, account.currency) }}
               </span>
             </router-link>
           </div>
-          <div v-else class="static-card-empty">
-            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="static-card-empty-icon"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 10h20"/><circle cx="17" cy="15" r="1.5"/></svg>
-            <p>Veja o saldo das suas contas num só lugar</p>
-            <router-link to="/accounts?action=new" class="static-card-action">Adicionar</router-link>
-          </div>
+          <EmptyState v-else compact title="Sem contas" description="Veja o saldo das suas contas num só lugar.">
+            <template #icon>
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 10h20"/><circle cx="17" cy="15" r="1.5"/></svg>
+            </template>
+            <router-link v-slot="{ navigate }" to="/accounts?action=new" custom>
+              <UiButton variant="secondary" size="sm" @click="navigate">Adicionar conta</UiButton>
+            </router-link>
+          </EmptyState>
         </div>
 
         <!-- Card: Objetivos -->
@@ -1222,26 +1230,29 @@ const showContent = computed(() =>
           @pointerdown="onCardPointerDown($event, 'objectives')"
         >
           <div class="static-card-header">
-            <h2 class="section-title">Objetivos de poupança</h2>
+            <h2 class="dash-card-title">Objetivos de poupança</h2>
             <div class="static-card-header-actions">
               <span v-if="cardEditMode" class="card-drag-handle" title="Arrastar para reordenar">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="5" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="19" r="1"/></svg>
               </span>
-              <router-link v-else :to="{ name: 'objetivos' }" class="static-card-link" title="Ver todos"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></router-link>
+              <router-link v-else :to="{ name: 'objetivos' }" class="see-all">
+                Ver tudo
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+              </router-link>
             </div>
           </div>
           <div
-            class="dashboard-objectives-body-wrap"
-            :class="{
-              'dashboard-objectives-body-wrap--locked':
-                !subscriptionStore.canAccessObjectives && objectivesPreview.length > 0,
-            }"
+            class="objectives-wrap"
+            :class="{ 'objectives-wrap--locked': !subscriptionStore.canAccessObjectives && objectivesPreview.length > 0 }"
           >
-            <div class="dashboard-objectives-body-inner">
-              <div v-if="objectivesLoading" class="objectives-preview-skeleton">
-                <span class="objectives-preview-loading">A carregar objetivos…</span>
+            <div class="objectives-inner">
+              <div v-if="objectivesLoading" class="objectives-loading">
+                <div v-for="i in 3" :key="i" class="objectives-loading-row">
+                  <span class="sk-bar sk-bar--w60" />
+                  <span class="sk-bar sk-bar--track" />
+                </div>
               </div>
-              <div v-else-if="objectivesPreview.length > 0" class="objectives-preview-block">
+              <div v-else-if="objectivesPreview.length > 0" class="objectives-block">
                 <div class="objectives-list">
                   <router-link
                     v-for="goal in objectivesPreview"
@@ -1250,44 +1261,56 @@ const showContent = computed(() =>
                     class="objective-row"
                   >
                     <div class="objective-row-top">
-                      <span class="objective-row-name">{{ goal.name }}</span>
-                      <span class="objective-row-amounts">
-                        {{ hideValues ? '••••• / •••••' : `${formatCurrency(goal.allocatedAmount, dashboard.currency.value)} / ${formatCurrency(goal.targetAmount, dashboard.currency.value)}` }}
-                      </span>
+                      <span class="row-name">{{ goal.name }}</span>
+                      <span class="objective-pct">{{ goal.progressPercent.toFixed(0) }}%</span>
                     </div>
-                    <div class="objective-preview-track" role="progressbar" :aria-valuenow="goal.progressPercent" aria-valuemin="0" aria-valuemax="100">
-                      <div class="objective-preview-fill" :style="{ width: `${Math.min(100, goal.progressPercent)}%` }" />
+                    <div class="objective-track" role="progressbar" :aria-valuenow="goal.progressPercent" aria-valuemin="0" aria-valuemax="100">
+                      <div class="objective-fill" :style="{ width: `${Math.min(100, goal.progressPercent)}%` }" />
                     </div>
-                    <p class="objective-preview-meta">
-                      <span>{{ goal.progressPercent.toFixed(0) }}%</span>
-                      <span v-if="goal.targetDate" class="objective-preview-date"> · Meta {{ formatObjectiveDate(goal.targetDate) }}</span>
+                    <p class="objective-meta">
+                      <span class="objective-amounts">{{ hideValues ? '••••• / •••••' : `${formatCurrency(goal.allocatedAmount, dashboard.currency.value)} de ${formatCurrency(goal.targetAmount, dashboard.currency.value)}` }}</span>
+                      <span v-if="goal.targetDate">Meta {{ formatObjectiveDate(goal.targetDate) }}</span>
                     </p>
                   </router-link>
                 </div>
-                <div class="objectives-footer">
-                  <p v-if="objectivesMoreCount > 0" class="objectives-more-count">
+                <div v-if="objectivesMoreCount > 0 || objectivesCompletedCount > 0" class="objectives-footer">
+                  <span v-if="objectivesMoreCount > 0" class="objectives-more">
                     +{{ objectivesMoreCount }} {{ objectivesMoreCount === 1 ? 'objetivo ativo' : 'objetivos ativos' }}
-                  </p>
-                  <p v-if="objectivesCompletedCount > 0" class="objectives-completed-badge">
+                  </span>
+                  <span v-if="objectivesCompletedCount > 0" class="ui-badge ui-badge--brand">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
                     {{ objectivesCompletedCount }} {{ objectivesCompletedCount === 1 ? 'concluído' : 'concluídos' }}
-                  </p>
+                  </span>
                 </div>
               </div>
-              <div v-else-if="objectivesLoaded" class="static-card-empty">
-                <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="static-card-empty-icon"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/><line x1="22" x2="12" y1="2" y2="12"/></svg>
-                <p>Defina objetivos de poupança para acompanhar o seu progresso</p>
+              <EmptyState
+                v-else-if="objectivesLoaded"
+                compact
+                title="Sem objetivos ativos"
+                description="Defina objetivos de poupança para acompanhar o seu progresso."
+              >
+                <template #icon>
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+                </template>
                 <router-link
                   v-if="subscriptionStore.canAccessObjectives"
+                  v-slot="{ navigate }"
                   :to="{ name: 'objetivos', query: { action: 'new' } }"
-                  class="static-card-action"
-                >Criar objetivo</router-link>
-                <router-link v-else :to="{ name: 'subscricao' }" class="static-card-action">Ver planos</router-link>
-              </div>
+                  custom
+                >
+                  <UiButton variant="secondary" size="sm" @click="navigate">Criar objetivo</UiButton>
+                </router-link>
+                <router-link v-else v-slot="{ navigate }" :to="{ name: 'subscricao' }" custom>
+                  <UiButton variant="secondary" size="sm" @click="navigate">Ver planos</UiButton>
+                </router-link>
+              </EmptyState>
             </div>
-            <div v-if="!subscriptionStore.canAccessObjectives && objectivesPreview.length > 0" class="dashboard-objectives-lock-overlay">
-              <div class="dashboard-objectives-lock-panel">
-                <p class="dashboard-objectives-lock-text">Atualize o plano para visualização completa</p>
-                <router-link :to="{ name: 'subscricao' }" class="btn-add-objective dashboard-objectives-lock-cta">Ver planos</router-link>
+            <div v-if="!subscriptionStore.canAccessObjectives && objectivesPreview.length > 0" class="objectives-lock">
+              <div class="objectives-lock-panel">
+                <p class="objectives-lock-text">Atualize o plano para ver os seus objetivos</p>
+                <router-link v-slot="{ navigate }" :to="{ name: 'subscricao' }" custom>
+                  <UiButton variant="primary" size="sm" @click="navigate">Ver planos</UiButton>
+                </router-link>
               </div>
             </div>
           </div>
@@ -1301,83 +1324,94 @@ const showContent = computed(() =>
           @pointerdown="onCardPointerDown($event, 'movements')"
         >
           <div class="static-card-header">
-            <h2 class="section-title">Últimos movimentos</h2>
+            <h2 class="dash-card-title">Últimos movimentos</h2>
             <div class="static-card-header-actions">
               <span v-if="cardEditMode" class="card-drag-handle" title="Arrastar para reordenar">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="5" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="19" r="1"/></svg>
               </span>
-              <router-link v-else :to="{ name: 'movimentos' }" class="static-card-link" title="Ver todos"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></router-link>
+              <router-link v-else :to="{ name: 'movimentos' }" class="see-all">
+                Ver tudo
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+              </router-link>
             </div>
           </div>
-          <div v-if="recentRows.length > 0" class="movements-list">
+          <div v-if="recentRows.length > 0" class="row-list">
             <template v-for="row in recentRows" :key="row.key">
             <router-link
               v-if="row.kind === 'deposit'"
               :to="{ name: 'investimentos', query: { tab: 'deposits' } }"
-              class="movement-row"
+              class="row"
               title="Dinheiro enviado para a corretora. Não conta como despesa."
             >
-              <div class="movement-row-left">
-                <span class="movement-row-icon invest">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
-                </span>
-                <div>
-                  <p class="movement-row-desc">Depósito na corretora</p>
-                  <span class="movement-row-date">{{ new Date(row.dep.date).toLocaleDateString('pt-PT', { day: '2-digit', month: 'short' }) }}</span>
-                </div>
-              </div>
-              <span class="movement-row-amount invest">
+              <span class="row-icon row-icon--invest" aria-hidden="true">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+              </span>
+              <span class="row-text">
+                <span class="row-name">Depósito na corretora</span>
+                <span class="row-sub">{{ new Date(row.dep.date).toLocaleDateString('pt-PT', { day: '2-digit', month: 'short' }) }}</span>
+              </span>
+              <span class="row-amount ui-amount row-amount--invest">
                 {{ hideValues ? '••••• €' : `→ ${formatCurrency(row.dep.amount, dashboard.currency.value)}` }}
               </span>
             </router-link>
             <router-link
               v-else
               :to="{ name: 'movimentos' }"
-              class="movement-row"
+              class="row"
             >
-              <div class="movement-row-left">
-                <BrandLogo :name="row.tx.entityName || row.tx.description" :size="28">
-                  <template #fallback>
-                    <span class="movement-row-icon" :class="row.tx.type === TransactionType.Income ? 'income' : 'expense'">
-                      <svg v-if="row.tx.type === TransactionType.Income" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 11 12 6 7 11"/><line x1="12" x2="12" y1="6" y2="18"/></svg>
-                      <svg v-else xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="7 13 12 18 17 13"/><line x1="12" x2="12" y1="18" y2="6"/></svg>
-                    </span>
-                  </template>
-                </BrandLogo>
-                <div>
-                  <p class="movement-row-desc">{{ row.tx.description || TRANSACTION_CATEGORY_LABELS[row.tx.category] || 'Transação' }}</p>
-                  <span class="movement-row-date">{{ new Date(row.tx.date).toLocaleDateString('pt-PT', { day: '2-digit', month: 'short' }) }}</span>
-                </div>
-              </div>
-              <span class="movement-row-amount" :class="row.tx.type === TransactionType.Income ? 'income' : 'expense'">
-                {{ hideValues ? '••••• €' : `${row.tx.type === TransactionType.Income ? '+' : '-'} ${formatCurrency(row.tx.amount, dashboard.currency.value)}` }}
+              <BrandLogo :name="row.tx.entityName || row.tx.description" :size="36" class="row-logo">
+                <template #fallback>
+                  <span class="row-icon" :class="row.tx.type === TransactionType.Income ? 'row-icon--income' : 'row-icon--expense'" aria-hidden="true">
+                    <svg v-if="row.tx.type === TransactionType.Income" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><path d="M17 7 7 17"/><path d="M17 17H7V7"/></svg>
+                    <svg v-else xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7"/><path d="M7 7h10v10"/></svg>
+                  </span>
+                </template>
+              </BrandLogo>
+              <span class="row-text">
+                <span class="row-name">{{ row.tx.description || TRANSACTION_CATEGORY_LABELS[row.tx.category] || 'Movimento' }}</span>
+                <span class="row-sub">{{ new Date(row.tx.date).toLocaleDateString('pt-PT', { day: '2-digit', month: 'short' }) }}</span>
+              </span>
+              <span class="row-amount ui-amount" :class="row.tx.type === TransactionType.Income ? 'ui-amount--pos' : 'row-amount--expense'">
+                {{ hideValues ? '••••• €' : `${row.tx.type === TransactionType.Income ? '+' : '−'}${formatCurrency(row.tx.amount, dashboard.currency.value)}` }}
               </span>
             </router-link>
             </template>
           </div>
-          <div v-else class="static-card-empty">
-            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="static-card-empty-icon"><line x1="7" x2="7" y1="18" y2="6"/><polyline points="3 10 7 6 11 10"/><line x1="17" x2="17" y1="6" y2="18"/><polyline points="13 14 17 18 21 14"/></svg>
-            <p>Nenhum movimento registado</p>
-            <router-link to="/transactions?tab=movements&action=new" class="static-card-action">Adicionar</router-link>
-          </div>
+          <EmptyState v-else compact title="Sem movimentos" description="Ainda não registou nenhum movimento.">
+            <template #icon>
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="7" x2="7" y1="18" y2="6"/><polyline points="3 10 7 6 11 10"/><line x1="17" x2="17" y1="6" y2="18"/><polyline points="13 14 17 18 21 14"/></svg>
+            </template>
+            <router-link v-slot="{ navigate }" to="/transactions?tab=movements&action=new" custom>
+              <UiButton variant="secondary" size="sm" @click="navigate">Adicionar movimento</UiButton>
+            </router-link>
+          </EmptyState>
         </div>
         </template>
       </div>
 
-      <!-- ═══ INVESTIMENTOS — card a toda a largura, por baixo dos 3 ═══ -->
-      <div v-if="showInvestmentsCard" class="dashboard-section-card inv-card">
-        <div class="inv-card-top">
-          <h2 class="section-title">Investimentos</h2>
-          <div class="inv-card-top-right">
-            <div class="patrimonio-periods">
-              <button
-                v-for="p in invPeriods"
-                :key="p"
-                class="patrimonio-period-btn"
-                :class="{ active: invPeriod === p }"
-                @click="selectInvPeriod(p)"
-              >{{ p }}</button>
-            </div>
+      <!-- ═══ INVESTIMENTOS — mesmo cartão (ValueHeroCard) do Património e da página de Investimentos ═══ -->
+      <ValueHeroCard
+        v-if="showInvestmentsCard"
+        title="Investimentos"
+        :points="invChartPoints"
+        :current-value="invBaseValue"
+        :current-cost="invBaseInvested"
+        cost-label="Investido"
+        :period-label="invPeriodLabel"
+        :year-ticks="invChartYearTicks"
+        :loading="invChartLoading"
+        currency="EUR"
+        :hide-values="hideValues"
+      >
+        <template #actions>
+          <div class="inv-actions">
+            <SegmentedControl
+              :model-value="invPeriod"
+              :options="invPeriodOptions"
+              size="sm"
+              aria-label="Período do gráfico de investimentos"
+              @update:model-value="selectInvPeriod"
+            />
             <!-- Dropdown de ativos (logo + nome completo) -->
             <div ref="invDropdownRef" class="inv-select">
               <button type="button" class="inv-select-trigger" :class="{ open: invDropdownOpen }" @click.stop="invDropdownOpen = !invDropdownOpen">
@@ -1387,18 +1421,18 @@ const showContent = computed(() =>
                   :name="invSelectedHolding.name"
                   :type="invSelectedHolding.type"
                   :domain="invSelectedHolding.logoDomain"
-                  :size="22"
+                  :size="20"
                 />
                 <span v-else class="inv-select-all-icon">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg>
                 </span>
                 <span class="inv-select-label">{{ invSelectedHolding ? invSelectedHolding.name : 'Todos os ativos' }}</span>
-                <svg class="inv-select-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+                <svg class="inv-select-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
               </button>
               <Transition name="panel">
                 <div v-show="invDropdownOpen" class="inv-select-menu">
                   <button type="button" class="inv-select-opt" :class="{ active: !invSelectedId }" @click="onInvSelect('all')">
-                    <span class="inv-select-all-icon">
+                    <span class="inv-select-all-icon inv-select-all-icon--lg">
                       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg>
                     </span>
                     <span class="inv-select-opt-text"><span class="inv-select-opt-name">Todos os ativos</span></span>
@@ -1412,7 +1446,7 @@ const showContent = computed(() =>
                     :class="{ active: invSelectedId === h.id }"
                     @click="onInvSelect(h.id)"
                   >
-                    <InstrumentLogo :symbol="h.symbol" :name="h.name" :type="h.type" :domain="h.logoDomain" :size="26" />
+                    <InstrumentLogo :symbol="h.symbol" :name="h.name" :type="h.type" :domain="h.logoDomain" :size="28" />
                     <span class="inv-select-opt-text">
                       <span class="inv-select-opt-name">{{ h.name }}</span>
                       <span class="inv-select-opt-sub">{{ h.providerSymbol || h.symbol }}</span>
@@ -1422,74 +1456,64 @@ const showContent = computed(() =>
                 </div>
               </Transition>
             </div>
-            <router-link :to="{ name: 'investimentos' }" class="static-card-link" title="Ver todos">
-              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            <router-link :to="{ name: 'investimentos' }" class="see-all">
+              Ver tudo
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
             </router-link>
           </div>
-        </div>
+        </template>
 
-        <div class="inv-card-hero">
-          <span class="inv-card-value">{{ hideValues ? '••••••' : invFmtEur(invHeroValue) }}</span>
-          <div v-if="!hideValues" class="inv-card-hero-sub">
-            <span class="inv-card-return" :class="{ negative: invHeroReturn < 0 }">{{ invFmtSignedEur(invHeroReturn) }}</span>
-            <span v-if="invHeroReturnPct !== null" class="inv-card-pct" :class="{ negative: invHeroReturn < 0 }">{{ invFmtPct(invHeroReturnPct) }}</span>
+        <template #empty>
+          <div class="chart-state">
+            <p class="chart-empty-text">Sem dados de evolução neste período</p>
           </div>
-          <span class="inv-card-date">{{ invHeroDate }}</span>
-        </div>
+        </template>
 
-        <div class="inv-card-chart">
-          <div v-if="invChartLoading" class="inv-card-chart-state"><div class="spinner"></div></div>
-          <AssetsChart
-            v-else-if="invShowChart"
-            :points="invChartPoints"
-            currency="EUR"
-            :year-ticks="invChartYearTicks"
-            cost-label="Investido"
-            @hover="onInvChartHover"
+        <template #footer>
+          <HeroStat label="Investido">{{ hideValues ? '••••• €' : invFmtEur(invBaseInvested) }}</HeroStat>
+          <HeroStat label="Retorno total">
+            <span :class="invBaseValue - invBaseInvested < 0 ? 'ui-amount--neg' : 'ui-amount--pos'">
+              {{ hideValues ? '••••• €' : invFmtSignedEur(invBaseValue - invBaseInvested) }}
+            </span>
+            <span v-if="!hideValues && invBaseInvested !== 0" class="alloc-pct">{{ invFmtPct(((invBaseValue - invBaseInvested) / Math.abs(invBaseInvested)) * 100) }}</span>
+          </HeroStat>
+        </template>
+      </ValueHeroCard>
+
+      <!-- ═══ TENDÊNCIAS ═══ -->
+      <UiCard v-if="trendChartData.length > 0" title="Tendências" subtitle="Receitas, despesas e poupança ao longo do tempo">
+        <template #actions>
+          <SegmentedControl
+            :model-value="trendChartPeriod"
+            :options="trendPeriodOptions"
+            size="sm"
+            aria-label="Período das tendências"
+            @update:model-value="selectTrendPeriod"
           />
-          <div v-else class="inv-card-chart-state">
-            <p class="inv-card-chart-empty">Sem dados de evolução</p>
-          </div>
-        </div>
-      </div>
-
-      <!-- ═══ TENDÊNCIAS — Card dedicado com seletor tipo patrimônio ═══ -->
-      <div v-if="trendChartData.length > 0" class="dashboard-section-card">
-        <div class="trend-card-top">
-          <h2 class="section-title">Tendências</h2>
-          <div class="patrimonio-periods">
-            <button
-              v-for="p in trendChartPeriods"
-              :key="p"
-              class="patrimonio-period-btn"
-              :class="{ active: trendChartPeriod === p }"
-              @click="selectTrendPeriod(p)"
-            >{{ p }}</button>
-          </div>
-        </div>
-        <div v-if="trendChartLoading" class="trend-loading"><div class="spinner"></div></div>
-        <div v-else class="trend-card-charts" :class="{ 'trend-card-charts--stacked': trendChartData.length > 8 }">
-          <div class="chart-card">
-            <h3 class="chart-title">Evolução mensal</h3>
-            <div class="trend-charts-inner">
+        </template>
+        <div v-if="trendChartLoading" class="chart-state chart-state--tall"><div class="spinner"></div></div>
+        <div v-else class="tile-grid" :class="{ 'tile-grid--stacked': trendChartData.length > 8 }">
+          <div class="chart-tile">
+            <h3 class="tile-title">Evolução mensal</h3>
+            <div class="trend-chart">
               <MonthlyLineChart :data="trendChartData" :period="trendChartPeriod" />
             </div>
           </div>
-          <div class="chart-card">
-            <h3 class="chart-title">Receitas vs Despesas</h3>
-            <div class="trend-charts-inner">
+          <div class="chart-tile">
+            <h3 class="tile-title">Receitas vs despesas</h3>
+            <div class="trend-chart">
               <IncomeVsExpensesBarChart :data="trendChartData" :period="trendChartPeriod" />
             </div>
           </div>
         </div>
-      </div>
+      </UiCard>
 
-      <!-- ═══ FILTERED SECTIONS (dados dinâmicos por período) ═══ -->
-      <div class="dashboard-section-card">
-        <div class="period-filter-bar">
+      <!-- ═══ SECÇÕES FILTRADAS (dados dinâmicos por período) ═══ -->
+      <UiCard title="Resumo do período" :subtitle="periodLabel">
+        <template #actions>
           <div ref="dashDatePickerRef" class="date-range-picker">
             <button type="button" class="date-range-btn" @click.stop="toggleDashDatePicker">
-              <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
               <span>{{ dashDatePickerLabel }}</span>
               <svg class="date-range-chevron" :class="{ open: dashDatePickerOpen }" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
             </button>
@@ -1505,11 +1529,11 @@ const showContent = computed(() =>
                 <div class="date-range-calendars">
                   <div class="dr-calendar">
                     <div class="dr-cal-header">
-                      <button type="button" class="dr-cal-nav" @click="dashPickerPrevMonth">
+                      <button type="button" class="dr-cal-nav" aria-label="Mês anterior" @click="dashPickerPrevMonth">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
                       </button>
                       <span class="dr-cal-title">{{ PICKER_MONTH_NAMES[dashPickerLeftMonth] }} {{ dashPickerLeftYear }}</span>
-                      <span style="width:28px"></span>
+                      <span class="dr-cal-spacer"></span>
                     </div>
                     <div class="dr-cal-weekdays">
                       <span v-for="wd in PICKER_WEEKDAYS" :key="wd">{{ wd }}</span>
@@ -1535,9 +1559,9 @@ const showContent = computed(() =>
                   </div>
                   <div class="dr-calendar">
                     <div class="dr-cal-header">
-                      <span style="width:28px"></span>
+                      <span class="dr-cal-spacer"></span>
                       <span class="dr-cal-title">{{ PICKER_MONTH_NAMES[dashPickerRightMonth] }} {{ dashPickerRightYear }}</span>
-                      <button type="button" class="dr-cal-nav" @click="dashPickerNextMonth">
+                      <button type="button" class="dr-cal-nav" aria-label="Mês seguinte" @click="dashPickerNextMonth">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
                       </button>
                     </div>
@@ -1567,137 +1591,157 @@ const showContent = computed(() =>
               </div>
             </Transition>
           </div>
-        </div>
-        <div v-if="periodChangeLoading" class="period-refresh-state">
-          <div class="period-refresh-inner">
-            <div class="spinner"></div>
-            <p class="period-refresh-text">A atualizar dados do dashboard...</p>
-          </div>
+        </template>
+
+        <div v-if="periodChangeLoading" class="chart-state chart-state--tall">
+          <div class="spinner"></div>
+          <p class="chart-empty-text">A atualizar os dados…</p>
         </div>
 
-        <template v-else>
-        <div class="summary-cards summary-cards-fallback">
-          <div class="card card-income">
-            <p class="card-title card-title--with-arrow">Receitas <svg class="card-arrow card-arrow--income" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 11 12 6 7 11"/><line x1="12" x2="12" y1="6" y2="18"/></svg><span class="card-info" tabindex="0" role="button" aria-label="O que são as receitas?"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="16" y2="12"/><line x1="12" x2="12.01" y1="8" y2="8"/></svg><span class="card-tooltip" role="tooltip">Total de receitas do período selecionado.</span></span></p>
-            <p class="card-value">{{ hideValues ? '••••• €' : formattedIncome }}</p>
-            <p class="card-subtitle">{{ periodLabel }}</p>
+        <div v-else class="period-body">
+          <!-- KPIs -->
+          <div class="kpi-grid">
+            <div class="kpi">
+              <span class="kpi-label">
+                <span class="kpi-dot kpi-dot--income" />Receitas
+                <span class="card-info" tabindex="0" role="button" aria-label="O que são as receitas?"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="16" y2="12"/><line x1="12" x2="12.01" y1="8" y2="8"/></svg><span class="card-tooltip" role="tooltip">Total de receitas do período selecionado.</span></span>
+              </span>
+              <span class="kpi-value ui-amount--pos">{{ hideValues ? '••••• €' : formattedIncome }}</span>
+            </div>
+            <div class="kpi">
+              <span class="kpi-label">
+                <span class="kpi-dot kpi-dot--expense" />Despesas
+                <span class="card-info" tabindex="0" role="button" aria-label="O que são as despesas?"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="16" y2="12"/><line x1="12" x2="12.01" y1="8" y2="8"/></svg><span class="card-tooltip" role="tooltip">Total de despesas do período selecionado.</span></span>
+              </span>
+              <span class="kpi-value ui-amount--neg">{{ hideValues ? '••••• €' : formattedExpenses }}</span>
+            </div>
+            <div class="kpi">
+              <span class="kpi-label">
+                <span class="kpi-dot kpi-dot--brand" />Poupança
+                <span class="card-info" tabindex="0" role="button" aria-label="O que é a poupança?"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="16" y2="12"/><line x1="12" x2="12.01" y1="8" y2="8"/></svg><span class="card-tooltip" role="tooltip">Receitas − Despesas do período selecionado.</span></span>
+              </span>
+              <span class="kpi-value">{{ hideValues ? '••••• €' : formattedSavings }}</span>
+            </div>
+            <div class="kpi">
+              <span class="kpi-label">
+                <span class="kpi-dot" />Taxa de poupança
+                <span class="card-info" tabindex="0" role="button" aria-label="O que é a taxa de poupança?"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="16" y2="12"/><line x1="12" x2="12.01" y1="8" y2="8"/></svg><span class="card-tooltip" role="tooltip">Percentagem das receitas que foi poupada (Poupança ÷ Receitas).</span></span>
+              </span>
+              <span class="kpi-value">{{ hideValues ? '•••' : formatPercent(savingsRate) }}</span>
+              <span class="kpi-sub">da receita poupada</span>
+            </div>
           </div>
-          <div class="card card-expense">
-            <p class="card-title card-title--with-arrow">Despesas <svg class="card-arrow card-arrow--expense" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="7 13 12 18 17 13"/><line x1="12" x2="12" y1="18" y2="6"/></svg><span class="card-info" tabindex="0" role="button" aria-label="O que são as despesas?"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="16" y2="12"/><line x1="12" x2="12.01" y1="8" y2="8"/></svg><span class="card-tooltip" role="tooltip">Total de despesas do período selecionado.</span></span></p>
-            <p class="card-value">{{ hideValues ? '••••• €' : formattedExpenses }}</p>
-            <p class="card-subtitle">{{ periodLabel }}</p>
-          </div>
-          <div class="card card-savings">
-            <p class="card-title card-title--with-arrow">Poupança <svg class="card-arrow card-arrow--savings" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 5c-1.5 0-2.8 1.4-3 2-3.5-1.5-11-.3-11 5 0 1.8 0 3 2 4.5V20h4v-2h3v2h4v-4c1-.5 1.7-1 2-2h2v-4h-2c0-1-.5-1.5-1-2"/><path d="M2 9.1C1.7 11 2 12 2 12"/><circle cx="15.5" cy="9.5" r=".5" fill="currentColor"/></svg><span class="card-info" tabindex="0" role="button" aria-label="O que é a poupança?"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="16" y2="12"/><line x1="12" x2="12.01" y1="8" y2="8"/></svg><span class="card-tooltip" role="tooltip">Receitas − Despesas do período selecionado.</span></span></p>
-            <p class="card-value">{{ hideValues ? '••••• €' : formattedSavings }}</p>
-            <p class="card-subtitle">{{ periodLabel }}</p>
-          </div>
-          <div class="card card-savings">
-            <p class="card-title card-title--with-arrow">Taxa de poupança <svg class="card-arrow card-arrow--rate" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" x2="9" y1="9" y2="15"/><line x1="9" x2="9.01" y1="9" y2="9"/><line x1="15" x2="15.01" y1="15" y2="15"/></svg><span class="card-info" tabindex="0" role="button" aria-label="O que é a taxa de poupança?"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="16" y2="12"/><line x1="12" x2="12.01" y1="8" y2="8"/></svg><span class="card-tooltip" role="tooltip">Percentagem das receitas que foi poupada (Poupança ÷ Receitas).</span></span></p>
-            <p class="card-value">{{ hideValues ? '•••' : formatPercent(savingsRate) }}</p>
-            <p class="card-subtitle">% da receita real poupada</p>
-          </div>
-        </div>
-        <div v-if="dailyAverage" class="daily-avg-banner">
-          <div class="daily-avg-banner-left">
-            <div class="daily-avg-banner-info">
-              <span class="daily-avg-banner-title">
-                <svg class="daily-avg-banner-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+
+          <!-- Média diária -->
+          <div v-if="dailyAverage" class="daily-avg">
+            <div class="daily-avg-main">
+              <span class="kpi-label">
                 Média diária de gastos
                 <span class="card-info card-info--inline" tabindex="0" role="button" aria-label="O que é a média diária de gastos?"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="16" y2="12"/><line x1="12" x2="12.01" y1="8" y2="8"/></svg><span class="card-tooltip" role="tooltip">Despesas do período ÷ número de dias. No mês atual, a projeção estima o total ao manter este ritmo até ao fim do mês.</span></span>
               </span>
-              <span class="daily-avg-banner-value-row">
-                <span class="daily-avg-banner-value">{{ hideValues ? '••••• €' : formatCurrency(dailyAverage.avg, dashboard.currency.value) }}</span>
-                <span v-if="dailyAverage.isCurrentMonth" class="daily-avg-banner-days">{{ dailyAverage.daysPassed }}/{{ dailyAverage.daysInMonth }} dias</span>
+              <span class="daily-avg-value-row">
+                <span class="daily-avg-value">{{ hideValues ? '••••• €' : formatCurrency(dailyAverage.avg, dashboard.currency.value) }}</span>
+                <span v-if="dailyAverage.isCurrentMonth" class="ui-badge">{{ dailyAverage.daysPassed }}/{{ dailyAverage.daysInMonth }} dias</span>
               </span>
             </div>
-          </div>
-          <div class="daily-avg-banner-right">
-            <div v-if="dailyAverage.isCurrentMonth" class="daily-avg-banner-proj-block">
-              <span class="daily-avg-banner-proj-label">Projeção fim do mês</span>
-              <span class="daily-avg-banner-proj-value">{{ hideValues ? '•••••' : formatCurrency(dailyAverage.projected, dashboard.currency.value) }}</span>
+            <div v-if="dailyAverage.isCurrentMonth" class="daily-avg-proj">
+              <span class="kpi-label">Projeção fim do mês</span>
+              <span class="daily-avg-proj-value">{{ hideValues ? '•••••' : formatCurrency(dailyAverage.projected, dashboard.currency.value) }}</span>
+            </div>
+            <div v-if="dailyAverage.isCurrentMonth" class="daily-avg-progress">
+              <div class="daily-avg-progress-bar" :style="{ width: Math.round((dailyAverage.daysPassed / dailyAverage.daysInMonth) * 100) + '%' }"></div>
             </div>
           </div>
-          <div v-if="dailyAverage.isCurrentMonth" class="daily-avg-banner-progress">
-            <div class="daily-avg-banner-progress-bar" :style="{ width: Math.round((dailyAverage.daysPassed / dailyAverage.daysInMonth) * 100) + '%' }"></div>
-          </div>
-        </div>
-        <!-- Gráficos de movimentos (dentro do mesmo card) -->
-        <div v-if="hasChartData" class="charts-section-inner">
-          <div class="charts-side-by-side">
-            <div class="chart-card">
-              <h3 class="chart-title">Despesas por categoria</h3>
-              <ExpensesPieChart v-if="hasExpensesForChart" :data="expensesForChart" />
-              <p v-else class="chart-empty-text">Sem despesas neste período</p>
-            </div>
-            <div class="chart-card">
-              <h3 class="chart-title">Receitas por categoria</h3>
-              <IncomePieChart v-if="hasIncomeForChart" :data="incomeForChart" />
-              <p v-else class="chart-empty-text">Sem receitas neste período</p>
-            </div>
-          </div>
-        </div>
-        <!-- Plano mensal (dentro do card filtrado) -->
-        <div v-if="isSingleMonth" class="plan-section">
-          <h2 class="section-title">Plano mensal</h2>
-          <div v-if="hasChartData && hasBudgetForPeriod" class="comparison-grid">
-            <div class="comparison-card">
-              <h3 class="comparison-title comparison-title--with-icon">Receitas <svg class="comparison-icon comparison-icon--income" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 11 12 6 7 11"/><line x1="12" x2="12" y1="6" y2="18"/></svg></h3>
-              <div class="comparison-row">
-                <span class="comparison-label">Esperado</span>
-                <span class="comparison-value expected">{{ hideValues ? '••••• €' : formatCurrency(budgetForPeriod.expectedIncome, dashboard.currency.value) }}</span>
-              </div>
-              <div class="comparison-row">
-                <span class="comparison-label">Real</span>
-                <span class="comparison-value">{{ hideValues ? '••••• €' : formattedIncome }}</span>
-              </div>
-              <div v-if="budgetForPeriod.expectedIncome > 0 && !hideValues" class="comparison-diff" :class="dashboard.monthlyIncome.value >= budgetForPeriod.expectedIncome ? 'comparison-diff--good' : 'comparison-diff--over'">
-                {{ dashboard.monthlyIncome.value >= budgetForPeriod.expectedIncome ? '✓' : '' }}
-                {{ formatCurrency(dashboard.monthlyIncome.value - budgetForPeriod.expectedIncome, dashboard.currency.value) }}
-                {{ dashboard.monthlyIncome.value >= budgetForPeriod.expectedIncome ? 'acima' : 'abaixo' }}
-              </div>
-            </div>
-            <div class="comparison-card">
-              <h3 class="comparison-title comparison-title--with-icon">Despesas <svg class="comparison-icon comparison-icon--expense" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="7 13 12 18 17 13"/><line x1="12" x2="12" y1="18" y2="6"/></svg></h3>
-              <div class="comparison-row">
-                <span class="comparison-label">Esperado</span>
-                <span class="comparison-value expected">{{ hideValues ? '••••• €' : formatCurrency(budgetForPeriod.expectedExpenses, dashboard.currency.value) }}</span>
-              </div>
-              <div class="comparison-row">
-                <span class="comparison-label">Real</span>
-                <span class="comparison-value">{{ hideValues ? '••••• €' : formattedExpenses }}</span>
-              </div>
-              <div v-if="budgetForPeriod.expectedExpenses > 0 && !hideValues" class="comparison-diff" :class="dashboard.monthlyExpenses.value <= budgetForPeriod.expectedExpenses ? 'comparison-diff--good' : 'comparison-diff--over'">
-                {{ dashboard.monthlyExpenses.value <= budgetForPeriod.expectedExpenses ? '✓' : '' }}
-                {{ formatCurrency(dashboard.monthlyExpenses.value - budgetForPeriod.expectedExpenses, dashboard.currency.value) }}
-                {{ dashboard.monthlyExpenses.value <= budgetForPeriod.expectedExpenses ? 'abaixo do orçamento' : 'acima do orçamento' }}
-              </div>
-            </div>
-            <div class="comparison-card">
-              <h3 class="comparison-title comparison-title--with-icon">Poupança <svg class="comparison-icon comparison-icon--savings" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 5c-1.5 0-2.8 1.4-3 2-3.5-1.5-11-.3-11 5 0 1.8 0 3 2 4.5V20h4v-2h3v2h4v-4c1-.5 1.7-1 2-2h2v-4h-2c0-1-.5-1.5-1-2"/><path d="M2 9.1C1.8 10 2 11 2 12"/><circle cx="12.5" cy="11.5" r=".5" fill="currentColor"/></svg></h3>
-              <div class="comparison-row">
-                <span class="comparison-label">Esperado</span>
-                <span class="comparison-value expected">{{ hideValues ? '••••• €' : formatCurrency(budgetForPeriod.expectedIncome - budgetForPeriod.expectedExpenses, dashboard.currency.value) }}</span>
-              </div>
-              <div class="comparison-row">
-                <span class="comparison-label">Real</span>
-                <span class="comparison-value">{{ hideValues ? '••••• €' : formattedSavings }}</span>
-              </div>
-              <div v-if="(budgetForPeriod.expectedIncome - budgetForPeriod.expectedExpenses) > 0 && !hideValues" class="comparison-diff" :class="dashboard.monthlySavings.value >= (budgetForPeriod.expectedIncome - budgetForPeriod.expectedExpenses) ? 'comparison-diff--good' : 'comparison-diff--over'">
-                {{ dashboard.monthlySavings.value >= (budgetForPeriod.expectedIncome - budgetForPeriod.expectedExpenses) ? '✓' : '' }}
-                {{ formatCurrency(dashboard.monthlySavings.value - (budgetForPeriod.expectedIncome - budgetForPeriod.expectedExpenses), dashboard.currency.value) }}
-                {{ dashboard.monthlySavings.value >= (budgetForPeriod.expectedIncome - budgetForPeriod.expectedExpenses) ? 'acima do esperado' : 'abaixo do esperado' }}
-              </div>
-            </div>
-          </div>
-          <div v-else class="section-empty">
-            <p class="section-empty-text">Ainda não definiu o seu plano mensal</p>
-            <router-link to="/monthly-plan" class="btn-section-add">Adicionar plano mensal</router-link>
-          </div>
-        </div>
-        </template>
-      </div>
 
+          <!-- Gráficos por categoria -->
+          <div v-if="hasChartData" class="tile-grid">
+            <div class="chart-tile">
+              <h3 class="tile-title">Despesas por categoria</h3>
+              <ExpensesPieChart v-if="hasExpensesForChart" :data="expensesForChart" />
+              <p v-else class="chart-empty-text chart-empty-text--pad">Sem despesas neste período</p>
+            </div>
+            <div class="chart-tile">
+              <h3 class="tile-title">Receitas por categoria</h3>
+              <IncomePieChart v-if="hasIncomeForChart" :data="incomeForChart" />
+              <p v-else class="chart-empty-text chart-empty-text--pad">Sem receitas neste período</p>
+            </div>
+          </div>
+
+          <!-- Plano mensal -->
+          <div v-if="isSingleMonth" class="plan-section">
+            <div class="plan-head">
+              <h3 class="dash-card-title">Plano mensal</h3>
+              <router-link v-if="hasChartData && hasBudgetForPeriod" to="/monthly-plan" class="see-all">
+                Ver plano
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+              </router-link>
+            </div>
+            <div v-if="hasChartData && hasBudgetForPeriod" class="comparison-grid">
+              <div class="comparison-tile">
+                <span class="kpi-label"><span class="kpi-dot kpi-dot--income" />Receitas</span>
+                <div class="comparison-row">
+                  <span class="comparison-label">Esperado</span>
+                  <span class="comparison-value comparison-value--muted">{{ hideValues ? '••••• €' : formatCurrency(budgetForPeriod.expectedIncome, dashboard.currency.value) }}</span>
+                </div>
+                <div class="comparison-row">
+                  <span class="comparison-label">Real</span>
+                  <span class="comparison-value">{{ hideValues ? '••••• €' : formattedIncome }}</span>
+                </div>
+                <span v-if="budgetForPeriod.expectedIncome > 0 && !hideValues" class="ui-badge comparison-diff" :class="dashboard.monthlyIncome.value >= budgetForPeriod.expectedIncome ? 'ui-badge--success' : 'ui-badge--danger'">
+                  <svg v-if="dashboard.monthlyIncome.value >= budgetForPeriod.expectedIncome" xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                  {{ formatCurrency(dashboard.monthlyIncome.value - budgetForPeriod.expectedIncome, dashboard.currency.value) }}
+                  {{ dashboard.monthlyIncome.value >= budgetForPeriod.expectedIncome ? 'acima' : 'abaixo' }}
+                </span>
+              </div>
+              <div class="comparison-tile">
+                <span class="kpi-label"><span class="kpi-dot kpi-dot--expense" />Despesas</span>
+                <div class="comparison-row">
+                  <span class="comparison-label">Esperado</span>
+                  <span class="comparison-value comparison-value--muted">{{ hideValues ? '••••• €' : formatCurrency(budgetForPeriod.expectedExpenses, dashboard.currency.value) }}</span>
+                </div>
+                <div class="comparison-row">
+                  <span class="comparison-label">Real</span>
+                  <span class="comparison-value">{{ hideValues ? '••••• €' : formattedExpenses }}</span>
+                </div>
+                <span v-if="budgetForPeriod.expectedExpenses > 0 && !hideValues" class="ui-badge comparison-diff" :class="dashboard.monthlyExpenses.value <= budgetForPeriod.expectedExpenses ? 'ui-badge--success' : 'ui-badge--danger'">
+                  <svg v-if="dashboard.monthlyExpenses.value <= budgetForPeriod.expectedExpenses" xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                  {{ formatCurrency(dashboard.monthlyExpenses.value - budgetForPeriod.expectedExpenses, dashboard.currency.value) }}
+                  {{ dashboard.monthlyExpenses.value <= budgetForPeriod.expectedExpenses ? 'abaixo do orçamento' : 'acima do orçamento' }}
+                </span>
+              </div>
+              <div class="comparison-tile">
+                <span class="kpi-label"><span class="kpi-dot kpi-dot--brand" />Poupança</span>
+                <div class="comparison-row">
+                  <span class="comparison-label">Esperado</span>
+                  <span class="comparison-value comparison-value--muted">{{ hideValues ? '••••• €' : formatCurrency(budgetForPeriod.expectedIncome - budgetForPeriod.expectedExpenses, dashboard.currency.value) }}</span>
+                </div>
+                <div class="comparison-row">
+                  <span class="comparison-label">Real</span>
+                  <span class="comparison-value">{{ hideValues ? '••••• €' : formattedSavings }}</span>
+                </div>
+                <span v-if="(budgetForPeriod.expectedIncome - budgetForPeriod.expectedExpenses) > 0 && !hideValues" class="ui-badge comparison-diff" :class="dashboard.monthlySavings.value >= (budgetForPeriod.expectedIncome - budgetForPeriod.expectedExpenses) ? 'ui-badge--success' : 'ui-badge--danger'">
+                  <svg v-if="dashboard.monthlySavings.value >= (budgetForPeriod.expectedIncome - budgetForPeriod.expectedExpenses)" xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                  {{ formatCurrency(dashboard.monthlySavings.value - (budgetForPeriod.expectedIncome - budgetForPeriod.expectedExpenses), dashboard.currency.value) }}
+                  {{ dashboard.monthlySavings.value >= (budgetForPeriod.expectedIncome - budgetForPeriod.expectedExpenses) ? 'acima do esperado' : 'abaixo do esperado' }}
+                </span>
+              </div>
+            </div>
+            <EmptyState
+              v-else
+              compact
+              title="Sem plano mensal"
+              description="Defina quanto espera receber e gastar para comparar com o real."
+            >
+              <template #icon>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
+              </template>
+              <router-link v-slot="{ navigate }" to="/monthly-plan" custom>
+                <UiButton variant="secondary" size="sm" @click="navigate">Adicionar plano mensal</UiButton>
+              </router-link>
+            </EmptyState>
+          </div>
+        </div>
+      </UiCard>
 
     </div>
   </div>
@@ -1706,42 +1750,38 @@ const showContent = computed(() =>
   <Teleport to="body">
     <Transition name="fade">
       <div v-if="settleModalOpen" class="settle-overlay" @click.self="closeSettleModal">
-        <div class="settle-modal">
+        <div class="settle-modal" role="dialog" aria-modal="true" aria-labelledby="settle-title">
           <div class="settle-header">
-            <h3>Objetivos concluídos</h3>
-            <button type="button" class="settle-close" @click="closeSettleModal">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
-            </button>
+            <h3 id="settle-title">Objetivos concluídos</h3>
+            <UiButton variant="ghost" size="sm" icon-only aria-label="Fechar" @click="closeSettleModal">
+              <template #icon><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></template>
+            </UiButton>
           </div>
 
           <div v-if="settleConfirmId" class="settle-confirm">
-            <p class="settle-confirm-text">Já registaste esta despesa nas transações?</p>
+            <p class="settle-confirm-text">Já registou esta despesa nos movimentos?</p>
             <div class="settle-confirm-actions">
-              <button type="button" class="settle-confirm-btn settle-confirm-yes" :disabled="settleLoading" @click="onSettleConfirmYes">
-                {{ settleLoading ? 'A liquidar...' : 'Sim, liquidar' }}
-              </button>
-              <button type="button" class="settle-confirm-btn settle-confirm-no" :disabled="settleLoading" @click="onSettleConfirmNo">
+              <UiButton variant="primary" block :loading="settleLoading" @click="onSettleConfirmYes">
+                {{ settleLoading ? 'A liquidar…' : 'Sim, liquidar' }}
+              </UiButton>
+              <UiButton variant="secondary" block :disabled="settleLoading" @click="onSettleConfirmNo">
                 Não, registar despesa
-              </button>
-              <button type="button" class="settle-confirm-btn settle-confirm-cancel" @click="onSettleCancelConfirm">
+              </UiButton>
+              <UiButton variant="ghost" block @click="onSettleCancelConfirm">
                 Cancelar
-              </button>
+              </UiButton>
             </div>
           </div>
 
           <div v-else class="settle-list">
-            <div v-if="unliquidatedHistory.length === 0" class="settle-empty">
-              <p>Nenhum objetivo concluído por liquidar</p>
-            </div>
+            <p v-if="unliquidatedHistory.length === 0" class="settle-empty">Não tem objetivos concluídos por liquidar.</p>
             <div v-for="h in unliquidatedHistory" :key="h.id" class="settle-item">
               <div class="settle-item-info">
-                <span class="settle-item-name">{{ h.name }}</span>
-                <span class="settle-item-amount">{{ formatCurrency(h.targetAmount, dashboard.currency.value) }}</span>
-                <span class="settle-item-date">Concluído a {{ new Date(h.completedAt).toLocaleDateString('pt-PT', { day: '2-digit', month: 'short', year: 'numeric' }) }}</span>
+                <span class="row-name">{{ h.name }}</span>
+                <span class="settle-item-amount ui-amount">{{ formatCurrency(h.targetAmount, dashboard.currency.value) }}</span>
+                <span class="row-sub">Concluído a {{ new Date(h.completedAt).toLocaleDateString('pt-PT', { day: '2-digit', month: 'short', year: 'numeric' }) }}</span>
               </div>
-              <button type="button" class="settle-item-btn" @click="onSettleLiquidar(h.id)">
-                Liquidar
-              </button>
+              <UiButton variant="secondary" size="sm" @click="onSettleLiquidar(h.id)">Liquidar</UiButton>
             </div>
           </div>
         </div>
@@ -1762,14 +1802,18 @@ const showContent = computed(() =>
 </template>
 
 <style scoped>
+/* ═══ Página ═══ */
 .dashboard {
   position: relative;
-  max-width: 100%;
+  max-width: var(--page-max);
   margin: 0 auto;
-  padding: 0;
-  margin-top: -4rem;
   min-height: 400px;
-  background: transparent;
+}
+
+.dashboard-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
 }
 
 .loading-overlay {
@@ -1778,431 +1822,164 @@ const showContent = computed(() =>
   z-index: 20;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  color: var(--color-text-muted);
+  background: var(--color-bg);
 }
 
 .fade-enter-active,
 .fade-leave-active {
-  transition: opacity 0.3s ease;
+  transition: opacity var(--transition-slow);
 }
-
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
 }
 
-.error-state,
-.empty-state {
-  text-align: center;
-  padding: 3rem;
-  color: var(--color-text-muted);
+.state-card {
+  margin-top: var(--space-2);
 }
 
 .spinner {
-  width: 36px;
-  height: 36px;
+  width: 28px;
+  height: 28px;
   border: 3px solid var(--color-border);
-  border-top-color: #166534;
+  border-top-color: var(--color-primary-text);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
-  margin: 0 auto 1rem;
 }
-
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
 
-.error-state p {
-  color: var(--color-error);
-}
-
-.error-hint {
-  font-size: 0.875rem;
-  color: var(--color-text-muted) !important;
-  margin-top: 1rem;
-}
-
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1rem;
-}
-
-.empty-state-card {
-  background: var(--color-bg-card);
-  border: 1px solid var(--color-border);
-  border-radius: 12px;
-  padding: 3rem 2rem;
-  margin-top: 1rem;
-}
-
-.empty-title {
-  font-size: 1.125rem;
-  font-weight: 600;
-  color: var(--color-text);
-  margin: 0;
-}
-
-.empty-icon {
-  font-size: 3rem;
-  opacity: 0.6;
-}
-
-.empty-hint {
-  font-size: 0.875rem;
-  color: var(--color-text-muted);
-  margin: 0;
-}
-
-.empty-links {
-  display: flex;
-  gap: 1rem;
-  margin-top: 0.5rem;
-}
-
-.link {
-  color: var(--color-link-hover);
-  text-decoration: none;
-  font-size: 0.875rem;
-}
-
-.link:hover {
-  text-decoration: underline;
-}
-
-.dashboard-content {
-  display: flex !important;
-  flex-direction: column;
-  gap: 1.5rem;
-  visibility: visible !important;
-  opacity: 1 !important;
-}
-
-.period-refresh-state {
+.chart-state {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: 240px;
+  gap: var(--space-3);
+  height: 100%;
+  min-height: 200px;
 }
-
-.period-refresh-inner {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.25rem 0;
+.chart-state--tall {
+  min-height: 280px;
 }
-
-.period-refresh-text {
+.chart-empty-text {
   margin: 0;
-  font-size: 0.9rem;
+  font-size: var(--text-sm);
   color: var(--color-text-muted);
-}
-
-.dashboard-section-card {
-  background: var(--color-bg-card);
-  border-radius: 14px;
-  padding: 1.5rem;
-  box-shadow: var(--app-shadow-card, 0 1px 3px rgba(0, 0, 0, 0.06));
-  border: 1px solid var(--color-border);
-  transition: box-shadow 0.2s ease;
-}
-
-.section-empty {
   text-align: center;
-  padding: 2rem 1rem;
+}
+.chart-empty-text--pad {
+  padding: var(--space-8) 0;
 }
 
-.section-empty-text {
-  font-size: 0.9375rem;
-  color: var(--color-text-muted);
-  margin: 0 0 1rem 0;
+/* ═══ Cartões (mesmo visual do UiCard; os da grelha arrastável são markup próprio) ═══ */
+.dash-card,
+.dashboard-section-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xs);
+  padding: var(--space-5);
+  min-width: 0;
 }
 
-.section-empty-hint {
-  font-size: 0.875rem;
-  color: var(--color-text-muted);
-  margin: 0;
-}
-
-.btn-section-add {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
-  padding: 0.625rem 1.25rem;
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: #fff;
-  background: linear-gradient(135deg, #166534 0%, #15803d 100%);
-  border: none;
-  border-radius: 10px;
-  text-decoration: none;
-  transition: transform 0.15s, box-shadow 0.15s;
-  box-shadow: 0 1px 3px rgba(22, 101, 52, 0.2);
-}
-
-.btn-section-add:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(22, 101, 52, 0.25);
-}
-
-.section-header {
+.dash-card-head,
+.static-card-header {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 1rem;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
 }
 
-.section-title {
-  font-size: 0.8125rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--color-text-muted);
-  margin: 0 0 1rem 0;
-  line-height: 1.3;
-  padding-bottom: 0.625rem;
-  border-bottom: 1px solid var(--color-border);
+.dash-card-title {
+  margin: 0;
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-strong);
+  letter-spacing: -0.01em;
+  min-width: 0;
+}
+
+.dash-card-actions,
+.static-card-header-actions {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-}
-
-.section-title::before {
-  content: '';
-  width: 3px;
-  height: 1em;
-  background: #166534;
-  border-radius: 2px;
-  flex-shrink: 0;
-}
-
-html.dark .section-title::before {
-  background: #4ade80;
-}
-
-.period-filter-bar {
-  display: flex;
+  justify-content: flex-end;
   flex-wrap: wrap;
-  gap: 1rem;
-  align-items: center;
-  margin-bottom: 0.25rem;
-  padding: 0;
+  gap: var(--space-2);
 }
 
-.period-selector {
-  display: flex;
-  gap: 0.5rem;
-  align-items: center;
-}
-
-.period-selector-center {
-  justify-content: center;
-  margin-bottom: 1rem;
-}
-
-.summary-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 1.25rem;
-  margin-top: 0.75rem;
-  align-items: start;
-}
-
-
-.dashboard-objectives-body-wrap {
-  position: relative;
-}
-
-.dashboard-objectives-body-wrap--locked .dashboard-objectives-body-inner {
-  filter: blur(8px) grayscale(0.25);
-  opacity: 0.52;
-  pointer-events: none;
-  user-select: none;
-}
-
-.dashboard-objectives-lock-overlay {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0.75rem;
-  background: rgba(0, 0, 0, 0.06);
-  pointer-events: none;
-}
-
-html.dark .dashboard-objectives-lock-overlay {
-  background: rgba(0, 0, 0, 0.28);
-}
-
-.dashboard-objectives-lock-panel {
-  pointer-events: auto;
-  text-align: center;
-  padding: 1rem 1.25rem;
-  border-radius: 14px;
-  background: var(--color-bg-card);
-  border: 1px solid var(--color-border);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-}
-
-.dashboard-objectives-lock-text {
-  margin: 0 0 0.5rem;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: var(--color-text);
-}
-
-.objectives-preview-block {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-}
-
-.objectives-footer {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  margin-top: 0.5rem;
-}
-
-.objectives-more-count {
-  margin: 0;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--color-text-muted);
-  line-height: 1.4;
-}
-
-.objectives-completed-badge {
-  margin: 0;
-  font-size: 0.6875rem;
-  font-weight: 600;
-  color: #166534;
-  background: rgba(22, 101, 52, 0.08);
-  padding: 0.2rem 0.5rem;
-  border-radius: 999px;
-  line-height: 1.4;
-}
-
-html.dark .objectives-completed-badge {
-  color: #4ade80;
-  background: rgba(74, 222, 128, 0.12);
-}
-
-
-.objective-preview-track {
-  width: 100%;
-  height: 6px;
-  border-radius: 999px;
-  background: var(--color-border);
-  overflow: hidden;
-}
-
-.objective-preview-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #166534 0%, #16a34a 100%);
-  border-radius: 999px;
-  transition: width 0.2s ease;
-}
-
-.objective-preview-meta {
-  margin: 0.4rem 0 0;
-  font-size: 0.75rem;
-  color: var(--color-text-muted);
-}
-
-.objective-preview-date {
-  color: var(--color-text-muted);
-}
-
-.objectives-preview-skeleton {
-  min-height: 2.5rem;
-  display: flex;
-  align-items: center;
-}
-
-.objectives-preview-loading {
-  font-size: 0.8125rem;
-  color: var(--color-text-muted);
-}
-
-.objectives-preview-empty {
-  text-align: center;
-  padding: 0.5rem 0 0.25rem;
-}
-
-.objectives-preview-empty-text {
-  margin: 0 0 0.65rem;
-  font-size: 0.875rem;
-  color: var(--color-text-muted);
-}
-
-.btn-add-objective {
+/* Link "Ver tudo" — estilo do UiButton ghost sm */
+.see-all {
   display: inline-flex;
   align-items: center;
-  padding: 0.45rem 0.9rem;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: #fff;
-  background: linear-gradient(135deg, #166534 0%, #15803d 100%);
-  border-radius: 8px;
+  gap: 2px;
+  height: var(--control-h-sm);
+  padding: 0 var(--space-2) 0 var(--space-3);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-secondary);
   text-decoration: none;
-  transition: transform 0.15s, box-shadow 0.15s;
-  box-shadow: 0 1px 2px rgba(22, 101, 52, 0.15);
+  white-space: nowrap;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+.see-all:hover {
+  background: var(--color-surface-muted);
+  color: var(--color-text-strong);
+}
+.see-all:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
 }
 
-.btn-add-objective:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 3px 8px rgba(22, 101, 52, 0.2);
-}
-
-.summary-cards-fallback .card {
-  position: relative;
-  background: var(--color-bg-card);
-  border-radius: 14px;
-  padding: 1.125rem 1.25rem;
-  box-shadow: var(--app-shadow-card, 0 1px 3px rgba(0, 0, 0, 0.06));
-  border: 1px solid var(--color-border);
-  transition: box-shadow 0.2s ease, transform 0.2s ease;
-}
-
-.summary-cards-fallback .card:hover {
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
-  transform: translateY(-1px);
-}
-
-.summary-cards-fallback .card-title--with-arrow {
+/* Botão de ícone discreto (olho, liquidar) */
+.icon-btn {
   display: inline-flex;
   align-items: center;
-  gap: 0.375rem;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+.icon-btn:hover {
+  background: var(--color-surface-muted);
+  color: var(--color-text-strong);
+}
+.icon-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+.icon-btn--sm {
+  width: 24px;
+  height: 24px;
 }
 
-/* ── Info tooltip (i) no canto superior direito dos cards do dashboard ── */
+/* ═══ Tooltips de informação ═══ */
 .card-info {
   position: absolute;
-  top: 0.875rem;
-  right: 1rem;
+  top: var(--space-4);
+  right: var(--space-4);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: var(--color-text-muted);
+  color: var(--color-text-subtle);
   cursor: help;
   outline: none;
   flex-shrink: 0;
   z-index: 2;
-  transition: color 0.15s ease;
+  transition: color var(--transition-fast);
 }
-
 .card-info:hover,
 .card-info:focus-visible {
-  color: var(--color-success);
+  color: var(--color-primary-text);
 }
 
 .card-tooltip {
@@ -2211,16 +1988,16 @@ html.dark .objectives-completed-badge {
   right: -0.25rem;
   transform: translateY(4px);
   width: max-content;
-  max-width: 220px;
-  padding: 0.625rem 0.75rem;
-  background: var(--color-bg-card);
+  max-width: 240px;
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-surface);
   color: var(--color-text);
   border: 1px solid var(--color-border);
-  border-radius: 10px;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
-  font-size: 0.75rem;
-  font-weight: 500;
-  line-height: 1.4;
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-md);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  line-height: 1.45;
   text-transform: none;
   letter-spacing: normal;
   text-align: left;
@@ -2228,18 +2005,8 @@ html.dark .objectives-completed-badge {
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
-  transition: opacity 0.15s ease, transform 0.15s ease, visibility 0.15s;
+  transition: opacity var(--transition-fast), transform var(--transition-fast), visibility var(--transition-fast);
 }
-
-.card-tooltip::after {
-  content: '';
-  position: absolute;
-  top: 100%;
-  right: 0.5rem;
-  border: 6px solid transparent;
-  border-top-color: var(--color-border);
-}
-
 .card-info:hover .card-tooltip,
 .card-info:focus-visible .card-tooltip {
   opacity: 1;
@@ -2247,470 +2014,397 @@ html.dark .objectives-completed-badge {
   transform: translateY(0);
 }
 
-/* Variante inline (ex.: banner da média diária) — fica junto ao título e o
-   tooltip abre centrado sobre o ícone, em vez de no canto do card. */
 .card-info--inline {
   position: relative;
   top: auto;
   right: auto;
-  vertical-align: middle;
-  margin-left: 0.25rem;
 }
-
 .card-info--inline .card-tooltip {
   right: auto;
   left: 50%;
   transform: translateX(-50%) translateY(4px);
 }
-
 .card-info--inline:hover .card-tooltip,
 .card-info--inline:focus-visible .card-tooltip {
   transform: translateX(-50%) translateY(0);
 }
 
-.card-info--inline .card-tooltip::after {
-  right: auto;
-  left: 50%;
-  transform: translateX(-50%);
-}
-
-/* Variante que abre para a DIREITA, ao lado do ícone (evita o corte em cima
-   quando está no topo da página). Usar com --inline. */
+/* Abre para a direita (evita o corte no topo da página). Usar com --inline. */
 .card-info--right .card-tooltip {
   bottom: auto;
   top: 50%;
   left: calc(100% + 8px);
-  right: auto;
-  transform: translateY(calc(-50% - 8px)) translateX(-4px);
+  transform: translateY(-50%) translateX(-4px);
 }
-
 .card-info--right:hover .card-tooltip,
 .card-info--right:focus-visible .card-tooltip {
-  transform: translateY(calc(-50% - 8px)) translateX(0);
+  transform: translateY(-50%) translateX(0);
 }
 
-.card-info--right .card-tooltip::after {
-  top: calc(50% + 8px);
-  left: auto;
-  right: 100%;
-  bottom: auto;
-  transform: translateY(-50%);
-  border-top-color: transparent;
-  border-right-color: var(--color-border);
+/* ═══ HERO: Património total (ValueHeroCard) — rodapé com a repartição ═══ */
+
+
+.hero-alloc {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  width: 100%;
+  min-width: 0;
 }
 
-.summary-cards-fallback .card-arrow {
+.hero-alloc-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4) var(--space-8);
+}
+
+.alloc-bar {
+  display: flex;
+  gap: 2px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  background: var(--color-surface-muted);
+}
+.alloc-seg {
+  display: block;
+  height: 100%;
+  min-width: 3px;
+}
+
+.alloc-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
   flex-shrink: 0;
 }
 
-.summary-cards-fallback .card-arrow--income {
-  color: var(--color-income);
-}
-
-.summary-cards-fallback .card-arrow--expense {
-  color: var(--color-expense);
-}
-
-.summary-cards-fallback .card-arrow--savings {
-  color: #ca8a04;
-}
-
-html.dark .summary-cards-fallback .card-arrow--savings {
-  color: #facc15;
-}
-
-.summary-cards-fallback .card-arrow--rate {
-  color: #16a34a;
-}
-
-html.dark .summary-cards-fallback .card-arrow--rate {
-  color: #4ade80;
-}
-
-.summary-cards-fallback .card-title {
-  font-size: 0.6875rem;
-  font-weight: 600;
+.alloc-pct {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
   color: var(--color-text-muted);
-  margin: 0 0 0.5rem 0;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
 }
 
-.summary-cards-fallback .card-value {
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: var(--color-text);
-  margin: 0;
-  letter-spacing: -0.02em;
-  line-height: 1.2;
-}
-
-.summary-cards-fallback .card-subtitle {
-  font-size: 0.6875rem;
-  color: var(--color-text-muted);
-  margin: 0.375rem 0 0 0;
-  font-weight: 500;
-}
-
-
-.summary-cards-fallback .card-income .card-value,
-.summary-cards-fallback .card-expense .card-value,
-.summary-cards-fallback .card-savings .card-value,
-.summary-cards-fallback .card-balance .card-value { color: var(--color-text); }
-
-
-
-.plan-section {
-  margin-top: 1.5rem;
-  padding-top: 1.25rem;
-  border-top: 1px solid var(--color-border);
-}
-
-.comparison-grid {
+/* ═══ Grelha estática (Contas + Objetivos + Movimentos) ═══ */
+.static-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 1.5rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-5);
 }
 
-.comparison-card {
-  background: var(--color-bg);
-  border-radius: 14px;
-  padding: 1.25rem;
-  border: 1px solid var(--color-border);
-  transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s;
+.static-card {
+  display: flex;
+  flex-direction: column;
+  min-height: 300px;
 }
 
-.comparison-card:hover {
-  border-color: rgba(22, 101, 52, 0.3);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
-  transform: translateY(-1px);
+.static-card > :deep(.empty) {
+  flex: 1;
+  justify-content: center;
 }
 
-.comparison-title {
-  font-size: 0.9375rem;
-  font-weight: 600;
-  color: var(--color-text);
-  margin: 0 0 1rem 0;
-  padding-bottom: 0.5rem;
-  border-bottom: 1px solid var(--color-border);
+/* Linhas (contas / movimentos) */
+.row-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0 calc(-1 * var(--space-2));
 }
 
-.comparison-title--with-icon {
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 10px var(--space-2);
+  border-radius: var(--radius-md);
+  text-decoration: none;
+  color: inherit;
+  transition: background var(--transition-fast);
+}
+.row:hover {
+  background: var(--color-surface-hover);
+}
+
+.row-logo {
+  flex-shrink: 0;
+}
+
+.row-icon {
   display: inline-flex;
   align-items: center;
-  gap: 0.375rem;
-}
-
-.comparison-icon {
+  justify-content: center;
+  width: 36px;
+  height: 36px;
   flex-shrink: 0;
-}
-
-.comparison-icon--income {
-  color: #16a34a;
-}
-
-.comparison-icon--expense {
-  color: #dc2626;
-}
-
-.comparison-icon--savings {
-  color: #ca8a04;
-}
-
-html.dark .comparison-icon--income {
-  color: #4ade80;
-}
-
-html.dark .comparison-icon--expense {
-  color: #f87171;
-}
-
-html.dark .comparison-icon--savings {
-  color: #facc15;
-}
-
-.comparison-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 0.5rem;
-}
-
-.comparison-label {
-  font-size: 0.8125rem;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-muted);
   color: var(--color-text-muted);
 }
-
-.comparison-value {
-  font-size: 1rem;
-  font-weight: 600;
-  color: var(--color-text);
+.row-icon--income {
+  background: var(--color-success-soft);
+  color: var(--color-income);
+}
+.row-icon--expense {
+  background: var(--color-danger-soft);
+  color: var(--color-expense);
+}
+.row-icon--invest {
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
 }
 
-.comparison-value.expected {
-  color: var(--color-text-muted);
-}
-
-.comparison-value.income { color: var(--color-income); }
-.comparison-value.expense { color: var(--color-expense); }
-.comparison-value.above { color: var(--color-income); }
-.comparison-value.below { color: var(--color-expense); }
-
-.comparison-diff {
-  font-size: 0.8125rem;
-  color: var(--color-text-muted);
-  margin-top: 0.5rem;
-  padding-top: 0.5rem;
-  border-top: 1px dashed var(--color-border);
-}
-
-.comparison-diff--good {
-  color: #16a34a;
-}
-
-html.dark .comparison-diff--good {
-  color: #4ade80;
-}
-
-.comparison-diff--over {
-  color: #dc2626;
-}
-
-html.dark .comparison-diff--over {
-  color: #f87171;
-}
-
-/* ═══ MÉDIA DIÁRIA BANNER ═══ */
-.daily-avg-banner {
-  background: var(--color-bg-card);
-  border: 1px solid var(--color-border);
-  border-radius: 14px;
-  padding: 1rem 1.25rem;
-  margin-top: 1rem;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  position: relative;
-  transition: box-shadow 0.2s, transform 0.15s;
-}
-
-.daily-avg-banner:hover {
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
-  transform: translateY(-1px);
-}
-
-.daily-avg-banner-left {
-  display: flex;
-  align-items: center;
-}
-
-.daily-avg-banner-info {
+.row-text {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
 }
 
-.daily-avg-banner-icon {
-  color: #6366f1;
-  flex-shrink: 0;
-  vertical-align: -2px;
-  margin-right: 0.375rem;
+.row-name {
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
 }
 
-html.dark .daily-avg-banner-icon {
-  color: #a5b4fc;
-}
-
-.daily-avg-banner-title {
-  font-size: 0.6875rem;
-  font-weight: 600;
+.row-sub {
+  font-size: var(--text-xs);
   color: var(--color-text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
 }
 
-.daily-avg-banner-value-row {
+.row-amount {
+  flex-shrink: 0;
+  font-size: var(--text-sm);
+}
+.row-amount--expense {
+  color: var(--color-text-strong);
+}
+.row-amount--invest {
+  color: var(--color-warning);
+}
+
+/* Objetivos */
+.objectives-wrap {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.objectives-inner {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.objectives-inner > :deep(.empty) {
+  flex: 1;
+  justify-content: center;
+}
+.objectives-wrap--locked .objectives-inner {
+  filter: blur(6px) grayscale(0.25);
+  opacity: 0.5;
+  pointer-events: none;
+  user-select: none;
+}
+
+.objectives-lock {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-3);
+  pointer-events: none;
+}
+.objectives-lock-panel {
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  text-align: center;
+  padding: var(--space-4) var(--space-5);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-md);
+}
+.objectives-lock-text {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-strong);
+}
+
+.objectives-loading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  padding-top: var(--space-2);
+}
+.objectives-loading-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.sk-bar {
+  display: block;
+  height: 10px;
+  border-radius: var(--radius-full);
+  background: linear-gradient(90deg, var(--color-surface-muted) 0%, var(--color-surface-2) 50%, var(--color-surface-muted) 100%);
+  background-size: 200% 100%;
+  animation: sk-shimmer 1.4s ease-in-out infinite;
+}
+.sk-bar--w60 { width: 60%; }
+.sk-bar--track { height: 6px; }
+@keyframes sk-shimmer {
+  0% { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
+
+.objectives-block {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.objectives-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0 calc(-1 * var(--space-2));
+}
+
+.objective-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-2);
+  border-radius: var(--radius-md);
+  text-decoration: none;
+  color: inherit;
+  transition: background var(--transition-fast);
+}
+.objective-row:hover {
+  background: var(--color-surface-hover);
+}
+
+.objective-row-top {
   display: flex;
   align-items: baseline;
-  gap: 0.5rem;
+  justify-content: space-between;
+  gap: var(--space-3);
 }
 
-.daily-avg-banner-value {
-  font-size: 1.125rem;
-  font-weight: 700;
-  color: var(--color-text);
+.objective-pct {
+  flex-shrink: 0;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-strong);
+  font-variant-numeric: tabular-nums;
 }
 
-.daily-avg-banner-days {
-  font-size: 0.6875rem;
-  color: var(--color-text-muted);
-  font-weight: 500;
-}
-
-.daily-avg-banner-right {
-  display: flex;
-  align-items: flex-start;
-}
-
-.daily-avg-banner-proj-block {
-  display: flex;
-  flex-direction: column;
-  gap: 0.125rem;
-  text-align: right;
-}
-
-.daily-avg-banner-proj-label {
-  font-size: 0.625rem;
-  font-weight: 600;
-  color: var(--color-text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-}
-
-.daily-avg-banner-proj-value {
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: var(--color-text);
-}
-
-.daily-avg-banner-progress {
-  width: 100%;
-  height: 3px;
-  background: var(--color-border);
-  border-radius: 2px;
+.objective-track {
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--color-surface-muted);
   overflow: hidden;
 }
-
-.daily-avg-banner-progress-bar {
+.objective-fill {
   height: 100%;
-  background: #6366f1;
-  border-radius: 2px;
-  transition: width 0.4s ease;
+  border-radius: var(--radius-full);
+  background: var(--color-primary-text);
+  transition: width var(--transition-slow);
 }
 
-html.dark .daily-avg-banner-progress-bar {
-  background: #a5b4fc;
-}
-
-@media (max-width: 600px) {
-  .daily-avg-banner {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .charts-side-by-side {
-    grid-template-columns: 1fr;
-  }
-}
-
-.charts-section-inner {
-  display: flex;
-  flex-direction: column;
-  gap: 1.25rem;
-  margin-top: 1.5rem;
-  padding-top: 1.25rem;
-  border-top: 1px solid var(--color-border);
-}
-
-.charts-side-by-side {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1rem;
-}
-
-.chart-empty-text {
-  text-align: center;
-  color: var(--color-text-muted);
-  font-size: 0.8125rem;
-  padding: 2rem 0;
-}
-
-.chart-card {
-  width: 100%;
-  background: var(--color-bg-card);
-  border-radius: 14px;
-  padding: 1.375rem;
-  box-shadow: var(--app-shadow-card, 0 1px 3px rgba(0, 0, 0, 0.06));
-  border: 1px solid var(--color-border);
-  transition: box-shadow 0.2s, transform 0.15s;
-}
-
-.chart-card:hover {
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
-  transform: translateY(-1px);
-}
-
-.chart-title {
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: var(--color-text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  margin: 0 0 1rem 0;
-}
-
-.trend-card-top {
+.objective-meta {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1.25rem;
-}
-
-.trend-card-top .section-title {
+  gap: var(--space-2);
   margin: 0;
-  border: none;
-  padding: 0;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+.objective-amounts {
+  font-variant-numeric: tabular-nums;
 }
 
-.trend-card-charts {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 1.25rem;
-}
-
-.trend-card-charts--stacked {
-  grid-template-columns: 1fr;
-}
-
-.trend-loading {
+.objectives-footer {
   display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-top: auto;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border-subtle);
+}
+.objectives-more {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  color: var(--color-text-muted);
+}
+
+/* ═══ Modo de edição (reordenar cartões) ═══ */
+.card-editing {
+  outline: 2px dashed var(--color-primary-text);
+  outline-offset: -2px;
+  cursor: grab;
+  user-select: none;
+  transition: outline-color var(--transition-base);
+}
+.card-editing:active {
+  cursor: grabbing;
+}
+
+.card-drag-placeholder {
+  outline: 2px dashed var(--color-primary-text);
+  outline-offset: -2px;
+  background: rgba(var(--color-primary-rgb), 0.06);
+  box-shadow: none;
+}
+.card-drag-placeholder > * {
+  visibility: hidden;
+}
+
+/* Clone que segue o ponteiro (anexado ao body; mantém as classes do cartão) */
+.card-floating {
+  position: fixed;
+  z-index: 9999;
+  pointer-events: none;
+  box-shadow: var(--shadow-lg);
+  transform: rotate(-1deg);
+  transition: none;
+}
+
+.card-drag-handle {
+  display: flex;
+  align-items: center;
   justify-content: center;
-  align-items: center;
-  height: 280px;
+  width: var(--control-h-sm);
+  height: var(--control-h-sm);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  cursor: grab;
+  transition: color var(--transition-fast), background var(--transition-fast);
+}
+.card-drag-handle:hover {
+  color: var(--color-selected-text);
+  background: var(--color-selected);
+}
+.card-drag-handle:active {
+  cursor: grabbing;
 }
 
-.trend-charts-inner {
-  position: relative;
-  height: 280px;
-}
 
-/* ═══ CARD DE INVESTIMENTOS (largura total, por baixo dos 3) ═══ */
-.inv-card-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 0.75rem 1rem;
-  margin-bottom: 1rem;
-}
 
-.inv-card-top .section-title {
-  margin: 0;
-  padding: 0;
-  border: none;
-}
 
-.inv-card-top-right {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  flex-wrap: wrap;
-  gap: 0.625rem;
-}
 
-/* Dropdown de ativos (logo + nome completo) */
+
+
+
+
+
 .inv-select {
   position: relative;
 }
@@ -2718,34 +2412,33 @@ html.dark .daily-avg-banner-progress-bar {
 .inv-select-trigger {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  width: 240px;
+  gap: var(--space-2);
+  width: 220px;
   max-width: 52vw;
-  padding: 0.45rem 0.625rem;
-  background: var(--color-input-bg, #fff);
-  border: 1.5px solid var(--color-input-border, #e2e8f0);
-  border-radius: 10px;
+  height: var(--control-h-sm);
+  padding: 0 var(--space-2);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-xs);
   font-family: inherit;
   color: var(--color-text);
   cursor: pointer;
-  transition: border-color 0.15s;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
-
-.inv-select-trigger:hover,
+.inv-select-trigger:hover {
+  border-color: var(--color-text-subtle);
+}
 .inv-select-trigger.open {
-  border-color: #166534;
-}
-
-html.dark .inv-select-trigger:hover,
-html.dark .inv-select-trigger.open {
-  border-color: #4ade80;
+  border-color: var(--color-primary-text);
+  box-shadow: var(--focus-ring);
 }
 
 .inv-select-label {
   flex: 1;
   min-width: 0;
-  font-size: 0.8125rem;
-  font-weight: 600;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
   text-align: left;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2755,9 +2448,8 @@ html.dark .inv-select-trigger.open {
 .inv-select-chevron {
   flex-shrink: 0;
   color: var(--color-text-muted);
-  transition: transform 0.2s;
+  transition: transform var(--transition-base);
 }
-
 .inv-select-trigger.open .inv-select-chevron {
   transform: rotate(180deg);
 }
@@ -2766,12 +2458,17 @@ html.dark .inv-select-trigger.open {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   flex-shrink: 0;
   border-radius: 6px;
   color: var(--color-text-muted);
-  background: var(--color-table-row-hover);
+  background: var(--color-surface-muted);
+}
+.inv-select-all-icon--lg {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
 }
 
 .inv-select-menu {
@@ -2780,907 +2477,363 @@ html.dark .inv-select-trigger.open {
   right: 0;
   z-index: 60;
   width: 320px;
-  max-width: 80vw;
+  max-width: calc(100vw - 32px);
   max-height: 320px;
   overflow-y: auto;
-  padding: 0.375rem;
-  background: var(--color-bg-card);
+  padding: var(--space-1);
+  background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: 12px;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.14);
-}
-
-html.dark .inv-select-menu {
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
 }
 
 .inv-select-opt {
   display: flex;
   align-items: center;
-  gap: 0.625rem;
+  gap: var(--space-3);
   width: 100%;
-  padding: 0.5rem 0.625rem;
+  padding: var(--space-2);
   border: none;
   background: transparent;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   font-family: inherit;
   text-align: left;
   cursor: pointer;
-  transition: background 0.12s;
+  transition: background var(--transition-fast);
 }
-
 .inv-select-opt:hover {
-  background: var(--color-table-row-hover);
+  background: var(--color-surface-hover);
 }
-
 .inv-select-opt.active {
-  background: rgba(22, 101, 52, 0.08);
-}
-
-html.dark .inv-select-opt.active {
-  background: rgba(74, 222, 128, 0.1);
+  background: var(--color-selected);
 }
 
 .inv-select-opt-text {
   display: flex;
   flex-direction: column;
-  gap: 0.05rem;
-  min-width: 0;
   flex: 1;
+  min-width: 0;
 }
-
 .inv-select-opt-name {
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: var(--color-text);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-strong);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
 .inv-select-opt-sub {
-  font-size: 0.6875rem;
-  font-weight: 600;
-  letter-spacing: 0.02em;
+  font-size: var(--text-xs);
   color: var(--color-text-muted);
 }
-
 .inv-select-check {
   flex-shrink: 0;
-  color: #166534;
+  color: var(--color-primary-text);
 }
 
-html.dark .inv-select-check {
-  color: #4ade80;
+/* ═══ Tiles internos (gráficos, KPIs, comparação) ═══ */
+.tile-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-5);
+}
+.tile-grid--stacked {
+  grid-template-columns: minmax(0, 1fr);
 }
 
-.inv-card-hero {
-  display: flex;
-  flex-direction: column;
-  gap: 0.1rem;
+.chart-tile {
+  min-width: 0;
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
 }
 
-.inv-card-value {
-  font-size: 1.4rem;
-  font-weight: 800;
-  color: #166534;
-  letter-spacing: -0.02em;
+.tile-title {
+  margin: 0 0 var(--space-4);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-strong);
 }
 
-html.dark .inv-card-value {
-  color: #4ade80;
-}
-
-.inv-card-hero-sub {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-}
-
-.inv-card-return {
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: #166534;
-}
-
-html.dark .inv-card-return {
-  color: #4ade80;
-}
-
-.inv-card-return.negative,
-.inv-card-pct.negative {
-  color: #dc2626;
-}
-
-html.dark .inv-card-return.negative,
-html.dark .inv-card-pct.negative {
-  color: #f87171;
-}
-
-.inv-card-pct {
-  font-size: 0.6875rem;
-  font-weight: 700;
-  color: #166534;
-  background: rgba(22, 101, 52, 0.1);
-  padding: 0.08rem 0.4rem;
-  border-radius: 999px;
-}
-
-html.dark .inv-card-pct {
-  color: #4ade80;
-  background: rgba(74, 222, 128, 0.12);
-}
-
-.inv-card-pct.negative {
-  background: rgba(220, 38, 38, 0.1);
-}
-
-.inv-card-date {
-  font-size: 0.6875rem;
-  color: var(--color-text-muted);
-}
-
-.inv-card-chart {
+.trend-chart {
   position: relative;
-  /* 200px do gráfico + ~24px para a legenda (Valor/Investido) por cima. */
-  height: 224px;
-  margin-top: 0.75rem;
+  height: 280px;
 }
 
-/* O AssetsChart tem altura própria (240px); forçamo-la à do contentor para não transbordar. */
-.inv-card-chart :deep(.assets-chart) {
-  height: 200px;
-}
-
-@media (max-width: 560px) {
-  .inv-select-trigger {
-    width: 180px;
-  }
-}
-
-.inv-card-chart-state {
+/* Resumo do período */
+.period-body {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
+  flex-direction: column;
+  gap: var(--space-5);
 }
 
-.inv-card-chart-empty {
-  font-size: 0.75rem;
-  color: var(--color-text-muted);
-  margin: 0;
-}
-
-
-/* ═══ STATIC GRID (Contas + Objetivos + Movimentos) ═══ */
-.static-grid {
+.kpi-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 1.25rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-4);
 }
 
-.static-card {
+.kpi {
+  position: relative;
   display: flex;
   flex-direction: column;
-  padding: 1rem 1.125rem;
-}
-
-.static-card-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  margin-bottom: 0.75rem;
-  padding-bottom: 0.625rem;
-  border-bottom: 1px solid var(--color-border);
-}
-
-.static-card-header .section-title {
-  margin: 0;
-  padding-bottom: 0;
-  border-bottom: none;
-}
-
-.static-card-link {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  color: var(--color-text-muted);
-  text-decoration: none;
-  flex-shrink: 0;
-  transition: all 0.15s;
-}
-
-.static-card-link:hover {
-  background: var(--color-table-row-hover);
-  color: #166534;
-  border-color: #bbf7d0;
-}
-
-html.dark .static-card-link {
-  color: #94a3b8;
-}
-
-html.dark .static-card-link:hover {
-  background: rgba(74, 222, 128, 0.1);
-  color: #4ade80;
-  border-color: rgba(74, 222, 128, 0.3);
-}
-
-/* Account rows inside static card */
-.accounts-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-}
-
-.account-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  padding: 0.5rem 0.25rem;
-  text-decoration: none;
-  color: inherit;
-  border-bottom: 1px solid var(--color-border);
-  border-radius: 8px;
-  transition: background 0.15s;
-}
-
-.account-row:last-child {
-  border-bottom: none;
-}
-
-.account-row:hover {
-  background: var(--color-table-row-hover);
-}
-
-.account-row-info {
-  display: flex;
-  align-items: center;
-  gap: 0.625rem;
+  gap: var(--space-2);
   min-width: 0;
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
 }
 
-.account-row-icon {
-  display: inline-flex;
-  width: 18px;
-  height: 18px;
-  flex-shrink: 0;
-  color: var(--color-text-muted);
-}
-
-.account-row-logo {
-  flex-shrink: 0;
-}
-
-.account-row-fallback {
+.kpi-label {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  border-radius: 8px;
-  background: #ecfdf5;
-  color: #166534;
-}
-
-html.dark .account-row-fallback {
-  background: rgba(22, 101, 52, 0.2);
-  color: #4ade80;
-}
-
-.account-row-name {
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: var(--color-text);
-  margin: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.account-row-type {
-  font-size: 0.6875rem;
+  gap: 6px;
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
   color: var(--color-text-muted);
 }
 
-.account-row-balance {
-  font-size: 0.8125rem;
-  font-weight: 700;
-  color: var(--color-text);
-  white-space: nowrap;
+.kpi-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
   flex-shrink: 0;
+  background: var(--color-text-subtle);
 }
+.kpi-dot--income { background: var(--color-income); }
+.kpi-dot--expense { background: var(--color-expense); }
+.kpi-dot--brand { background: var(--color-primary-text); }
 
-.account-row-balance.negative {
-  color: var(--color-expense);
-}
-
-/* Objectives rows inside static card */
-.objectives-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.375rem;
-}
-
-.objective-row {
-  display: block;
-  padding: 0.375rem 0.5rem;
-  border-radius: 8px;
-  border: 1px solid var(--color-border);
-  text-decoration: none;
-  color: inherit;
-  transition: border-color 0.15s, transform 0.15s;
-}
-
-.objective-row:hover {
-  border-color: rgba(22, 101, 52, 0.35);
-  transform: translateY(-1px);
-}
-
-.objective-row-top {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 0.5rem;
-  margin-bottom: 0.25rem;
-}
-
-.objective-row-name {
-  font-size: 0.8125rem;
-  font-weight: 650;
-  color: var(--color-text);
-}
-
-.objective-row-amounts {
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--color-text-muted);
-  white-space: nowrap;
-}
-
-/* Empty state for static cards */
-.static-card-empty {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  padding: 1rem 0.75rem;
-  gap: 0.375rem;
-}
-
-.static-card-empty-icon {
-  color: var(--color-text-muted);
-  opacity: 0.4;
-}
-
-.static-card-empty p {
-  font-size: 0.875rem;
-  color: var(--color-text-muted);
-  margin: 0;
-  max-width: 22rem;
-  line-height: 1.5;
-}
-
-.static-card-action {
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: #166534;
-  text-decoration: none;
-  margin-top: 0.25rem;
-}
-
-.static-card-action:hover {
-  text-decoration: underline;
-}
-
-html.dark .static-card-action {
-  color: #4ade80;
-}
-
-/* Movement rows inside static card */
-.movements-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-}
-
-.movement-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  padding: 0.5rem 0.25rem;
-  text-decoration: none;
-  color: inherit;
-  border-bottom: 1px solid var(--color-border);
-  border-radius: 8px;
-  transition: background 0.15s;
-}
-
-.movement-row:last-child {
-  border-bottom: none;
-}
-
-.movement-row:hover {
-  background: var(--color-table-row-hover);
-}
-
-.movement-row-left {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  min-width: 0;
-}
-
-.movement-row-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-  flex-shrink: 0;
-}
-
-.movement-row-icon.income {
-  background: rgba(5, 150, 105, 0.12);
-  color: #059669;
-}
-
-.movement-row-icon.expense {
-  background: rgba(220, 38, 38, 0.10);
-  color: #dc2626;
-}
-
-html.dark .movement-row-icon.income {
-  background: rgba(74, 222, 128, 0.15);
-  color: #4ade80;
-}
-
-html.dark .movement-row-icon.expense {
-  background: rgba(248, 113, 113, 0.15);
-  color: #f87171;
-}
-
-/* Depósito na corretora — âmbar, como o "Investido" dos gráficos e a linha nos Movimentos */
-.movement-row-icon.invest {
-  background: rgba(217, 119, 6, 0.1);
-  color: #d97706;
-}
-
-html.dark .movement-row-icon.invest {
-  background: rgba(251, 191, 36, 0.14);
-  color: #fbbf24;
-}
-
-.movement-row-desc {
-  margin: 0;
-  font-size: 0.8125rem;
-  font-weight: 500;
+.kpi-value {
+  font-size: var(--text-xl);
+  font-weight: var(--weight-bold);
   line-height: 1.2;
+  letter-spacing: var(--tracking-tight);
+  color: var(--color-text-strong);
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 140px;
 }
 
-.movement-row-date {
-  font-size: 0.6875rem;
-  color: var(--color-text-secondary, #94a3b8);
+.kpi-sub {
+  margin-top: -4px;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
 }
 
-.movement-row-amount {
-  font-size: 0.8125rem;
-  font-weight: 600;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
-.movement-row-amount.income {
-  color: #059669;
-}
-
-.movement-row-amount.expense {
-  color: #dc2626;
-}
-
-html.dark .movement-row-amount.income {
-  color: #4ade80;
-}
-
-html.dark .movement-row-amount.expense {
-  color: #f87171;
-}
-
-.movement-row-amount.invest {
-  color: #d97706;
-}
-
-html.dark .movement-row-amount.invest {
-  color: #fbbf24;
-}
-
-@media (max-width: 768px) {
-  .static-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .static-card {
-    min-height: auto;
-  }
-}
-
-/* ═══ PATRIMONIO HERO ═══ */
-.patrimonio-hero {
-  background: var(--color-bg-card);
-  border-radius: 14px;
-  padding: 1.75rem 2rem 1.5rem;
-  box-shadow: var(--app-shadow-card, 0 1px 3px rgba(0, 0, 0, 0.06));
-  border: 1px solid var(--color-border);
-  margin-top: 0;
-  transition: box-shadow 0.2s;
-}
-
-.patrimonio-hero:hover {
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
-}
-
-.patrimonio-top {
+/* Média diária */
+.daily-avg {
   display: flex;
+  align-items: center;
   justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 0.75rem;
-}
-
-.patrimonio-info {
-  display: flex;
-  flex-direction: column;
-}
-
-.patrimonio-label-row {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-bottom: 0.375rem;
-}
-
-.patrimonio-label {
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: #166534;
-}
-
-html.dark .patrimonio-label {
-  color: #4ade80;
-}
-
-.patrimonio-eye-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 0.2rem;
-  border-radius: 6px;
-  color: var(--color-text-muted);
-  transition: color 0.15s, background 0.15s;
-}
-
-.patrimonio-eye-btn:hover {
-  color: var(--color-text);
-  background: var(--color-table-row-hover, rgba(0, 0, 0, 0.04));
-}
-
-.patrimonio-value {
-  font-size: clamp(1.75rem, 3.5vw, 2.25rem);
-  font-weight: 800;
-  color: var(--color-text);
-  margin: 0;
-  letter-spacing: -0.03em;
-  line-height: 1.15;
-}
-
-.patrimonio-trend {
-  display: block;
-  font-size: 0.8125rem;
-  font-weight: 700;
-  color: #16a34a;
-  margin-top: 0.375rem;
-  letter-spacing: -0.01em;
-}
-
-.patrimonio-trend--down {
-  color: #dc2626;
-}
-
-html.dark .patrimonio-trend {
-  color: #4ade80;
-}
-
-html.dark .patrimonio-trend--down {
-  color: #f87171;
-}
-
-.patrimonio-date {
-  font-size: 0.8125rem;
-  color: var(--color-text-muted);
-  margin-top: 0.25rem;
-}
-
-.patrimonio-reserved {
-  display: inline-flex;
-  align-items: center;
-  font-size: 0.75rem;
-  font-weight: 500;
-  color: var(--color-text-muted);
-  margin-top: 0.375rem;
-  padding: 0.25rem 0.625rem;
-  background: rgba(22, 101, 52, 0.06);
-  border-radius: 999px;
-  width: fit-content;
-}
-
-html.dark .patrimonio-reserved {
-  background: rgba(74, 222, 128, 0.1);
-}
-
-.patrimonio-periods {
-  display: flex;
-  gap: 0;
+  flex-wrap: wrap;
+  gap: var(--space-3) var(--space-6);
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: 10px;
+}
+
+.daily-avg-main,
+.daily-avg-proj {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.daily-avg-proj {
+  align-items: flex-end;
+  text-align: right;
+}
+
+.daily-avg-value-row {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.daily-avg-value {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-bold);
+  color: var(--color-text-strong);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--tracking-tight);
+}
+.daily-avg-proj-value {
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-strong);
+  font-variant-numeric: tabular-nums;
+}
+
+.daily-avg-progress {
+  flex-basis: 100%;
+  height: 4px;
+  border-radius: var(--radius-full);
+  background: var(--color-surface-muted);
   overflow: hidden;
-  flex-shrink: 0;
+}
+.daily-avg-progress-bar {
+  height: 100%;
+  border-radius: var(--radius-full);
+  background: var(--color-primary-text);
+  transition: width var(--transition-slow);
 }
 
-.patrimonio-period-btn {
-  padding: 0.4rem 0.75rem;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--color-text-muted);
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s;
-  border-right: 1px solid var(--color-border);
-  font-family: inherit;
+/* Plano mensal */
+.plan-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--color-border-subtle);
 }
 
-.patrimonio-period-btn:last-child {
-  border-right: none;
+.plan-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
 }
 
-.patrimonio-period-btn:hover {
-  background: var(--color-table-row-hover, rgba(0, 0, 0, 0.03));
-  color: var(--color-text);
-}
-
-.patrimonio-period-btn.active {
-  background: var(--color-text);
-  color: var(--color-bg-card);
-  font-weight: 700;
-}
-
-html.dark .patrimonio-period-btn.active {
-  background: #f5f5f5;
-  color: #0a0a0a;
-}
-
-.patrimonio-body {
+.comparison-grid {
   display: grid;
-  grid-template-columns: 220px 1fr;
-  gap: 1.25rem;
-  align-items: center;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-4);
 }
 
-.patrimonio-categories {
+.comparison-tile {
   display: flex;
   flex-direction: column;
-  gap: 0.625rem;
+  align-items: stretch;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  min-width: 0;
 }
 
-.patrimonio-cat-row {
+.comparison-row {
   display: flex;
-  flex-direction: column;
-  gap: 0.125rem;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
 }
-
-.patrimonio-cat-name {
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: var(--color-text);
-}
-
-.patrimonio-cat-values {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-}
-
-.patrimonio-cat-amount {
-  font-size: 0.8125rem;
-  font-weight: 700;
-  color: var(--color-text);
-}
-
-.patrimonio-cat-percent {
-  font-size: 0.75rem;
+.comparison-label {
+  font-size: var(--text-sm);
   color: var(--color-text-muted);
 }
-
-.patrimonio-chart-area {
-  min-height: 200px;
+.comparison-value {
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-strong);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.comparison-value--muted {
+  font-weight: var(--weight-medium);
+  color: var(--color-text-secondary);
 }
 
-.patrimonio-chart-loading {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 200px;
+.comparison-diff {
+  align-self: flex-start;
+  margin-top: var(--space-1);
+  font-variant-numeric: tabular-nums;
 }
 
-.patrimonio-chart-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  min-height: 200px;
-  color: var(--color-text-muted);
-  font-size: 0.875rem;
-}
-
-.patrimonio-chart-empty-icon {
-  opacity: 0.4;
-}
-
-
-@media (max-width: 768px) {
-  .patrimonio-hero {
-    padding: 1.25rem 1rem;
-    margin-top: 0;
-  }
-
-  .patrimonio-top {
-    flex-direction: column;
-    gap: 1rem;
-  }
-
-  .patrimonio-body {
-    grid-template-columns: 1fr;
-    gap: 1.25rem;
-  }
-
-  .patrimonio-categories {
-    order: 2;
-    flex-direction: row;
-    flex-wrap: wrap;
-    gap: 1rem;
-  }
-
-  .patrimonio-cat-row {
-    flex: 1;
-    min-width: 140px;
-  }
-
-  .patrimonio-chart-area {
-    order: 1;
-  }
-
-}
-
-/* ═══ Date Range Picker ═══ */
+/* ═══ Seletor de datas ═══ */
 .date-range-picker {
   position: relative;
 }
 
 .date-range-btn {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 0.375rem;
-  background: var(--color-bg-card);
-  border: 1px solid var(--color-border);
-  border-radius: 10px;
-  padding: 0.5rem 0.875rem;
+  gap: var(--space-2);
+  height: var(--control-h-sm);
+  padding: 0 var(--space-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-xs);
   font-family: inherit;
-  font-size: 0.8125rem;
-  font-weight: 500;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
   color: var(--color-text);
   cursor: pointer;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
   white-space: nowrap;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
 }
-
 .date-range-btn:hover {
-  border-color: #166534;
-  box-shadow: 0 2px 8px rgba(22, 101, 52, 0.08);
+  background: var(--color-surface-muted);
 }
-
+.date-range-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
 .date-range-btn svg:first-child {
   color: var(--color-text-muted);
-  flex-shrink: 0;
 }
 
 .date-range-chevron {
   color: var(--color-text-muted);
-  transition: transform 0.2s ease;
-  flex-shrink: 0;
+  transition: transform var(--transition-base);
 }
-
 .date-range-chevron.open {
   transform: rotate(180deg);
 }
 
 .date-range-panel {
   position: absolute;
-  top: calc(100% + 0.5rem);
-  left: 0;
+  top: calc(100% + 6px);
+  right: 0;
   z-index: 60;
-  background: var(--color-bg-card);
+  max-width: calc(100vw - 32px);
+  padding: var(--space-4);
+  background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: 14px;
-  box-shadow: 0 12px 40px -8px rgba(15, 23, 42, 0.18);
-  padding: 1.125rem;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
 }
 
 .dr-presets {
   display: flex;
-  gap: 0.375rem;
-  margin-bottom: 0.75rem;
-  padding-bottom: 0.75rem;
-  border-bottom: 1px solid var(--color-border);
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin-bottom: var(--space-3);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--color-border-subtle);
 }
 
 .dr-preset-btn {
-  padding: 0.35rem 0.75rem;
-  font-size: 0.75rem;
-  font-weight: 600;
+  height: 28px;
+  padding: 0 var(--space-3);
   font-family: inherit;
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
   border: 1px solid var(--color-border);
-  border-radius: 8px;
+  border-radius: var(--radius-full);
   background: transparent;
-  color: var(--color-text-muted);
+  color: var(--color-text-secondary);
   cursor: pointer;
-  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
   white-space: nowrap;
+  transition: border-color var(--transition-fast), color var(--transition-fast), background var(--transition-fast);
 }
-
 .dr-preset-btn:hover {
-  border-color: #166534;
-  color: #166534;
+  color: var(--color-text-strong);
+  background: var(--color-surface-muted);
 }
-
 .dr-preset-btn.active {
-  border-color: #166534;
-  background: rgba(22, 101, 52, 0.1);
-  color: #166534;
-}
-
-html.dark .dr-preset-btn.active {
-  border-color: #4ade80;
-  background: rgba(74, 222, 128, 0.12);
-  color: #4ade80;
-}
-
-html.dark .dr-preset-btn:hover {
-  border-color: #4ade80;
-  color: #4ade80;
+  border-color: var(--color-border-strong);
+  background: var(--color-selected);
+  color: var(--color-selected-text);
 }
 
 .date-range-calendars {
   display: flex;
-  gap: 1.25rem;
+  gap: var(--space-5);
 }
 
 .dr-calendar {
@@ -3691,13 +2844,17 @@ html.dark .dr-preset-btn:hover {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 0.75rem;
+  margin-bottom: var(--space-3);
+}
+
+.dr-cal-spacer {
+  width: 28px;
 }
 
 .dr-cal-title {
-  font-size: 0.8125rem;
-  font-weight: 700;
-  color: var(--color-text);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-strong);
   text-align: center;
 }
 
@@ -3712,32 +2869,26 @@ html.dark .dr-preset-btn:hover {
   color: var(--color-text-muted);
   cursor: pointer;
   border-radius: 6px;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition: background var(--transition-fast), color var(--transition-fast);
 }
-
 .dr-cal-nav:hover {
-  background: rgba(0, 0, 0, 0.06);
-  color: var(--color-text);
-}
-
-html.dark .dr-cal-nav:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--color-surface-muted);
+  color: var(--color-text-strong);
 }
 
 .dr-cal-weekdays {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  margin-bottom: 0.25rem;
+  margin-bottom: var(--space-1);
 }
-
 .dr-cal-weekdays span {
   text-align: center;
-  font-size: 0.625rem;
-  font-weight: 600;
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--color-text-muted);
-  padding: 0.25rem 0;
+  letter-spacing: var(--tracking-caps);
+  color: var(--color-text-subtle);
+  padding: var(--space-1) 0;
 }
 
 .dr-cal-grid {
@@ -3754,142 +2905,100 @@ html.dark .dr-cal-nav:hover {
   border: none;
   background: transparent;
   font-family: inherit;
-  font-size: 0.75rem;
-  font-weight: 500;
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
   color: var(--color-text);
   cursor: pointer;
   border-radius: 0;
-  transition: background 0.1s ease;
+  font-variant-numeric: tabular-nums;
+  transition: background var(--transition-fast);
 }
-
-.dr-day.empty { cursor: default; }
-
-.dr-day:not(.empty):hover { background: rgba(22, 101, 52, 0.08); }
-
-.dr-day.in-range { background: rgba(22, 101, 52, 0.08); }
-
+.dr-day.empty {
+  cursor: default;
+}
+.dr-day:not(.empty):hover,
+.dr-day.in-range {
+  background: var(--color-selected);
+}
 .dr-day.is-start,
 .dr-day.is-end {
-  background: #166534;
-  color: #fff;
-  font-weight: 700;
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  font-weight: var(--weight-bold);
 }
-
 .dr-day.is-start { border-radius: 6px 0 0 6px; }
 .dr-day.is-end { border-radius: 0 6px 6px 0; }
 .dr-day.is-start.is-end { border-radius: 6px; }
 
-html.dark .dr-day.in-range { background: rgba(74, 222, 128, 0.1); }
-html.dark .dr-day.is-start,
-html.dark .dr-day.is-end { background: #4ade80; color: #0a0a0a; }
-
 .panel-enter-active,
 .panel-leave-active {
-  transition: opacity 0.15s ease, transform 0.15s ease;
+  transition: opacity var(--transition-fast), transform var(--transition-fast);
 }
-
 .panel-enter-from,
 .panel-leave-to {
   opacity: 0;
   transform: translateY(-6px);
 }
 
-/* Settle button */
-.settle-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: none;
-  border: none;
-  color: #166534;
-  cursor: pointer;
-  padding: 0.125rem;
-  margin-left: 0.25rem;
-  border-radius: 4px;
-  transition: background 0.15s, color 0.15s;
-}
-
-.settle-btn:hover {
-  background: rgba(22, 101, 52, 0.12);
-}
-
-html.dark .settle-btn {
-  color: #4ade80;
-}
-
-html.dark .settle-btn:hover {
-  background: rgba(74, 222, 128, 0.15);
-}
-
-/* Settle modal */
+/* ═══ Modal: liquidar objetivos ═══ */
 .settle-overlay {
   position: fixed;
   inset: 0;
-  z-index: 100;
+  z-index: var(--z-modal);
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.4);
+  padding: var(--space-4);
+  background: var(--color-modal-overlay);
+  backdrop-filter: blur(4px);
 }
 
 .settle-modal {
-  background: var(--color-bg-card);
-  border-radius: 14px;
-  box-shadow: 0 16px 48px -12px rgba(0, 0, 0, 0.2);
   width: 100%;
   max-width: 440px;
   max-height: 80vh;
   overflow-y: auto;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
 }
 
 .settle-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 1.25rem 1.5rem 0.75rem;
-  border-bottom: 1px solid var(--color-border);
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--color-border-subtle);
 }
-
 .settle-header h3 {
-  font-size: 1rem;
-  font-weight: 700;
   margin: 0;
-  color: var(--color-text);
-}
-
-.settle-close {
-  background: none;
-  border: none;
-  color: var(--color-text-muted);
-  cursor: pointer;
-  padding: 0.25rem;
-  border-radius: 6px;
-  transition: background 0.15s;
-}
-
-.settle-close:hover {
-  background: var(--color-table-row-hover);
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-strong);
 }
 
 .settle-list {
-  padding: 0.75rem 1.5rem 1.25rem;
+  padding: var(--space-2) var(--space-5) var(--space-4);
 }
 
 .settle-empty {
+  margin: 0;
+  padding: var(--space-6) 0;
   text-align: center;
-  padding: 1.5rem 0;
+  font-size: var(--text-sm);
   color: var(--color-text-muted);
-  font-size: 0.875rem;
 }
 
 .settle-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.75rem 0;
-  border-bottom: 1px solid var(--color-border);
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--color-border-subtle);
 }
-
 .settle-item:last-child {
   border-bottom: none;
 }
@@ -3897,242 +3006,105 @@ html.dark .settle-btn:hover {
 .settle-item-info {
   display: flex;
   flex-direction: column;
-  gap: 0.125rem;
+  gap: 2px;
+  min-width: 0;
 }
-
-.settle-item-name {
-  font-weight: 600;
-  font-size: 0.875rem;
-  color: var(--color-text);
-}
-
 .settle-item-amount {
-  font-size: 0.8125rem;
-  font-weight: 500;
-  color: #166534;
+  font-size: var(--text-sm);
 }
 
-html.dark .settle-item-amount {
-  color: #4ade80;
-}
-
-.settle-item-date {
-  font-size: 0.75rem;
-  color: var(--color-text-muted);
-}
-
-.settle-item-btn {
-  padding: 0.375rem 0.875rem;
-  border: 1px solid #166534;
-  border-radius: 8px;
-  background: transparent;
-  color: #166534;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  font-family: inherit;
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s;
-  white-space: nowrap;
-}
-
-.settle-item-btn:hover {
-  background: #166534;
-  color: white;
-}
-
-html.dark .settle-item-btn {
-  border-color: #4ade80;
-  color: #4ade80;
-}
-
-html.dark .settle-item-btn:hover {
-  background: #4ade80;
-  color: #0a0a0a;
-}
-
-/* Settle confirm */
 .settle-confirm {
-  padding: 1.5rem;
+  padding: var(--space-5);
+}
+.settle-confirm-text {
+  margin: 0 0 var(--space-4);
+  font-size: var(--text-base);
+  color: var(--color-text);
   text-align: center;
 }
-
-.settle-confirm-text {
-  font-size: 0.9375rem;
-  font-weight: 600;
-  color: var(--color-text);
-  margin: 0 0 1.25rem;
-}
-
 .settle-confirm-actions {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: var(--space-2);
 }
 
-.settle-confirm-btn {
-  width: 100%;
-  padding: 0.625rem;
-  border-radius: 10px;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  font-family: inherit;
-  cursor: pointer;
-  transition: opacity 0.15s;
-  border: none;
+/* ═══ Responsivo ═══ */
+@media (max-width: 1024px) {
+  .kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
-.settle-confirm-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
+@media (max-width: 900px) {
+  .static-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .static-card {
+    min-height: 0;
+  }
+  .comparison-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
-.settle-confirm-yes {
-  background: linear-gradient(135deg, #166534 0%, #15803d 100%);
-  color: white;
+@media (max-width: 720px) {
+  .tile-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .date-range-calendars {
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+  .dr-calendar {
+    width: min(260px, calc(100vw - 72px));
+  }
+  .date-range-panel {
+    max-height: 70vh;
+    overflow-y: auto;
+  }
 }
 
-.settle-confirm-no {
-  background: var(--color-table-row-hover);
-  color: var(--color-text);
-  border: 1px solid var(--color-border);
+@media (max-width: 640px) {
+  .dash-card,
+  .dashboard-section-card {
+    padding: var(--space-4);
+  }
+  .hero-alloc-stats {
+    gap: var(--space-3) var(--space-6);
+  }
+  .dash-card-head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .dash-card-actions {
+    justify-content: flex-start;
+  }
+  .inv-select-trigger {
+    width: 180px;
+  }
+  .kpi {
+    padding: var(--space-3);
+  }
+  .kpi-value {
+    font-size: var(--text-lg);
+  }
+  .daily-avg-proj {
+    align-items: flex-start;
+    text-align: left;
+  }
 }
 
-.settle-confirm-cancel {
-  background: transparent;
-  color: var(--color-text-muted);
+@media (max-width: 420px) {
+  .kpi-grid {
+    gap: var(--space-3);
+  }
 }
 
-.settle-confirm-cancel:hover {
-  color: var(--color-text);
-}
-
-/* ── Card reorder ── */
-.static-grid-header {
+/* Ações do cartão de Investimentos: período + seletor de ativo + "Ver tudo" */
+.inv-actions {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: 0.75rem;
-  margin-bottom: 0.5rem;
-}
-
-.card-edit-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
-  padding: 0.375rem 0.75rem;
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  background: var(--color-bg-card);
-  color: var(--color-text-muted);
-  font-size: 0.8125rem;
-  font-family: inherit;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-.card-edit-btn:hover {
-  border-color: #166534;
-  color: #166534;
-}
-html.dark .card-edit-btn {
-  background: var(--color-bg-card);
-}
-html.dark .card-edit-btn:hover {
-  border-color: #4ade80;
-  color: #4ade80;
-}
-
-.card-cancel-btn {
-  padding: 0.375rem 0.75rem;
-  border: none;
-  background: transparent;
-  color: var(--color-text-secondary);
-  font-size: 0.8125rem;
-  cursor: pointer;
-  transition: color 0.15s ease;
-}
-.card-cancel-btn:hover {
-  color: var(--color-text);
-}
-
-.card-done-btn {
-  padding: 0.5rem 1.25rem;
-  border: none;
-  border-radius: 10px;
-  background: #166534;
-  color: #fff;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  font-family: inherit;
-  cursor: pointer;
-  transition: background 0.15s ease, transform 0.15s;
-}
-.card-done-btn:hover {
-  background: #15803d;
-  transform: translateY(-1px);
-}
-html.dark .card-done-btn:hover {
-  background: #15803d;
-}
-
-.card-editing {
-  outline: 2px dashed var(--color-primary);
-  outline-offset: -2px;
-  border-radius: 1rem;
-  cursor: grab;
-  transition: outline-color 0.2s ease;
-}
-.card-editing:active {
-  cursor: grabbing;
-}
-
-.card-drag-placeholder {
-  outline: 2px dashed var(--color-primary);
-  outline-offset: -2px;
-  border-radius: 1rem;
-  background: rgba(var(--color-primary-rgb, 99, 102, 241), 0.06) !important;
-}
-.card-drag-placeholder > * {
-  visibility: hidden;
-}
-html.dark .card-drag-placeholder {
-  background: rgba(var(--color-primary-rgb, 99, 102, 241), 0.1) !important;
-}
-
-.card-floating {
-  position: fixed;
-  z-index: 9999;
-  pointer-events: none;
-  border-radius: 1rem;
-  background: var(--color-bg-card, #fff);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
-  padding: 0.875rem 1rem;
-  transition: none;
-}
-html.dark .card-floating {
-  background: var(--color-bg-card, #1e1e2e);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
-}
-
-.static-card-header-actions {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.card-drag-handle {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--color-text-secondary);
-  cursor: grab;
-  padding: 0.25rem;
-  border-radius: 0.25rem;
-  transition: color 0.15s ease;
-}
-.card-drag-handle:hover {
-  color: var(--color-primary);
-}
-.card-drag-handle:active {
-  cursor: grabbing;
+  flex-wrap: wrap;
+  gap: var(--space-2);
 }
 </style>

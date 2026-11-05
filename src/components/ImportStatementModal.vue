@@ -1,6 +1,9 @@
 <script setup lang="ts">
+import { PT_GROUPING } from '@/utils/numberFormat'
 import { ref, computed } from 'vue'
 import BaseModal from './BaseModal.vue'
+import BaseSelect from './BaseSelect.vue'
+import UiButton from './ui/UiButton.vue'
 import { investmentsApi } from '@/api/investments'
 import { parseXtbWorkbook } from '@/utils/xtbExcel'
 import {
@@ -110,7 +113,10 @@ async function loadFile(f: File) {
 }
 
 /* ── Mapeamento ── */
-const columnOptions = computed(() => headers.value.map((h, i) => ({ value: i, label: h || `Coluna ${i + 1}` })))
+const columnOptions = computed(() => [
+  { value: -1, label: '—' },
+  ...headers.value.map((h, i) => ({ value: i, label: h || `Coluna ${i + 1}` })),
+])
 
 function colValue(key: FieldKey): number {
   const v = mapping.value[key]
@@ -181,13 +187,13 @@ async function confirmImport() {
 
 function fmtPrice(v: number, ccy: string): string {
   try {
-    return new Intl.NumberFormat('pt-PT', { style: 'currency', currency: ccy || 'EUR' }).format(v)
+    return new Intl.NumberFormat('pt-PT', { ...PT_GROUPING, style: 'currency', currency: ccy || 'EUR' }).format(v)
   } catch {
     return `${v} ${ccy}`
   }
 }
 function fmtQty(v: number): string {
-  return new Intl.NumberFormat('pt-PT', { maximumFractionDigits: 6 }).format(v)
+  return new Intl.NumberFormat('pt-PT', { ...PT_GROUPING, maximumFractionDigits: 6 }).format(v)
 }
 function fmtDate(iso: string): string {
   const d = new Date(iso + 'T00:00:00')
@@ -196,7 +202,11 @@ function fmtDate(iso: string): string {
 </script>
 
 <template>
-  <BaseModal v-if="open" title="Importar de corretora" @close="handleClose">
+  <BaseModal
+    v-if="open"
+    title="Importar de corretora"
+    @close="handleClose"
+  >
     <div class="imp">
       <!-- Passo 1: escolher ficheiro -->
       <template v-if="step === 'pick'">
@@ -219,9 +229,6 @@ function fmtDate(iso: string): string {
 
         <p v-if="error" class="imp-error">{{ error }}</p>
 
-        <div class="modal-actions">
-          <button type="button" class="btn-cancel" :disabled="previewing" @click="handleClose">Fechar</button>
-        </div>
       </template>
 
       <!-- Passo 2: mapeamento de colunas (genérico) -->
@@ -234,10 +241,12 @@ function fmtDate(iso: string): string {
               {{ f.label }}<span v-if="f.required" class="imp-req">*</span>
             </label>
             <div class="imp-map-control">
-              <select class="imp-select" :value="colValue(f.key)" @change="setCol(f.key, Number(($event.target as HTMLSelectElement).value))">
-                <option :value="-1">—</option>
-                <option v-for="o in columnOptions" :key="o.value" :value="o.value">{{ o.label }}</option>
-              </select>
+              <BaseSelect
+                :model-value="colValue(f.key)"
+                :options="columnOptions"
+                placeholder="—"
+                @update:model-value="(v) => setCol(f.key, Number(v))"
+              />
               <span v-if="sampleFor(f.key)" class="imp-map-sample">ex.: {{ sampleFor(f.key) }}</span>
             </div>
           </div>
@@ -248,12 +257,6 @@ function fmtDate(iso: string): string {
         </p>
         <p v-if="error" class="imp-error">{{ error }}</p>
 
-        <div class="modal-actions">
-          <button type="button" class="btn-cancel" :disabled="previewing" @click="reset">Voltar</button>
-          <button type="button" class="btn-primary" :disabled="previewing || !mappingValid" @click="confirmMapping">
-            {{ previewing ? 'A processar…' : 'Continuar' }}
-          </button>
-        </div>
       </template>
 
       <!-- Passo 3: pré-visualização -->
@@ -277,7 +280,7 @@ function fmtDate(iso: string): string {
           {{ preview.skipped }} {{ preview.skipped === 1 ? 'transação já existia' : 'transações já existiam' }}
           e {{ preview.skipped === 1 ? 'foi ignorada' : 'foram ignoradas' }}.
         </p>
-        <p v-if="preview.hasUnparsedRows" class="imp-warn">
+        <p v-if="preview.hasUnparsedRows" class="modal-note modal-note--warning">
           Algumas linhas não foram reconhecidas. Confirme os valores antes de importar.
         </p>
         <p v-if="preview.depositsImported > 0" class="imp-note">
@@ -298,14 +301,24 @@ function fmtDate(iso: string): string {
 
         <p v-if="error" class="imp-error">{{ error }}</p>
 
-        <div class="modal-actions">
-          <button type="button" class="btn-cancel" :disabled="importing" @click="reset">Escolher outro</button>
-          <button type="button" class="btn-primary" :disabled="importing || preview.created === 0" @click="confirmImport">
-            {{ importing ? 'A importar…' : `Importar ${preview.created} ${preview.created === 1 ? 'nova' : 'novas'}` }}
-          </button>
-        </div>
       </template>
     </div>
+
+    <template #footer>
+      <template v-if="step === 'pick'">
+        <UiButton variant="secondary" :disabled="previewing" @click="handleClose">Fechar</UiButton>
+      </template>
+      <template v-else-if="step === 'mapping'">
+        <UiButton variant="secondary" :disabled="previewing" @click="reset">Voltar</UiButton>
+        <UiButton :loading="previewing" :disabled="!mappingValid" @click="confirmMapping">Continuar</UiButton>
+      </template>
+      <template v-else-if="step === 'preview' && preview">
+        <UiButton variant="secondary" :disabled="importing" @click="reset">Escolher outro</UiButton>
+        <UiButton :loading="importing" :disabled="preview.created === 0" @click="confirmImport">
+          Importar {{ preview.created }} {{ preview.created === 1 ? 'nova' : 'novas' }}
+        </UiButton>
+      </template>
+    </template>
   </BaseModal>
 </template>
 
@@ -313,328 +326,228 @@ function fmtDate(iso: string): string {
 .imp {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: var(--space-4);
 }
 
 .imp-intro {
-  font-size: 0.8125rem;
-  color: var(--color-text-muted);
-  line-height: 1.5;
   margin: 0;
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+}
+.imp-intro strong {
+  color: var(--color-text-strong);
 }
 
+/* Zona de largar ficheiro */
 .imp-drop {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 0.4rem;
-  padding: 2rem 1rem;
-  border: 1.5px dashed var(--color-border);
-  border-radius: 12px;
+  gap: 6px;
+  padding: var(--space-8) var(--space-4);
+  border: 1.5px dashed var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
   color: var(--color-text-muted);
   cursor: pointer;
   text-align: center;
-  transition: border-color 0.15s, background 0.15s;
+  transition: border-color var(--transition-fast), background var(--transition-fast), color var(--transition-fast);
 }
-
 .imp-drop:hover {
-  border-color: #166534;
-  background: rgba(22, 101, 52, 0.04);
+  border-color: var(--color-border-strong);
+  background: var(--color-selected);
+  color: var(--color-selected-text);
 }
-
-html.dark .imp-drop:hover {
-  border-color: #4ade80;
-  background: rgba(74, 222, 128, 0.06);
-}
-
 .imp-drop.busy {
   cursor: default;
 }
-
+.imp-drop p {
+  margin: 0;
+  font-size: var(--text-sm);
+}
 .imp-file {
   display: none;
 }
-
-.imp-drop-title {
-  font-size: 0.9375rem;
-  font-weight: 600;
-  color: var(--color-text);
-  margin: 0;
+.imp-drop .imp-drop-title {
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-strong);
 }
-
-.imp-drop-sub {
-  font-size: 0.75rem;
-  margin: 0;
+.imp-drop .imp-drop-sub {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
 }
 
 /* Mapeamento */
 .imp-map {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  max-height: 320px;
-  overflow-y: auto;
-  padding-right: 0.25rem;
+  gap: var(--space-3);
 }
-
 .imp-map-row {
   display: grid;
-  grid-template-columns: 130px 1fr;
+  grid-template-columns: 140px minmax(0, 1fr);
   align-items: center;
-  gap: 0.625rem;
+  gap: var(--space-3);
 }
-
+@media (max-width: 520px) {
+  .imp-map-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+  }
+}
 .imp-map-label {
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: var(--color-text);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-strong);
 }
-
 .imp-req {
-  color: #dc2626;
   margin-left: 2px;
+  color: var(--color-danger);
 }
-
 .imp-map-control {
   display: flex;
   flex-direction: column;
-  gap: 0.15rem;
+  gap: 4px;
   min-width: 0;
 }
-
-.imp-select {
-  width: 100%;
-  padding: 0.45rem 0.625rem;
-  font-size: 0.8125rem;
-  font-family: inherit;
-  color: var(--color-text);
-  background: var(--color-input-bg, #fff);
-  border: 1px solid var(--color-input-border, #e2e8f0);
-  border-radius: 8px;
-}
-
-.imp-select:focus {
-  outline: none;
-  border-color: #166534;
-}
-
 .imp-map-sample {
-  font-size: 0.6875rem;
+  font-size: var(--text-xs);
   color: var(--color-text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+/* Pré-visualização */
 .imp-summary {
-  display: flex;
-  gap: 0.5rem;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
 }
-
 .imp-stat {
-  flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.1rem;
-  padding: 0.75rem;
+  gap: 2px;
+  padding: var(--space-3);
   border: 1px solid var(--color-border);
-  border-radius: 12px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
 }
-
 .imp-stat-num {
-  font-size: 1.25rem;
-  font-weight: 800;
-  color: var(--color-text);
+  font-size: var(--text-xl);
+  font-weight: var(--weight-bold);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-strong);
 }
-
 .imp-stat-label {
-  font-size: 0.6875rem;
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: var(--tracking-caps);
   color: var(--color-text-muted);
 }
-
 .imp-stat--new .imp-stat-num {
-  color: #166534;
+  color: var(--color-primary-text);
 }
-
-html.dark .imp-stat--new .imp-stat-num {
-  color: #4ade80;
-}
-
 .imp-stat--dup .imp-stat-num {
   color: var(--color-text-muted);
 }
 
 .imp-note {
-  font-size: 0.75rem;
+  margin: 0;
+  font-size: var(--text-xs);
+  line-height: 1.45;
   color: var(--color-text-muted);
-  margin: 0;
-}
-
-.imp-warn {
-  font-size: 0.75rem;
-  color: #b45309;
-  background: rgba(245, 158, 11, 0.1);
-  border: 1px solid rgba(245, 158, 11, 0.3);
-  border-radius: 8px;
-  padding: 0.5rem 0.625rem;
-  margin: 0;
-}
-
-html.dark .imp-warn {
-  color: #fbbf24;
 }
 
 .imp-list {
   display: flex;
   flex-direction: column;
-  gap: 0.2rem;
+  gap: 2px;
   max-height: 260px;
   overflow-y: auto;
-  padding-right: 0.25rem;
+  padding: 4px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
 }
-
 .imp-row {
   display: flex;
   align-items: center;
-  gap: 0.625rem;
-  padding: 0.4rem 0.5rem;
-  border-radius: 8px;
+  gap: 10px;
+  padding: 6px var(--space-2);
+  border-radius: var(--radius-sm);
 }
-
 .imp-row:hover {
-  background: var(--color-table-row-hover);
+  background: var(--color-surface-hover);
 }
-
 .imp-row.dup {
   opacity: 0.55;
 }
-
 .imp-row-op {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   flex-shrink: 0;
   border-radius: 6px;
-  font-size: 0.6875rem;
-  font-weight: 800;
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-bold);
 }
-
 .imp-row-op.buy {
-  color: #059669;
-  background: rgba(5, 150, 105, 0.12);
+  color: var(--color-success);
+  background: var(--color-success-soft);
 }
-
-html.dark .imp-row-op.buy {
-  color: #34d399;
-}
-
 .imp-row-op.sell {
-  color: #dc2626;
-  background: rgba(220, 38, 38, 0.12);
+  color: var(--color-danger);
+  background: var(--color-danger-soft);
 }
-
-html.dark .imp-row-op.sell {
-  color: #f87171;
-}
-
 .imp-row-main {
   display: flex;
   flex-direction: column;
-  gap: 0.05rem;
+  gap: 1px;
   min-width: 0;
   flex: 1;
 }
-
 .imp-row-sym {
-  font-size: 0.8125rem;
-  font-weight: 700;
-  color: var(--color-text);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-strong);
 }
-
 .imp-row-meta {
-  font-size: 0.6875rem;
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
   color: var(--color-text-muted);
 }
-
 .imp-row-badge {
   flex-shrink: 0;
-  font-size: 0.625rem;
-  font-weight: 600;
-  color: var(--color-text-muted);
-  background: var(--color-table-row-hover);
-  padding: 0.1rem 0.4rem;
-  border-radius: 999px;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-secondary);
+  background: var(--color-surface-muted);
 }
 
 .imp-error {
-  font-size: 0.8125rem;
-  color: #dc2626;
   margin: 0;
-}
-
-html.dark .imp-error {
-  color: #f87171;
-}
-
-.modal-actions {
-  display: flex;
-  gap: 0.75rem;
-  justify-content: flex-end;
-  margin-top: 0.25rem;
-}
-
-.btn-cancel {
-  padding: 0.5rem 1rem;
-  background: var(--color-bg, #f1f5f9);
-  color: var(--color-text-muted, #475569);
-  border: 1px solid var(--color-border, #e2e8f0);
-  border-radius: 8px;
-  font-size: 0.875rem;
-  cursor: pointer;
-  font-family: inherit;
-}
-
-.btn-cancel:hover:not(:disabled) {
-  background: var(--color-table-row-hover, #e2e8f0);
-}
-
-.btn-cancel:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.btn-primary {
-  padding: 0.5rem 1rem;
-  background: linear-gradient(135deg, #166534 0%, #15803d 100%);
-  color: white;
-  border: none;
-  border-radius: 8px;
-  font-size: 0.875rem;
-  font-weight: 600;
-  cursor: pointer;
-  font-family: inherit;
-}
-
-.btn-primary:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--color-danger);
 }
 
 .spinner {
   width: 28px;
   height: 28px;
   border: 3px solid var(--color-border);
-  border-top-color: #166534;
+  border-top-color: var(--color-primary-text);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
-
 @keyframes spin {
   to {
     transform: rotate(360deg);

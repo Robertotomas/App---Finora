@@ -1,7 +1,8 @@
 <script setup lang="ts">
+import PasswordInput from '@/components/PasswordInput.vue'
 import { computed, ref } from 'vue'
 import { useRoute, useRouter, RouterLink } from 'vue-router'
-import iconFinoraFlow from '@/assets/images/finoraflow-icon.png'
+import AppLogo from '@/components/AppLogo.vue'
 import AuthShowcase from '@/components/AuthShowcase.vue'
 import { authApi } from '@/api/auth'
 
@@ -47,13 +48,13 @@ async function handleSubmit() {
   } catch (e: unknown) {
     const err = e as { rateLimited?: boolean; rateLimitMessage?: string; response?: { data?: { message?: string; errors?: Record<string, string[]> } } }
     if (err.rateLimited) {
-      error.value = err.rateLimitMessage || 'Demasiados pedidos. Tenta novamente dentro de 1 minuto.'
+      error.value = err.rateLimitMessage || 'Demasiados pedidos. Tente novamente dentro de 1 minuto.'
     } else {
       const data = err.response?.data
       if (data?.errors) {
         error.value = Object.values(data.errors).flat().join(' ')
       } else {
-        error.value = data?.message || 'O link é inválido ou expirou. Pede um novo a partir do ecrã de início de sessão.'
+        error.value = data?.message || 'O link é inválido ou expirou. Peça um novo a partir do ecrã de início de sessão.'
       }
     }
   } finally {
@@ -70,38 +71,38 @@ function goToLogin() {
   <div class="auth-page">
     <div class="auth-left">
       <div class="auth-brand">
-        <img :src="iconFinoraFlow" alt="FinoraFlow" class="auth-brand-img" />
+        <AppLogo :size="36" class="auth-brand-img" />
       </div>
       <div class="auth-left-inner">
         <div class="auth-intro">
-          <p class="auth-intro-title">Nova palavra-passe</p>
+          <h1 class="auth-intro-title">Nova palavra-passe</h1>
           <p class="auth-intro-welcome">Defina uma nova palavra-passe para a sua conta.</p>
         </div>
 
         <!-- Sem token -->
-        <div v-if="!token" class="auth-error">
+        <div v-if="!token" class="auth-error" role="alert">
           Link inválido. Abra o link mais recente que recebeu por email ou peça um novo no
           <RouterLink to="/login">início de sessão</RouterLink>.
         </div>
 
         <!-- Sucesso -->
         <template v-else-if="done">
-          <div class="reset-success">
-            <div class="reset-success-icon">
+          <div class="auth-state">
+            <div class="auth-state-icon" aria-hidden="true">
               <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
             </div>
-            <p class="reset-success-title">Palavra-passe alterada</p>
-            <p class="reset-success-text">Já pode iniciar sessão com a nova palavra-passe.</p>
+            <p class="auth-state-title">Palavra-passe alterada</p>
+            <p class="auth-state-text">Já pode iniciar sessão com a nova palavra-passe.</p>
           </div>
           <button type="button" class="auth-btn" @click="goToLogin">Iniciar sessão</button>
         </template>
 
         <!-- Formulário -->
         <form v-else @submit.prevent="handleSubmit">
-          <div v-if="error" class="auth-error">{{ error }}</div>
+          <div v-if="error" class="auth-error" role="alert">{{ error }}</div>
           <div class="auth-field">
             <label for="password">Nova palavra-passe</label>
-            <input id="password" v-model="password" type="password" required placeholder="Introduza a nova palavra-passe" />
+            <PasswordInput id="password" v-model="password" autocomplete="new-password" placeholder="Introduza a nova palavra-passe" />
             <ul v-if="password.length > 0" class="pw-rules">
               <li :class="{ ok: passwordRules.minLength }">Mínimo 8 caracteres</li>
               <li :class="{ ok: passwordRules.hasUpper }">Uma letra maiúscula</li>
@@ -111,7 +112,7 @@ function goToLogin() {
           </div>
           <div class="auth-field">
             <label for="confirm">Confirmar palavra-passe</label>
-            <input id="confirm" v-model="confirm" type="password" required placeholder="Repita a palavra-passe" />
+            <PasswordInput id="confirm" v-model="confirm" autocomplete="new-password" placeholder="Repita a palavra-passe" />
             <p v-if="confirm.length > 0 && !matches" class="pw-mismatch">As palavras-passe não coincidem.</p>
           </div>
           <button type="submit" class="auth-btn" :disabled="loading || !passwordValid || !matches">
@@ -127,71 +128,3 @@ function goToLogin() {
     <AuthShowcase />
   </div>
 </template>
-
-<style scoped>
-.pw-rules {
-  list-style: none;
-  padding: 0;
-  margin: 0.5rem 0 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.25rem 0.75rem;
-  font-size: 0.75rem;
-  color: #ef4444;
-}
-.pw-rules li.ok {
-  color: #22c55e;
-}
-.pw-rules li::before {
-  content: '✕ ';
-}
-.pw-rules li.ok::before {
-  content: '✓ ';
-}
-.pw-mismatch {
-  margin: 0.4rem 0 0;
-  font-size: 0.75rem;
-  color: #ef4444;
-}
-
-.reset-success {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  margin-bottom: 1.25rem;
-}
-.reset-success-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  background: #ecfdf5;
-  color: #166534;
-  margin-bottom: 1rem;
-}
-:global(html.dark) .reset-success-icon {
-  background: rgba(22, 101, 52, 0.2);
-  color: #4ade80;
-}
-.reset-success-title {
-  font-size: 1.05rem;
-  font-weight: 700;
-  color: #0f172a;
-  margin: 0 0 0.4rem;
-}
-:global(html.dark) .reset-success-title {
-  color: #ffffff;
-}
-.reset-success-text {
-  font-size: 0.875rem;
-  color: #64748b;
-  margin: 0;
-  line-height: 1.45;
-}
-:global(html.dark) .reset-success-text {
-  color: #a3a3a3;
-}
-</style>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { PT_GROUPING } from '@/utils/numberFormat'
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useSubscriptionStore } from '@/stores/subscription'
@@ -8,6 +9,9 @@ import { useAuthStore } from '@/stores/auth'
 import { userFromProfileResponse } from '@/types/auth'
 import { useHouseholdStore } from '@/stores/household'
 import { useNotificationStore } from '@/stores/notifications'
+import UiButton from '@/components/ui/UiButton.vue'
+import SegmentedControl from '@/components/ui/SegmentedControl.vue'
+import { useToast } from '@/composables/useToast'
 
 const route = useRoute()
 const router = useRouter()
@@ -15,6 +19,12 @@ const subscriptionStore = useSubscriptionStore()
 const authStore = useAuthStore()
 const householdStore = useHouseholdStore()
 const notificationStore = useNotificationStore()
+const toast = useToast()
+
+const intervalOptions: { value: BillingInterval; label: string }[] = [
+  { value: 'monthly', label: 'Mensal' },
+  { value: 'annual', label: 'Anual' },
+]
 
 const interval = ref<BillingInterval>('monthly')
 const redirecting = ref<SubscriptionPlan | null>(null)
@@ -70,7 +80,9 @@ const planCards: PlanCard[] = [
     features: [
       'Contas ilimitadas',
       'Receitas e despesas ilimitadas',
-      'Transações recorrentes',
+      'Movimentos recorrentes',
+      'Investimentos (ações e ETFs) com cotações diárias',
+      'Bens e valores (imóveis, veículos, arte…)',
       'Objetivos de poupança',
       'Relatórios mensais automáticos (PDF)',
       'Dashboard completo com histórico até 5 anos',
@@ -100,12 +112,12 @@ function pricesFor(plan: PaidPlan): { monthly: number; annual: number } {
 }
 
 function formatEuro(cents: number): string {
-  return (cents / 100).toLocaleString('pt-PT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '€'
+  return (cents / 100).toLocaleString('pt-PT', { ...PT_GROUPING, minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €'
 }
 
 /** Big headline price = per-month figure (annual shows the monthly-equivalent of the yearly charge). */
 function displayPrice(plan: SubscriptionPlan): string {
-  if (plan === 'Free') return '0€'
+  if (plan === 'Free') return '0 €'
   const prices = pricesFor(plan as PaidPlan)
   const cents = interval.value === 'annual' ? Math.round(prices.annual / 12) : prices.monthly
   return formatEuro(cents)
@@ -124,9 +136,18 @@ function isCurrent(plan: SubscriptionPlan): boolean {
 function buttonLabel(plan: SubscriptionPlan): string {
   if (redirecting.value === plan) return 'A redirecionar…'
   if (isCurrent(plan)) return plan === 'Free' ? 'Plano atual' : 'Gerir subscrição'
-  if (plan === 'Free') return 'Gerir subscrição'
+  if (plan === 'Free') return 'Mudar para Free'
   return `Escolher ${plan}`
 }
+
+/** Estilo do botão: atual / descer para Free = secundário, subir = verde cheio. */
+function buttonVariant(plan: SubscriptionPlan): 'primary' | 'secondary' {
+  if (isCurrent(plan) || plan === 'Free') return 'secondary'
+  return 'primary'
+}
+
+// "Aceitar convite" fica recolhido por baixo dos planos (só interessa a quem recebeu um código).
+const inviteOpen = ref(false)
 
 function buttonDisabled(plan: SubscriptionPlan): boolean {
   if (redirecting.value !== null || portalLoading.value) return true
@@ -169,7 +190,7 @@ function isValidEmail(email: string): boolean {
 async function confirmCoupleInvite() {
   coupleInviteError.value = ''
   const email = coupleInviteEmail.value.trim()
-  if (!email) { coupleInviteError.value = 'Indica um email válido para o convite.'; return }
+  if (!email) { coupleInviteError.value = 'Indique um email válido para o convite.'; return }
   if (!isValidEmail(email)) { coupleInviteError.value = 'O email do convite parece inválido.'; return }
   coupleInviteLoading.value = true
   try {
@@ -177,6 +198,7 @@ async function confirmCoupleInvite() {
     await subscriptionStore.fetchSubscription()
     try { await householdStore.fetchHousehold() } catch { /* */ }
     coupleInviteOpen.value = false
+    toast.success('Convite enviado')
   } catch (e: unknown) {
     const err = e as { response?: { data?: { message?: string } } }
     coupleInviteError.value = err.response?.data?.message ?? 'Não foi possível enviar o convite.'
@@ -190,7 +212,7 @@ async function submitPartnerOtp() {
   partnerOtpSuccess.value = ''
   const code = partnerOtp.value.trim().replace(/\s/g, '')
   if (code.length !== 6 || !/^\d{6}$/.test(code)) {
-    partnerOtpError.value = 'Indica o código de 6 dígitos enviado por email.'
+    partnerOtpError.value = 'Indique o código de 6 dígitos enviado por email.'
     return
   }
   partnerOtpLoading.value = true
@@ -199,6 +221,7 @@ async function submitPartnerOtp() {
     partnerOtp.value = ''
     authStore.setAuth(data.accessToken, userFromProfileResponse(data.user))
     partnerOtpSuccess.value = 'Conta associada ao agregado do convite.'
+    toast.success(partnerOtpSuccess.value)
     await Promise.all([subscriptionStore.fetchSubscription(), householdStore.fetchHousehold(), notificationStore.fetchUnreadCount()])
   } catch (e: unknown) {
     const err = e as { response?: { data?: { message?: string } } }
@@ -253,82 +276,127 @@ onMounted(async () => {
   <div class="sub-page">
     <!-- Top bar -->
     <header class="top-bar">
-      <button type="button" class="btn-back" @click="router.push('/overview')">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
-      </button>
+      <UiButton variant="ghost" size="sm" @click="router.push('/overview')">
+        <template #icon>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+        </template>
+        Voltar
+      </UiButton>
     </header>
 
-    <!-- Hero -->
-    <div class="hero">
-      <h1 class="hero-title">Planos que crescem consigo</h1>
-    </div>
-
-    <div v-if="subscriptionStore.error" class="banner banner--error">{{ subscriptionStore.error }}</div>
-    <div v-if="checkoutNotice" class="banner" :class="checkoutNoticeKind === 'error' ? 'banner--error' : 'banner--info'">{{ checkoutNotice }}</div>
-
-    <!-- Billing interval toggle -->
-    <div class="interval-toggle" role="group" aria-label="Periodicidade">
-      <button
-        type="button"
-        class="interval-btn"
-        :class="{ 'interval-btn--active': interval === 'monthly' }"
-        @click="interval = 'monthly'"
-      >Mensal</button>
-      <button
-        type="button"
-        class="interval-btn"
-        :class="{ 'interval-btn--active': interval === 'annual' }"
-        @click="interval = 'annual'"
-      >
-        Anual
-        <span class="interval-save">2 meses grátis</span>
-      </button>
-    </div>
-
-    <!-- Invite partner (only when already on a paid Couple plan) -->
-    <section v-if="subscriptionStore.canInvite" class="invite-cta">
-      <div>
-        <h2 class="invite-cta-title">Tem o plano Couple</h2>
-        <p class="invite-cta-text">Convide o seu parceiro para partilharem contas, movimentos e orçamento.</p>
+    <div class="sub-content">
+      <!-- Hero -->
+      <div class="hero">
+        <h1 class="hero-title">Planos que crescem consigo</h1>
+        <p class="hero-subtitle">Comece grátis e mude de plano quando quiser. Cancele a qualquer momento.</p>
       </div>
-      <button type="button" class="btn-primary" @click="openInvite">Convidar parceiro</button>
-    </section>
 
-    <!-- Partner OTP section -->
-    <section class="otp-card">
-      <div class="otp-left">
-        <div class="otp-icon-wrap">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
-        </div>
+      <div v-if="subscriptionStore.error" class="banner banner--error" role="alert">{{ subscriptionStore.error }}</div>
+      <div v-if="checkoutNotice" class="banner" :class="checkoutNoticeKind === 'error' ? 'banner--error' : 'banner--info'" role="status">{{ checkoutNotice }}</div>
+
+      <!-- Billing interval toggle -->
+      <div class="interval-row">
+        <SegmentedControl v-model="interval" :options="intervalOptions" aria-label="Periodicidade" />
+        <span class="ui-badge ui-badge--brand">2 meses grátis no anual</span>
+      </div>
+
+      <!-- Invite partner (only when already on a paid Couple plan) -->
+      <section v-if="subscriptionStore.canInvite" class="invite-cta">
         <div>
-          <h2 class="otp-title">Aceitar convite</h2>
-          <p class="otp-text">Já tinha conta e recebeu um código por email? Introduza-o para se juntar ao agregado.</p>
+          <h2 class="invite-cta-title">Tem o plano Couple</h2>
+          <p class="invite-cta-text">Convide o seu parceiro para partilharem contas, movimentos e orçamento.</p>
         </div>
+        <UiButton @click="openInvite">Convidar parceiro</UiButton>
+      </section>
+
+      <!-- Plans grid -->
+      <div class="plans-grid">
+        <article
+          v-for="card in planCards"
+          :key="card.plan"
+          class="plan-card"
+          :class="{ 'plan-card--featured': card.highlight, 'plan-card--current': isCurrent(card.plan) }"
+        >
+          <div class="plan-body">
+            <div class="plan-head">
+              <h2 class="plan-name">{{ card.title }}</h2>
+              <div class="plan-badges">
+                <span v-if="isCurrent(card.plan)" class="ui-badge ui-badge--success">Plano atual</span>
+                <span v-else-if="card.highlight" class="ui-badge ui-badge--brand">Recomendado</span>
+              </div>
+            </div>
+            <p class="plan-subtitle">{{ card.subtitle }}</p>
+            <p class="plan-price">
+              <span class="plan-price-value">{{ displayPrice(card.plan) }}</span>
+              <span class="plan-price-period">/mês</span>
+            </p>
+            <p class="plan-annual-note">{{ annualNote(card.plan) ?? ' ' }}</p>
+
+            <UiButton
+              class="plan-cta"
+              block
+              :variant="buttonVariant(card.plan)"
+              :disabled="buttonDisabled(card.plan)"
+              :loading="redirecting === card.plan"
+              @click="selectPlan(card.plan)"
+            >
+              {{ buttonLabel(card.plan) }}
+            </UiButton>
+
+            <div class="plan-divider"></div>
+
+            <p v-if="card.preamble" class="plan-preamble">{{ card.preamble }}</p>
+            <ul class="plan-features">
+              <li v-for="feature in card.features" :key="feature">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+                {{ feature }}
+              </li>
+            </ul>
+          </div>
+        </article>
       </div>
-      <div class="otp-right">
-        <div class="otp-row">
-          <input
-            v-model="partnerOtp"
-            type="text"
-            inputmode="numeric"
-            maxlength="6"
-            class="otp-input"
-            placeholder="000000"
-            :disabled="partnerOtpLoading"
-            aria-label="Código de 6 dígitos"
-          />
-          <button type="button" class="btn-primary" :disabled="partnerOtpLoading" @click="submitPartnerOtp">
-            {{ partnerOtpLoading ? 'A validar…' : 'Validar' }}
-          </button>
+
+      <!-- Aceitar convite (recolhido: só interessa a quem recebeu um código) -->
+      <div class="invite-toggle-wrap">
+        <button type="button" class="invite-toggle" :aria-expanded="inviteOpen" @click="inviteOpen = !inviteOpen">
+          Recebeu um código de convite?
+        </button>
+      </div>
+      <section v-if="inviteOpen" class="otp-card">
+        <div class="otp-left">
+          <div class="otp-icon-wrap" aria-hidden="true">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
+          </div>
+          <div>
+            <h2 class="otp-title">Aceitar convite</h2>
+            <p class="otp-text">Já tinha conta e recebeu um código por email? Introduza-o para se juntar ao agregado.</p>
+          </div>
         </div>
-        <label class="otp-migrate">
-          <input v-model="partnerMigratePersonalData" type="checkbox" :disabled="partnerOtpLoading" />
-          <span>Levar os meus dados para o agregado</span>
-        </label>
-        <p v-if="partnerOtpError" class="otp-msg otp-msg--error">{{ partnerOtpError }}</p>
-        <p v-if="partnerOtpSuccess" class="otp-msg otp-msg--ok">{{ partnerOtpSuccess }}</p>
-      </div>
-    </section>
+        <div class="otp-right">
+          <div class="otp-row">
+            <input
+              v-model="partnerOtp"
+              type="text"
+              inputmode="numeric"
+              maxlength="6"
+              class="otp-input"
+              placeholder="000000"
+              :disabled="partnerOtpLoading"
+              aria-label="Código de 6 dígitos"
+            />
+            <UiButton :loading="partnerOtpLoading" @click="submitPartnerOtp">
+              {{ partnerOtpLoading ? 'A validar…' : 'Validar' }}
+            </UiButton>
+          </div>
+          <label class="otp-migrate">
+            <input v-model="partnerMigratePersonalData" type="checkbox" :disabled="partnerOtpLoading" />
+            <span>Levar os meus dados para o agregado</span>
+          </label>
+          <p v-if="partnerOtpError" class="otp-msg otp-msg--error">{{ partnerOtpError }}</p>
+          <p v-if="partnerOtpSuccess" class="otp-msg otp-msg--ok">{{ partnerOtpSuccess }}</p>
+        </div>
+      </section>
+    </div>
 
     <!-- Couple invite modal -->
     <div
@@ -336,10 +404,11 @@ onMounted(async () => {
       class="modal-overlay"
       role="dialog"
       aria-modal="true"
+      aria-labelledby="couple-invite-title"
       @click.self="cancelCoupleInvite"
     >
       <div class="modal-card">
-        <h2 class="modal-title">Convidar parceiro</h2>
+        <h2 id="couple-invite-title" class="modal-title">Convidar parceiro</h2>
         <p class="modal-text">
           Introduza o email da pessoa que quer convidar para o seu agregado <strong>Couple</strong>.
           Ela recebe um convite por email para se juntar.
@@ -350,6 +419,7 @@ onMounted(async () => {
             v-model="coupleInviteEmail"
             type="email"
             class="field-input"
+            :class="{ 'field-input--error': coupleInviteError }"
             placeholder="email@exemplo.com"
             autocomplete="email"
             :disabled="coupleInviteLoading"
@@ -357,51 +427,13 @@ onMounted(async () => {
         </label>
         <p v-if="coupleInviteError" class="field-error">{{ coupleInviteError }}</p>
         <div class="modal-actions">
-          <button type="button" class="btn-secondary" :disabled="coupleInviteLoading" @click="cancelCoupleInvite">Cancelar</button>
-          <button type="button" class="btn-primary" :disabled="coupleInviteLoading" @click="confirmCoupleInvite">
+          <UiButton variant="secondary" :disabled="coupleInviteLoading" @click="cancelCoupleInvite">Cancelar</UiButton>
+          <UiButton :loading="coupleInviteLoading" @click="confirmCoupleInvite">
             {{ coupleInviteLoading ? 'A confirmar…' : 'Confirmar' }}
-          </button>
+          </UiButton>
         </div>
       </div>
     </div>
-
-    <!-- Plans grid -->
-    <div class="plans-grid">
-      <article
-        v-for="card in planCards"
-        :key="card.plan"
-        class="plan-card"
-        :class="{ 'plan-card--highlight': currentPlan === card.plan, 'plan-card--featured': card.highlight }"
-      >
-        <span v-if="card.highlight" class="plan-tag">Mais completo</span>
-        <div class="plan-body">
-          <h2 class="plan-name">{{ card.title }}</h2>
-          <p class="plan-subtitle">{{ card.subtitle }}</p>
-          <p class="plan-price">
-            <span class="plan-price-value">{{ displayPrice(card.plan) }}</span>
-            <span class="plan-price-period">/mês</span>
-          </p>
-          <p v-if="annualNote(card.plan)" class="plan-annual-note">{{ annualNote(card.plan) }}</p>
-          <p v-if="card.preamble" class="plan-preamble">{{ card.preamble }}</p>
-          <ul class="plan-features">
-            <li v-for="feature in card.features" :key="feature">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-              {{ feature }}
-            </li>
-          </ul>
-        </div>
-        <button
-          type="button"
-          class="btn-plan"
-          :class="{ 'btn-plan--current': isCurrent(card.plan), 'btn-plan--upgrade': !isCurrent(card.plan) }"
-          :disabled="buttonDisabled(card.plan)"
-          @click="selectPlan(card.plan)"
-        >
-          {{ buttonLabel(card.plan) }}
-        </button>
-      </article>
-    </div>
-
   </div>
 </template>
 
@@ -419,135 +451,69 @@ onMounted(async () => {
   z-index: 10;
   display: flex;
   align-items: center;
-  height: 52px;
-  padding: 0 1.5rem;
-  background: var(--color-bg);
-  border-bottom: 1px solid var(--color-border);
+  height: 56px;
+  padding: 0 var(--space-4);
+  background: var(--color-header-bg);
+  border-bottom: 1px solid var(--color-header-border);
 }
 
-.btn-back {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  border: none;
-  background: transparent;
-  color: var(--color-text-muted);
-  cursor: pointer;
-  transition: color 0.15s;
-}
-
-.btn-back:hover {
-  color: var(--color-text);
+.sub-content {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 0 var(--space-6) var(--space-12);
 }
 
 /* ── Hero ── */
 .hero {
   text-align: center;
-  padding: 2.5rem 1.5rem 1.5rem;
+  padding: var(--space-10) 0 var(--space-6);
 }
 
 .hero-title {
-  font-size: 1.75rem;
-  font-weight: 750;
-  color: var(--color-text);
   margin: 0;
-  letter-spacing: -0.03em;
+  font-size: var(--text-2xl);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-tight);
+  color: var(--color-text-strong);
+}
+
+.hero-subtitle {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-base);
+  color: var(--color-text-muted);
 }
 
 /* ── Banners ── */
 .banner {
-  max-width: 960px;
-  margin: 0 auto 1rem;
-  padding: 0.75rem 1rem;
-  border-radius: 10px;
-  font-size: 0.8125rem;
-  font-weight: 500;
+  max-width: 720px;
+  margin: 0 auto var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  text-align: center;
 }
 
 .banner--error {
-  background: #fef2f2;
-  color: #dc2626;
-  border: 1px solid #fecaca;
-}
-
-html.dark .banner--error {
-  background: rgba(220, 38, 38, 0.12);
-  color: #f87171;
-  border-color: rgba(248, 113, 113, 0.3);
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+  border: 1px solid var(--color-danger-border);
 }
 
 .banner--info {
-  background: #ecfdf5;
-  color: #166534;
-  border: 1px solid #bbf7d0;
-}
-
-html.dark .banner--info {
-  background: rgba(22, 101, 52, 0.18);
-  color: #4ade80;
-  border-color: rgba(74, 222, 128, 0.3);
+  background: var(--color-primary-soft);
+  color: var(--color-primary-text);
+  border: 1px solid var(--color-primary-soft-border);
 }
 
 /* ── Interval toggle ── */
-.interval-toggle {
-  display: inline-flex;
-  gap: 0.25rem;
-  margin: 0 auto 1.75rem;
-  padding: 0.25rem;
-  background: var(--color-bg-card);
-  border: 1px solid var(--color-border);
-  border-radius: 999px;
-  /* center the inline-flex within the page */
-}
-
-.sub-page > .interval-toggle {
+.interval-row {
   display: flex;
-  width: max-content;
-}
-
-.interval-btn {
-  display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem 1.1rem;
-  font-size: 0.875rem;
-  font-weight: 600;
-  font-family: inherit;
-  color: var(--color-text-muted);
-  background: transparent;
-  border: none;
-  border-radius: 999px;
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s;
-}
-
-.interval-btn--active {
-  background: #166534;
-  color: #fff;
-}
-
-html.dark .interval-btn--active {
-  background: #15803d;
-}
-
-.interval-save {
-  font-size: 0.6875rem;
-  font-weight: 700;
-  padding: 0.1rem 0.4rem;
-  border-radius: 999px;
-  background: rgba(22, 101, 52, 0.12);
-  color: #166534;
-}
-
-.interval-btn--active .interval-save {
-  background: rgba(255, 255, 255, 0.2);
-  color: #fff;
-}
-
-html.dark .interval-save {
-  background: rgba(74, 222, 128, 0.18);
-  color: #4ade80;
+  justify-content: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-8);
 }
 
 /* ── Invite CTA ── */
@@ -555,222 +521,200 @@ html.dark .interval-save {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
+  gap: var(--space-4);
   flex-wrap: wrap;
-  max-width: 960px;
-  margin: 0 auto 1.5rem;
-  padding: 1rem 1.25rem;
-  background: var(--color-bg-card);
-  border: 1px solid #166534;
-  border-radius: 14px;
+  margin: 0 0 var(--space-6);
+  padding: var(--space-4) var(--space-5);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
 }
 
 .invite-cta-title {
   margin: 0;
-  font-size: 0.9375rem;
-  font-weight: 700;
-  color: var(--color-text);
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-strong);
 }
 
 .invite-cta-text {
-  margin: 0.2rem 0 0;
-  font-size: 0.8125rem;
-  color: var(--color-text-muted);
-}
-
-.plan-annual-note {
-  margin: 0.35rem 0 0;
-  font-size: 0.75rem;
-  color: var(--color-text-muted);
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
 }
 
 /* ── Plans grid ── */
 .plans-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 1.5rem;
-  max-width: 1080px;
-  margin: 0 auto;
-  padding: 0 1.5rem 2.5rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-5);
+  align-items: stretch;
+  margin-bottom: var(--space-8);
 }
 
 .plan-card {
-  position: relative;
   display: flex;
   flex-direction: column;
-  background: var(--color-bg-card);
+  background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: 18px;
-  padding: 2.25rem 1.875rem 1.875rem;
-  transition: box-shadow 0.2s, transform 0.2s;
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+  transition: border-color var(--transition-base);
 }
 
-.plan-card:hover {
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
-  transform: translateY(-2px);
+.plan-card:not(.plan-card--featured):hover {
+  border-color: var(--color-border-strong);
 }
 
-.plan-card--highlight {
-  border-color: #166534;
-  box-shadow: 0 0 0 1px #166534;
-}
-
-.plan-tag {
-  position: absolute;
-  top: 0;
-  right: 1.5rem;
-  transform: translateY(-50%);
-  padding: 0.25rem 0.625rem;
-  font-size: 0.6875rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: #fff;
-  background: #166534;
-  border-radius: 999px;
-}
-
-html.dark .plan-tag {
-  background: #15803d;
+.plan-card--featured {
+  border: 2px solid var(--color-primary);
+  /* compensa a borda de 2px para manter o alinhamento interno */
+  padding: calc(var(--space-6) - 1px);
 }
 
 .plan-body {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.plan-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-height: 24px;
+}
+
+.plan-badges {
+  display: flex;
+  gap: var(--space-1);
 }
 
 .plan-name {
   margin: 0;
-  font-size: 1.375rem;
-  font-weight: 700;
-  color: var(--color-text);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-strong);
 }
 
 .plan-subtitle {
-  margin: 0.2rem 0 0;
-  font-size: 0.8125rem;
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-sm);
   color: var(--color-text-muted);
 }
 
 .plan-price {
-  margin: 1.25rem 0 0;
+  margin: var(--space-5) 0 0;
   display: flex;
   align-items: baseline;
-  gap: 0.15rem;
+  gap: var(--space-1);
 }
 
 .plan-price-value {
-  font-size: 2.375rem;
-  font-weight: 750;
-  color: var(--color-text);
-  letter-spacing: -0.03em;
+  font-size: var(--text-3xl);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-tight);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-strong);
 }
 
 .plan-price-period {
-  font-size: 0.875rem;
+  font-size: var(--text-base);
   color: var(--color-text-muted);
+}
+
+.plan-annual-note {
+  margin: var(--space-1) 0 0;
+  min-height: 1.2em;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+.plan-cta {
+  margin-top: var(--space-5);
+}
+
+.plan-divider {
+  height: 1px;
+  margin: var(--space-6) 0 var(--space-5);
+  background: var(--color-border-subtle);
 }
 
 .plan-preamble {
-  margin: 1.25rem 0 0;
-  font-size: 0.8125rem;
-  color: var(--color-text-muted);
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-strong);
 }
 
 .plan-features {
-  margin: 1.25rem 0 0;
+  margin: 0;
   padding: 0;
   list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 0.625rem;
+  gap: var(--space-3);
 }
 
 .plan-features li {
   display: flex;
   align-items: flex-start;
-  gap: 0.5rem;
-  font-size: 0.875rem;
-  color: var(--color-text);
+  gap: var(--space-2);
+  font-size: var(--text-base);
   line-height: 1.45;
+  color: var(--color-text);
 }
 
 .plan-features li svg {
   flex-shrink: 0;
-  margin-top: 0.1rem;
-  color: #166534;
+  margin-top: 2px;
+  color: var(--color-primary-text);
 }
 
-html.dark .plan-features li svg {
-  color: #4ade80;
+/* ── Aceitar convite ── */
+.invite-toggle-wrap {
+  text-align: center;
+  margin: 0 0 var(--space-4);
 }
 
-/* ── Plan buttons ── */
-.btn-plan {
-  margin-top: 1.75rem;
-  width: 100%;
-  padding: 0.75rem 1rem;
-  font-size: 0.9375rem;
-  font-weight: 600;
-  font-family: inherit;
-  border-radius: 10px;
-  cursor: pointer;
-  transition: background 0.15s, transform 0.15s, box-shadow 0.15s;
+.invite-toggle {
   border: none;
+  background: none;
+  padding: var(--space-1) var(--space-2);
+  font-family: inherit;
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  color: var(--color-primary-text);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
-.btn-plan--upgrade {
-  background: #166534;
-  color: #fff;
+.invite-toggle:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: var(--radius-sm);
 }
 
-.btn-plan--upgrade:hover:not(:disabled) {
-  background: #15803d;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(22, 101, 52, 0.2);
-}
-
-.btn-plan--current {
-  background: transparent;
-  color: var(--color-text-muted);
-  border: 1px solid var(--color-border);
-  cursor: default;
-}
-
-.btn-plan:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-
-/* ── OTP card ── */
 .otp-card {
-  max-width: 960px;
-  margin: 0 auto 2rem;
-  padding: 1.25rem 1.5rem;
+  max-width: 860px;
+  margin: 0 auto;
+  padding: var(--space-5) var(--space-6);
   display: flex;
   align-items: center;
-  gap: 1.5rem;
-  background: var(--color-bg-card);
+  gap: var(--space-6);
+  background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: 14px;
-  box-shadow: var(--app-shadow-card, 0 1px 3px rgba(0, 0, 0, 0.06));
-  margin-left: 1.5rem;
-  margin-right: 1.5rem;
-  max-width: calc(960px - 3rem);
-}
-
-@media (min-width: 993px) {
-  .otp-card {
-    margin-left: auto;
-    margin-right: auto;
-    max-width: 960px;
-  }
+  border-radius: var(--radius-lg);
 }
 
 .otp-left {
   display: flex;
   align-items: flex-start;
-  gap: 0.75rem;
-  flex-shrink: 0;
+  gap: var(--space-3);
+  flex: 1;
+  min-width: 0;
 }
 
 .otp-icon-wrap {
@@ -780,215 +724,194 @@ html.dark .plan-features li svg {
   width: 40px;
   height: 40px;
   flex-shrink: 0;
-  border-radius: 10px;
-  background: #ecfdf5;
-  color: #166534;
-}
-
-html.dark .otp-icon-wrap {
-  background: rgba(22, 101, 52, 0.2);
-  color: #4ade80;
+  border-radius: 50%;
+  background: var(--color-primary-soft);
+  color: var(--color-primary-text);
 }
 
 .otp-title {
-  font-size: 0.9375rem;
-  font-weight: 700;
-  color: var(--color-text);
   margin: 0;
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-strong);
 }
 
 .otp-text {
-  margin: 0.2rem 0 0;
-  font-size: 0.8125rem;
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-sm);
+  line-height: 1.45;
   color: var(--color-text-muted);
-  line-height: 1.4;
 }
 
 .otp-right {
-  flex: 1;
-  min-width: 0;
+  flex-shrink: 0;
 }
 
 .otp-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: var(--space-2);
   align-items: center;
 }
 
 .otp-input {
-  letter-spacing: 0.2em;
-  font-size: 1.05rem;
+  width: 8.5rem;
+  height: 40px;
+  padding: 0 var(--space-3);
+  letter-spacing: 0.25em;
+  font-size: var(--text-md);
   font-family: inherit;
-  padding: 0.5rem 0.75rem;
-  border-radius: 10px;
-  border: 1px solid var(--color-input-border);
-  background: var(--color-input-bg);
-  color: var(--color-text);
-  width: 8rem;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  font-variant-numeric: tabular-nums;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-surface);
+  color: var(--color-text-strong);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
 .otp-input:focus {
   outline: none;
-  border-color: #166534;
-  box-shadow: 0 0 0 3px rgba(22, 101, 52, 0.12);
+  border-color: var(--color-primary);
+  box-shadow: var(--focus-ring);
 }
 
 .otp-migrate {
   display: flex;
-  gap: 0.4rem;
+  gap: var(--space-2);
   align-items: center;
-  margin: 0.5rem 0 0;
-  font-size: 0.75rem;
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-xs);
   color: var(--color-text-muted);
   cursor: pointer;
 }
 
 .otp-migrate input {
   flex-shrink: 0;
+  accent-color: var(--color-primary);
 }
 
 .otp-msg {
-  margin: 0.4rem 0 0;
-  font-size: 0.8125rem;
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-sm);
 }
 
-.otp-msg--error { color: #dc2626; }
-.otp-msg--ok { color: #166534; }
-
-html.dark .otp-msg--ok { color: #4ade80; }
+.otp-msg--error { color: var(--color-danger); }
+.otp-msg--ok { color: var(--color-primary-text); }
 
 /* ── Modal ── */
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.4);
+  z-index: var(--z-modal);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 100;
-  padding: 1rem;
+  padding: var(--space-4);
+  background: var(--color-modal-overlay);
+  backdrop-filter: blur(4px);
 }
 
 .modal-card {
   width: 100%;
   max-width: 460px;
-  background: var(--color-bg-card);
+  padding: var(--space-6);
+  background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: 14px;
-  padding: 1.5rem;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
 }
 
 .modal-title {
-  margin: 0 0 0.5rem;
-  font-size: 1.0625rem;
-  font-weight: 700;
-  color: var(--color-text);
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-strong);
 }
 
 .modal-text {
-  margin: 0 0 1rem;
+  margin: 0 0 var(--space-5);
+  font-size: var(--text-sm);
+  line-height: 1.5;
   color: var(--color-text-muted);
-  font-size: 0.8125rem;
-  line-height: 1.45;
+}
+
+.modal-text strong {
+  color: var(--color-text-strong);
 }
 
 .modal-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 0.625rem;
-  margin-top: 0.25rem;
+  gap: var(--space-2);
+  margin-top: var(--space-5);
 }
 
 /* ── Fields ── */
 .field {
   display: flex;
   flex-direction: column;
-  gap: 0.375rem;
-  margin-bottom: 0.75rem;
+  gap: 6px;
 }
 
 .field-label {
-  font-size: 0.75rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-strong);
 }
 
 .field-input {
-  padding: 0.625rem 0.875rem;
-  border: 1px solid var(--color-input-border);
-  border-radius: 10px;
-  font-size: 0.875rem;
+  height: 40px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-base);
   font-family: inherit;
-  background: var(--color-input-bg);
+  background: var(--color-surface);
   color: var(--color-text);
-  transition: border-color 0.15s, box-shadow 0.15s;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
 .field-input:focus {
   outline: none;
-  border-color: #166534;
-  box-shadow: 0 0 0 3px rgba(22, 101, 52, 0.12);
+  border-color: var(--color-primary);
+  box-shadow: var(--focus-ring);
 }
 
-.field-input:disabled { opacity: 0.7; }
+.field-input--error {
+  border-color: var(--color-danger);
+}
+
+.field-input:disabled {
+  background: var(--color-surface-muted);
+  cursor: not-allowed;
+}
 
 .field-error {
-  margin: -0.25rem 0 0.75rem;
-  color: #dc2626;
-  font-size: 0.8125rem;
+  margin: 6px 0 0;
+  font-size: var(--text-sm);
+  color: var(--color-danger);
 }
 
-/* ── Buttons ── */
-.btn-primary {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0.5rem 1rem;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  font-family: inherit;
-  color: #fff;
-  background: #166534;
-  border: none;
-  border-radius: 10px;
-  cursor: pointer;
-  transition: background 0.15s;
-  white-space: nowrap;
+@media (max-width: 960px) {
+  .plans-grid {
+    grid-template-columns: minmax(0, 1fr);
+    max-width: 480px;
+    margin-left: auto;
+    margin-right: auto;
+  }
 }
 
-.btn-primary:hover:not(:disabled) { background: #15803d; }
-.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
-
-.btn-secondary {
-  padding: 0.5rem 0.85rem;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  font-family: inherit;
-  color: var(--color-text);
-  background: transparent;
-  border: 1px solid var(--color-border);
-  border-radius: 10px;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-
-.btn-secondary:hover { background: var(--color-table-row-hover); }
-.btn-secondary:disabled { opacity: 0.6; cursor: not-allowed; }
-
-@media (max-width: 600px) {
-  .hero-title { font-size: 1.35rem; }
-  .plans-grid { padding: 0 1rem 2rem; }
+@media (max-width: 720px) {
+  .sub-content { padding: 0 var(--space-4) var(--space-10); }
+  .hero { padding-top: var(--space-8); }
+  .hero-title { font-size: var(--text-xl); }
   .otp-card {
     flex-direction: column;
-    gap: 0.75rem;
-    margin-left: 1rem;
-    margin-right: 1rem;
+    align-items: stretch;
+    gap: var(--space-4);
+    padding: var(--space-5);
   }
-  .plan-card { padding: 1.25rem 1.125rem 1.25rem; }
+  .plan-card { padding: var(--space-5); }
+  .plan-card--featured { padding: calc(var(--space-5) - 1px); }
 }
 </style>

@@ -124,36 +124,35 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.5rem;
+  gap: var(--space-2);
   width: 100%;
-  padding: 0.625rem 0.875rem;
-  background: var(--color-input-bg, #fff);
-  border: 1px solid var(--color-input-border, #e2e8f0);
-  border-radius: 8px;
-  font-size: 0.9375rem;
+  height: 40px;
+  padding: 0 10px 0 12px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
   font-family: inherit;
-  color: var(--color-text, #0f172a);
+  font-size: var(--text-base);
+  color: var(--color-text-strong);
   cursor: pointer;
   text-align: left;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
-
+.base-select-trigger:hover:not(:disabled) {
+  border-color: var(--color-text-subtle);
+}
+.base-select-trigger:focus-visible,
 .base-select.is-open .base-select-trigger {
-  border-color: #166534;
-  box-shadow: 0 0 0 2px rgba(22, 101, 52, 0.2);
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: var(--focus-ring);
 }
-
-html.dark .base-select.is-open .base-select-trigger {
-  border-color: #4ade80;
-  box-shadow: 0 0 0 2px rgba(74, 222, 128, 0.2);
-}
-
 .base-select.is-error .base-select-trigger {
-  border-color: #dc2626;
+  border-color: var(--color-danger);
 }
-
 .base-select.is-disabled .base-select-trigger {
-  opacity: 0.6;
+  background: var(--color-surface-2);
+  color: var(--color-text-muted);
   cursor: not-allowed;
 }
 
@@ -163,17 +162,15 @@ html.dark .base-select.is-open .base-select-trigger {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
 .base-select-value.is-placeholder {
-  color: var(--color-text-muted, #94a3b8);
+  color: var(--color-text-subtle);
 }
 
 .base-select-chevron {
   flex-shrink: 0;
-  color: var(--color-text-muted, #64748b);
-  transition: transform 0.18s ease;
+  color: var(--color-text-muted);
+  transition: transform var(--transition-fast);
 }
-
 .base-select.is-open .base-select-chevron {
   transform: rotate(180deg);
 }
@@ -183,42 +180,38 @@ html.dark .base-select.is-open .base-select-trigger {
   top: calc(100% + 4px);
   left: 0;
   right: 0;
-  z-index: 20;
+  z-index: var(--z-popover);
   margin: 0;
   padding: 4px;
   list-style: none;
   max-height: 240px;
   overflow-y: auto;
-  background: var(--color-bg-card, #fff);
-  border: 1px solid var(--color-border, #e2e8f0);
-  border-radius: 12px;
-  box-shadow: 0 10px 30px -8px rgba(0, 0, 0, 0.25), 0 4px 12px -4px rgba(0, 0, 0, 0.12);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
 }
 
 .base-select-option {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.5rem;
-  padding: 0.5rem 0.75rem;
-  font-size: 0.875rem;
-  color: var(--color-text, #334155);
-  border-radius: 8px;
+  gap: var(--space-2);
+  min-height: 34px;
+  padding: 0 10px;
+  font-size: var(--text-base);
+  color: var(--color-text);
+  border-radius: 6px;
   cursor: pointer;
-  transition: background 0.12s, color 0.12s;
+  transition: background var(--transition-fast), color var(--transition-fast);
 }
-
 .base-select-option:hover {
-  background: var(--color-table-row-hover, #f1f5f9);
+  background: var(--color-surface-muted);
 }
-
 .base-select-option.is-selected {
-  color: #166534;
-  font-weight: 600;
-}
-
-html.dark .base-select-option.is-selected {
-  color: #4ade80;
+  background: var(--color-selected);
+  color: var(--color-selected-text);
+  font-weight: var(--weight-semibold);
 }
 
 .base-select-option-label {
@@ -233,13 +226,11 @@ html.dark .base-select-option.is-selected {
 
 .select-pop-enter-active,
 .select-pop-leave-active {
-  transition: opacity 0.15s ease, transform 0.15s ease;
-  transform-origin: top;
+  transition: opacity 0.12s ease, transform 0.12s ease;
 }
-
 .select-pop-enter-from,
 .select-pop-leave-to {
   opacity: 0;
-  transform: translateY(-4px) scaleY(0.96);
+  transform: translateY(-4px);
 }
 </style>

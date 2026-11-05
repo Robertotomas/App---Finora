@@ -1,68 +1,32 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { Pie } from 'vue-chartjs'
-import {
-  Chart as ChartJS,
-  ArcElement,
-  Tooltip,
-  Legend,
-} from 'chart.js'
+// Receitas: todas as categorias partilham a cor do grupo "Rendimentos" → usar a paleta categórica.
 import type { IncomeByCategory } from '@/types/dashboard'
+import CategoryDoughnut from './CategoryDoughnut.vue'
 
-ChartJS.register(ArcElement, Tooltip, Legend)
-
-const COLORS = [
-  '#2563eb', '#059669', '#7c3aed', '#0891b2', '#d97706',
-  '#4f46e5', '#0d9488', '#a855f7', '#0ea5e9', '#f59e0b',
-]
-
-const props = defineProps<{
+defineProps<{
   data: IncomeByCategory[]
 }>()
-
-const chartData = computed(() => ({
-  labels: props.data.map((d) => d.categoryName),
-  datasets: [
-    {
-      data: props.data.map((d) => d.amount),
-      backgroundColor: props.data.map((_, i) => COLORS[i % COLORS.length]),
-      borderWidth: 0,
-    },
-  ],
-}))
-
-const options = {
-  responsive: true,
-  maintainAspectRatio: false,
-  plugins: {
-    legend: {
-      position: 'bottom' as const,
-      labels: {
-        padding: 16,
-        usePointStyle: true,
-      },
-    },
-    tooltip: {
-      callbacks: {
-        label: (ctx: { raw: unknown; dataIndex: number }) => {
-          const pct = props.data[ctx.dataIndex]?.percentage ?? 0
-          return `${Number(ctx.raw).toFixed(2)} € (${pct}%)`
-        },
-      },
-    },
-  },
-}
 </script>
 
 <template>
   <div class="chart-container">
-    <Pie :data="chartData" :options="options" />
+    <CategoryDoughnut v-if="data.length > 0" :items="data" color-mode="series" />
+    <div v-else class="chart-empty">Sem dados para mostrar</div>
   </div>
 </template>
 
 <style scoped>
 .chart-container {
-  height: 280px;
+  min-height: 200px;
   position: relative;
+}
+
+.chart-empty {
+  min-height: 200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
 }
 </style>

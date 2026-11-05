@@ -4,8 +4,15 @@ import { useAuthStore } from '@/stores/auth'
 import { authApi } from '@/api/auth'
 import type { User } from '@/types/auth'
 import { userFromProfileResponse } from '@/types/auth'
+import BaseSelect from '@/components/BaseSelect.vue'
+import PageHeader from '@/components/ui/PageHeader.vue'
+import UiCard from '@/components/ui/UiCard.vue'
+import UiButton from '@/components/ui/UiButton.vue'
+import UserAvatar from '@/components/ui/UserAvatar.vue'
+import { useToast } from '@/composables/useToast'
 
 const authStore = useAuthStore()
+const toast = useToast()
 
 const coupleProfileHint = computed(() => {
   const u = authStore.user
@@ -92,7 +99,7 @@ onMounted(async () => {
     const u = userFromProfileResponse(data)
     fillFromUser(u)
   } catch {
-    error.value = 'Não foi possível carregar o perfil. Tenta novamente.'
+    error.value = 'Não foi possível carregar o perfil. Tente novamente.'
     fillFromUser(authStore.user)
   } finally {
     loading.value = false
@@ -103,7 +110,7 @@ async function handleSubmit() {
   error.value = ''
   success.value = false
   if (!firstName.value.trim() || !lastName.value.trim()) {
-    error.value = 'Preenche nome e apelido.'
+    error.value = 'Preencha o nome e o apelido.'
     return
   }
   saving.value = true
@@ -117,14 +124,16 @@ async function handleSubmit() {
     authStore.applyUserFromProfileResponse(data)
     fillFromUser(authStore.user)
     success.value = true
+    toast.success('Perfil atualizado')
   } catch (e: unknown) {
     const err = e as { response?: { data?: { message?: string; errors?: Record<string, string[]> } } }
     const d = err.response?.data
     if (d?.errors) {
       error.value = Object.values(d.errors).flat().join(' ')
     } else {
-      error.value = d?.message || 'Não foi possível guardar. Tenta novamente.'
+      error.value = d?.message || 'Não foi possível guardar. Tente novamente.'
     }
+    toast.error(error.value)
   } finally {
     saving.value = false
   }
@@ -133,26 +142,30 @@ async function handleSubmit() {
 
 <template>
   <div class="profile-page">
-    <div class="page-header">
-      <div class="page-header-text">
-        <h1 class="page-title">Perfil</h1>
-        <p class="page-subtitle">Edite os seus dados pessoais</p>
-      </div>
-    </div>
+    <PageHeader title="Perfil" />
 
     <div v-if="loading" class="loading-state">
       <div class="spinner"></div>
       <p>A carregar perfil…</p>
     </div>
 
-    <template v-else>
-      <p v-if="coupleProfileHint" class="couple-hint">{{ coupleProfileHint }}</p>
+    <form v-else class="ui-stack" @submit.prevent="handleSubmit">
+      <div class="identity">
+        <UserAvatar :first-name="firstName" :last-name="lastName" :size="56" />
+        <div class="identity-text">
+          <p class="identity-name">{{ [firstName, lastName].filter(Boolean).join(' ') || 'Sem nome' }}</p>
+          <p class="identity-email">{{ email }}</p>
+        </div>
+      </div>
 
-      <form class="card" @submit.prevent="handleSubmit">
-        <div v-if="error" class="form-error">{{ error }}</div>
-        <div v-if="success" class="form-success">Alterações guardadas.</div>
+      <p v-if="coupleProfileHint" class="couple-hint">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" /></svg>
+        <span>{{ coupleProfileHint }}</span>
+      </p>
 
-        <div class="section-label">Dados pessoais</div>
+      <div v-if="error" class="form-error" role="alert">{{ error }}</div>
+
+      <UiCard title="Dados pessoais" subtitle="O nome que aparece na aplicação e ao seu parceiro.">
         <div class="form-grid">
           <label class="field">
             <span class="field-label">Nome</span>
@@ -163,243 +176,185 @@ async function handleSubmit() {
             <input v-model="lastName" class="field-input" type="text" maxlength="100" required autocomplete="family-name" />
           </label>
         </div>
+      </UiCard>
 
-        <div class="section-divider"></div>
-
-        <div class="section-label">Conta</div>
+      <UiCard title="Conta" subtitle="Email de acesso e fuso horário usado nas datas e relatórios.">
         <div class="form-grid">
-          <label class="field field-readonly">
+          <label class="field">
             <span class="field-label">Email</span>
             <input :value="email" class="field-input" type="email" disabled readonly />
             <span class="field-hint">O email não pode ser alterado.</span>
           </label>
-          <label class="field">
+          <div class="field">
             <span class="field-label">Fuso horário</span>
-            <select v-model="timeZoneId" class="field-input">
-              <option v-for="tz in ensuredOptions" :key="tz.value" :value="tz.value">{{ tz.label }}</option>
-            </select>
-          </label>
+            <BaseSelect
+              :model-value="timeZoneId"
+              :options="ensuredOptions"
+              placeholder="Escolha um fuso horário"
+              @update:model-value="(v) => (timeZoneId = String(v))"
+            />
+          </div>
         </div>
-
-        <div class="section-divider"></div>
-
         <div class="form-actions">
-          <button type="submit" class="btn-save" :disabled="saving">
-{{ saving ? 'A guardar…' : 'Guardar alterações' }}
-          </button>
+          <UiButton type="submit" :loading="saving">
+            {{ saving ? 'A guardar…' : 'Guardar alterações' }}
+          </UiButton>
         </div>
-      </form>
-    </template>
+      </UiCard>
+    </form>
   </div>
 </template>
 
 <style scoped>
+/* Mesma largura/alinhamento das outras páginas (título no mesmo sítio); o conteúdo, por ser
+   formulário, fica com largura confortável e alinhado à esquerda. */
 .profile-page {
-  max-width: min(860px, 100%);
+  max-width: var(--page-max);
   margin: 0 auto;
-  padding: 0 0 3rem;
+  padding: 0 0 var(--space-12);
 }
 
-/* ── Page header ── */
-.page-header {
+.profile-page > :not(.page-head) {
+  max-width: var(--page-max-narrow);
+}
+
+/* ── Identidade ── */
+.identity {
   display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 1.5rem;
+  align-items: center;
+  gap: var(--space-4);
 }
 
-.page-title {
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: var(--color-text);
+.identity-text {
+  min-width: 0;
+}
+
+.identity-name {
   margin: 0;
-  letter-spacing: -0.02em;
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-strong);
 }
 
-.page-subtitle {
-  font-size: 0.8125rem;
+.identity-email {
+  margin: 2px 0 0;
+  font-size: var(--text-sm);
   color: var(--color-text-muted);
-  margin: 0.25rem 0 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* ── Couple hint ── */
 .couple-hint {
-  margin: 0 0 1rem;
-  padding: 0.75rem 1rem;
-  font-size: 0.8125rem;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--text-sm);
   line-height: 1.45;
-  color: var(--color-text);
-  background: var(--color-bg-card);
-  border: 1px solid var(--color-border);
-  border-radius: 14px;
-  box-shadow: var(--app-shadow-card, 0 1px 3px rgba(0, 0, 0, 0.06));
+  color: var(--color-text-secondary);
+  background: var(--color-info-soft);
+  border-radius: var(--radius-md);
+}
+
+.couple-hint svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: var(--color-info);
 }
 
 /* ── Loading ── */
 .loading-state {
   text-align: center;
-  padding: 3rem;
+  padding: var(--space-12);
   color: var(--color-text-muted);
+  font-size: var(--text-sm);
 }
 
 .spinner {
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   border: 3px solid var(--color-border);
-  border-top-color: #166534;
+  border-top-color: var(--color-primary);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
-  margin: 0 auto 1rem;
+  margin: 0 auto var(--space-4);
 }
 
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
 
-/* ── Feedback banners ── */
+/* ── Erro ── */
 .form-error {
-  padding: 0.75rem 1rem;
-  border-radius: 10px;
-  background: #fef2f2;
-  color: #dc2626;
-  border: 1px solid #fecaca;
-  font-size: 0.8125rem;
-  font-weight: 500;
-  margin-bottom: 1rem;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-sm);
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+  border: 1px solid var(--color-danger-border);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
 }
 
-.form-success {
-  padding: 0.75rem 1rem;
-  border-radius: 10px;
-  background: #ecfdf5;
-  color: #166534;
-  border: 1px solid #a7f3d0;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  margin-bottom: 1rem;
-}
-
-/* ── Card ── */
-.card {
-  background: var(--color-bg-card);
-  border: 1px solid var(--color-border);
-  border-radius: 14px;
-  padding: 1.5rem;
-  box-shadow: var(--app-shadow-card, 0 1px 3px rgba(0, 0, 0, 0.06));
-}
-
-/* ── Sections inside card ── */
-.section-label {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: var(--color-text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  margin-bottom: 0.75rem;
-}
-
-.section-divider {
-  height: 1px;
-  background: var(--color-border);
-  margin: 1.25rem 0;
-}
-
-/* ── Form grid ── */
+/* ── Campos ── */
 .form-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 0.875rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
 }
 
 .field {
   display: flex;
   flex-direction: column;
-  gap: 0.375rem;
+  gap: 6px;
+  min-width: 0;
 }
 
 .field-label {
-  font-size: 0.75rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-strong);
 }
 
 .field-input {
-  padding: 0.625rem 0.875rem;
-  border: 1px solid var(--color-input-border);
-  border-radius: 10px;
-  font-size: 0.875rem;
+  height: 40px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-base);
   font-family: inherit;
-  background: var(--color-input-bg);
+  background: var(--color-surface);
   color: var(--color-text);
-  transition: border-color 0.15s, box-shadow 0.15s;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
 .field-input:focus {
   outline: none;
-  border-color: #166534;
-  box-shadow: 0 0 0 3px rgba(22, 101, 52, 0.12);
+  border-color: var(--color-primary);
+  box-shadow: var(--focus-ring);
 }
 
-.field-readonly .field-input:disabled {
-  opacity: 0.85;
+.field-input:disabled {
+  background: var(--color-surface-muted);
+  color: var(--color-text-muted);
   cursor: not-allowed;
 }
 
 .field-hint {
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   color: var(--color-text-muted);
 }
 
-/* ── Actions ── */
 .form-actions {
   display: flex;
   justify-content: flex-end;
-}
-
-.btn-save {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
-  padding: 0.5rem 1rem;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  font-family: inherit;
-  color: #fff;
-  background: #166534;
-  border: none;
-  border-radius: 10px;
-  cursor: pointer;
-  transition: background 0.15s, transform 0.15s;
-  white-space: nowrap;
-}
-
-.btn-save:hover:not(:disabled) {
-  background: #15803d;
-  transform: translateY(-1px);
-}
-
-.btn-save:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+  margin-top: var(--space-6);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border-subtle);
 }
 
 @media (max-width: 600px) {
-  .page-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0.75rem;
-  }
-
-  .card {
-    padding: 1.125rem;
-  }
-
   .form-grid {
     grid-template-columns: 1fr;
   }

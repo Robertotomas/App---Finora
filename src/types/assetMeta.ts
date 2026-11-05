@@ -22,7 +22,7 @@ export const ASSET_CATEGORY_ICONS: Record<AssetCategory, string> = {
 
 /** Cor (acento) por categoria, usada no ícone dos cards e do detalhe. */
 export const ASSET_CATEGORY_COLORS: Record<AssetCategory, string> = {
-  [AssetCategory.RealEstate]: '#166534',
+  [AssetCategory.RealEstate]: '#075E46',
   [AssetCategory.Art]: '#a855f7',
   [AssetCategory.Collectibles]: '#f59e0b',
   [AssetCategory.RawMaterials]: '#0891b2',

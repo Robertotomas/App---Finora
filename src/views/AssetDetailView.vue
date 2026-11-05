@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { PT_GROUPING } from '@/utils/numberFormat'
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAssetsStore } from '@/stores/assets'
@@ -6,7 +7,8 @@ import { useSubscriptionStore } from '@/stores/subscription'
 import AssetFormModal from '@/components/AssetFormModal.vue'
 import ValuationFormModal from '@/components/ValuationFormModal.vue'
 import ConfirmDeleteModal from '@/components/ConfirmDeleteModal.vue'
-import AssetsChart from '@/components/charts/AssetsChart.vue'
+import ValueHeroCard from '@/components/charts/ValueHeroCard.vue'
+import HeroStat from '@/components/charts/HeroStat.vue'
 import type { AssetChartPoint } from '@/components/charts/AssetsChart.vue'
 import {
   ASSET_CATEGORY_LABELS,
@@ -17,7 +19,16 @@ import {
 } from '@/types/asset'
 import type { Asset, CreateAssetRequest, AddValuationRequest, AssetValuation } from '@/types/asset'
 import { assetCategoryIcon, assetCategoryColor } from '@/types/assetMeta'
+import PageSkeleton from '@/components/PageSkeleton.vue'
+import PageHeader from '@/components/ui/PageHeader.vue'
+import UiButton from '@/components/ui/UiButton.vue'
+import UiCard from '@/components/ui/UiCard.vue'
+import EmptyState from '@/components/ui/EmptyState.vue'
+import ActionMenu from '@/components/ui/ActionMenu.vue'
+import type { ActionMenuItem } from '@/components/ui/ActionMenu.vue'
+import { useToast } from '@/composables/useToast'
 
+const toast = useToast()
 const route = useRoute()
 const router = useRouter()
 const assetsStore = useAssetsStore()
@@ -59,6 +70,22 @@ const annualized = computed(() =>
 const holding = computed(() => (asset.value ? holdingPeriodLabel(asset.value.acquisitionDate) : '—'))
 
 const rows = computed(() => (asset.value ? valuationDeltas(asset.value.valuations) : []))
+
+const assetActions = computed<ActionMenuItem[]>(() => [
+  { label: 'Editar ativo', onSelect: () => (editModalOpen.value = true) },
+  { label: 'Eliminar ativo', danger: true, onSelect: () => (deleteAssetModalOpen.value = true) },
+])
+
+function valuationActions(row: AssetValuation): ActionMenuItem[] {
+  const items: ActionMenuItem[] = [{ label: 'Editar', onSelect: () => openEditValuation(row) }]
+  // Não se pode apagar a única avaliação restante.
+  if (rows.value.length > 1) items.push({ label: 'Eliminar', danger: true, onSelect: () => (deleteValuationId.value = row.id) })
+  return items
+}
+
+function goBack() {
+  router.push({ name: 'bens-valores' })
+}
 
 /* ── Gráfico da evolução das avaliações deste ativo ── */
 const DAY = 86_400_000
@@ -114,7 +141,7 @@ const chartYearTicks = computed(() => {
 })
 
 function formatCurrency(value: number): string {
-  return new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(value)
+  return new Intl.NumberFormat('pt-PT', { ...PT_GROUPING, style: 'currency', currency: 'EUR' }).format(value)
 }
 
 function formatSignedCurrency(value: number): string {
@@ -143,6 +170,7 @@ async function handleEdit(payload: CreateAssetRequest) {
   try {
     await assetsStore.updateAsset(asset.value.id, payload)
     editModalOpen.value = false
+    toast.success('Ativo atualizado')
   } catch {
     // erro na store
   } finally {
@@ -166,12 +194,14 @@ async function handleSubmitValuation(payload: AddValuationRequest) {
   if (!asset.value) return
   actionLoading.value = true
   try {
+    const editing = !!editingValuation.value
     if (editingValuation.value) {
       await assetsStore.updateValuation(asset.value.id, editingValuation.value.id, payload)
     } else {
       await assetsStore.addValuation(asset.value.id, payload)
     }
     valuationModalOpen.value = false
+    toast.success(editing ? 'Avaliação atualizada' : 'Avaliação adicionada')
     editingValuation.value = null
   } catch {
     // erro na store
@@ -185,6 +215,7 @@ async function handleDeleteAsset() {
   actionLoading.value = true
   try {
     await assetsStore.deleteAsset(asset.value.id)
+    toast.success('Ativo eliminado')
     router.push({ name: 'bens-valores' })
   } catch {
     // erro na store
@@ -199,6 +230,7 @@ async function handleDeleteValuation() {
   try {
     await assetsStore.deleteValuation(asset.value.id, deleteValuationId.value)
     deleteValuationId.value = null
+    toast.success('Avaliação eliminada')
   } catch {
     // erro na store (ex.: não pode apagar a única avaliação)
   } finally {
@@ -209,161 +241,173 @@ async function handleDeleteValuation() {
 
 <template>
   <div class="asset-detail-page">
-    <router-link :to="{ name: 'bens-valores' }" class="back-link">
-      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-      Bens e valores
-    </router-link>
+    <template v-if="loading || !asset">
+      <div class="back-row">
+        <UiButton variant="ghost" size="sm" @click="goBack">
+          <template #icon>
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+          </template>
+          Voltar
+        </UiButton>
+      </div>
 
-    <div v-if="loading" class="loading-state">
-      <div class="spinner"></div>
-      <p>A carregar...</p>
-    </div>
+      <PageSkeleton v-if="loading" variant="hero" />
 
-    <div v-else-if="!asset" class="empty-card">
-      <p class="empty-text">Ativo não encontrado</p>
-      <router-link :to="{ name: 'bens-valores' }" class="btn-confirm">Voltar</router-link>
-    </div>
+      <UiCard v-else>
+        <EmptyState
+          title="Ativo não encontrado"
+          description="Este ativo pode ter sido eliminado ou já não está disponível."
+        >
+          <UiButton variant="secondary" @click="goBack">Ver bens e valores</UiButton>
+        </EmptyState>
+      </UiCard>
+    </template>
 
     <template v-else>
-      <div class="detail-grid">
-        <!-- Hero -->
-        <div class="hero-card">
-          <div class="hero-top">
+      <PageHeader :title="asset.name">
+        <template #back>
+          <UiButton variant="ghost" size="sm" class="back-btn" @click="goBack">
+            <template #icon>
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+            </template>
+            Voltar
+          </UiButton>
+        </template>
+        <template #meta>
+          <div class="head-meta">
             <span
-              class="hero-icon"
+              class="cat-icon"
               :style="{ background: assetCategoryColor(asset.category) + '1f', color: assetCategoryColor(asset.category) }"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" v-html="assetCategoryIcon(asset.category)"></svg>
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" v-html="assetCategoryIcon(asset.category)"></svg>
             </span>
-            <div class="hero-head">
-              <h1 class="hero-name">{{ asset.name }}</h1>
-              <span class="hero-cat">{{ ASSET_CATEGORY_LABELS[asset.category] }}</span>
-            </div>
-            <div class="hero-actions">
-              <button type="button" class="action-btn" title="Editar" @click="editModalOpen = true">
-                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
-              </button>
-              <button type="button" class="action-btn action-btn--danger" title="Eliminar" @click="deleteAssetModalOpen = true">
-                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-              </button>
-            </div>
+            <span class="ui-badge">{{ ASSET_CATEGORY_LABELS[asset.category] }}</span>
+            <span class="head-meta-text">Adquirido em {{ formatLongDate(asset.acquisitionDate) }}</span>
           </div>
+        </template>
+        <template #actions>
+          <UiButton variant="primary" @click="openAddValuation">
+            <template #icon>
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="5" y2="19"/><line x1="5" x2="19" y1="12" y2="12"/></svg>
+            </template>
+            Adicionar avaliação
+          </UiButton>
+          <ActionMenu :items="assetActions" aria-label="Ações do ativo" />
+        </template>
+      </PageHeader>
 
-          <div class="hero-value-row">
-            <span class="hero-value">{{ formatCurrency(asset.currentValue) }}</span>
-            <span class="hero-change" :class="{ negative: change.abs < 0 }">{{ formatSignedCurrency(change.abs) }}</span>
-            <span v-if="change.pct !== null" class="hero-pct" :class="{ negative: (change.pct ?? 0) < 0 }">
-              {{ formatPct(change.pct) }}
-            </span>
-          </div>
-          <p class="hero-date">Última avaliação: {{ formatLongDate(asset.lastValuationDate) }}</p>
+      <div v-if="assetsStore.error" class="notice notice--danger">{{ assetsStore.error }}</div>
 
-          <div class="hero-chart">
-            <AssetsChart v-if="showChart" :points="chartPoints" currency="EUR" :year-ticks="chartYearTicks" cost-label="Custo" />
-            <div v-else class="chart-placeholder">
-              <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
-              <p>O gráfico aparece quando tiver mais do que uma avaliação</p>
+      <div class="detail-grid">
+        <!-- Hero + gráfico -->
+        <ValueHeroCard
+          :points="showChart ? chartPoints : []"
+          :current-value="asset.currentValue"
+          :current-cost="asset.acquisitionCost"
+          cost-label="Custo"
+          period-label="desde a aquisição"
+          :year-ticks="chartYearTicks"
+        >
+          <template #empty>
+            <div class="chart-placeholder">
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
+              <p>O gráfico aparece quando tiver mais do que uma avaliação.</p>
             </div>
-          </div>
-        </div>
+          </template>
+          <template #footer>
+            <HeroStat label="Custo de aquisição" :value="formatCurrency(asset.acquisitionCost)" />
+            <HeroStat label="Última avaliação" :value="formatLongDate(asset.lastValuationDate)" />
+          </template>
+        </ValueHeroCard>
 
-        <!-- Side cards -->
+        <!-- Cartões laterais -->
         <div class="side-col">
-          <div class="info-card">
-            <h2 class="info-title">Performance</h2>
-            <div class="info-row">
-              <span class="info-label">Custo de aquisição</span>
-              <span class="info-value">{{ formatCurrency(asset.acquisitionCost) }}</span>
-            </div>
-            <div class="info-row">
-              <span class="info-label">Período de detenção</span>
-              <span class="info-value">{{ holding }}</span>
-            </div>
-            <div class="info-row">
-              <span class="info-label">Retorno anualizado</span>
-              <span
-                class="info-value"
-                :class="annualized !== null ? (annualized >= 0 ? 'pos' : 'neg') : ''"
-              >
-                {{ annualized !== null ? formatPct(annualized) : '—' }}
-              </span>
-            </div>
-          </div>
+          <UiCard title="Performance">
+            <dl class="def-list">
+              <div class="def-row">
+                <dt>Custo de aquisição</dt>
+                <dd>{{ formatCurrency(asset.acquisitionCost) }}</dd>
+              </div>
+              <div class="def-row">
+                <dt>Variação</dt>
+                <dd :class="change.abs < 0 ? 'ui-amount--neg' : 'ui-amount--pos'">{{ formatSignedCurrency(change.abs) }}</dd>
+              </div>
+              <div class="def-row">
+                <dt>Retorno anualizado</dt>
+                <dd :class="annualized !== null ? (annualized >= 0 ? 'ui-amount--pos' : 'ui-amount--neg') : ''">
+                  {{ annualized !== null ? formatPct(annualized) : '—' }}
+                </dd>
+              </div>
+              <div class="def-row">
+                <dt>Período de detenção</dt>
+                <dd>{{ holding }}</dd>
+              </div>
+            </dl>
+          </UiCard>
 
-          <div class="info-card">
-            <h2 class="info-title">Detalhes</h2>
-            <div class="info-row">
-              <span class="info-label">Data de aquisição</span>
-              <span class="info-value">{{ formatShortDate(asset.acquisitionDate) }}</span>
-            </div>
-            <div class="info-row">
-              <span class="info-label">Última avaliação</span>
-              <span class="info-value">{{ formatShortDate(asset.lastValuationDate) }}</span>
-            </div>
-          </div>
+          <UiCard title="Detalhes">
+            <dl class="def-list">
+              <div class="def-row">
+                <dt>Categoria</dt>
+                <dd>{{ ASSET_CATEGORY_LABELS[asset.category] }}</dd>
+              </div>
+              <div class="def-row">
+                <dt>Data de aquisição</dt>
+                <dd>{{ formatShortDate(asset.acquisitionDate) }}</dd>
+              </div>
+              <div class="def-row">
+                <dt>Última avaliação</dt>
+                <dd>{{ formatShortDate(asset.lastValuationDate) }}</dd>
+              </div>
+              <div class="def-row">
+                <dt>Moeda</dt>
+                <dd>EUR</dd>
+              </div>
+            </dl>
+          </UiCard>
         </div>
       </div>
 
       <!-- Avaliações -->
-      <div class="valuations-section">
-        <div class="valuations-header">
-          <h2 class="section-title">Avaliações</h2>
-          <button type="button" class="btn-add" @click="openAddValuation">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="5" y2="19"/><line x1="5" x2="19" y1="12" y2="12"/></svg>
-            Adicionar avaliação
-          </button>
-        </div>
-
-        <div v-if="assetsStore.error" class="global-error">{{ assetsStore.error }}</div>
-
-        <div class="table-wrap">
-          <table class="valuations-table">
+      <UiCard
+        flush
+        title="Avaliações"
+        :subtitle="`${rows.length} ${rows.length === 1 ? 'avaliação' : 'avaliações'}`"
+      >
+        <div class="ui-table-wrap">
+          <table class="ui-table valuations-table">
             <thead>
               <tr>
                 <th>Data</th>
                 <th class="num">Valor</th>
-                <th class="num">Δ vs anterior</th>
-                <th class="num">Δ %</th>
-                <th class="act"></th>
+                <th class="num">Variação</th>
+                <th class="num col-pct">Variação %</th>
+                <th class="col-act" aria-hidden="true"></th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="row in rows" :key="row.id">
                 <td>{{ formatLongDate(row.date) }}</td>
-                <td class="num strong">{{ formatCurrency(row.value) }}</td>
-                <td class="num" :class="row.deltaAbs === null ? 'muted' : row.deltaAbs >= 0 ? 'pos' : 'neg'">
+                <td class="num"><span class="ui-amount">{{ formatCurrency(row.value) }}</span></td>
+                <td class="num" :class="row.deltaAbs === null ? 'muted' : row.deltaAbs >= 0 ? 'ui-amount--pos' : 'ui-amount--neg'">
                   {{ row.deltaAbs === null ? '—' : formatSignedCurrency(row.deltaAbs) }}
                 </td>
-                <td class="num" :class="row.deltaPct === null ? 'muted' : row.deltaPct >= 0 ? 'pos' : 'neg'">
-                  {{ row.deltaPct === null ? '—' : formatPct(row.deltaPct) }}
+                <td class="num col-pct">
+                  <span
+                    v-if="row.deltaPct !== null"
+                    class="ui-badge"
+                    :class="row.deltaPct < 0 ? 'ui-badge--danger' : 'ui-badge--success'"
+                  >{{ formatPct(row.deltaPct) }}</span>
+                  <span v-else class="muted">—</span>
                 </td>
-                <td class="act">
-                  <div class="row-actions">
-                    <button
-                      type="button"
-                      class="row-btn"
-                      title="Editar avaliação"
-                      @click="openEditValuation(row)"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
-                    </button>
-                    <button
-                      v-if="rows.length > 1"
-                      type="button"
-                      class="row-btn row-btn--del"
-                      title="Eliminar avaliação"
-                      @click="deleteValuationId = row.id"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>
-                    </button>
-                  </div>
+                <td class="col-act">
+                  <ActionMenu :items="valuationActions(row)" aria-label="Ações da avaliação" />
                 </td>
               </tr>
             </tbody>
           </table>
         </div>
-        <p class="valuations-count">{{ rows.length }} {{ rows.length === 1 ? 'avaliação' : 'avaliações' }}</p>
-      </div>
+      </UiCard>
     </template>
 
     <AssetFormModal
@@ -404,503 +448,150 @@ async function handleDeleteValuation() {
 
 <style scoped>
 .asset-detail-page {
-  max-width: min(1000px, 100%);
+  max-width: var(--page-max);
   margin: 0 auto;
-  padding: 0 0 3rem;
+  padding: 0 0 var(--space-12);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+.asset-detail-page > .page-head {
+  margin-bottom: 0;
+}
+.back-row {
+  margin-bottom: calc(-1 * var(--space-4));
+}
+.back-btn {
+  margin-left: calc(-1 * var(--space-2));
 }
 
-.back-link {
+/* ── Cabeçalho ── */
+.head-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.cat-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
   display: inline-flex;
   align-items: center;
-  gap: 0.375rem;
-  font-size: 0.875rem;
-  font-weight: 600;
+  justify-content: center;
+}
+.head-meta-text {
+  font-size: var(--text-sm);
   color: var(--color-text-muted);
-  text-decoration: none;
-  margin-bottom: 1.25rem;
-  transition: color 0.15s;
 }
 
-.back-link:hover {
-  color: var(--color-text);
+.notice {
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+}
+.notice--danger {
+  background: var(--color-danger-soft);
+  border: 1px solid var(--color-danger-border);
+  color: var(--color-danger);
 }
 
+/* ── Grelha ── */
 .detail-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.8fr) minmax(0, 1fr);
-  gap: 1rem;
+  gap: var(--space-5);
   align-items: start;
 }
-
-@media (max-width: 760px) {
-  .detail-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-/* Hero */
-.hero-card {
-  background: var(--color-bg-card);
-  border: 1px solid var(--color-border);
-  border-radius: 16px;
-  padding: 1.5rem;
-}
-
-.hero-top {
+.side-col {
   display: flex;
-  align-items: flex-start;
-  gap: 0.875rem;
-}
-
-.hero-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 44px;
-  height: 44px;
-  flex-shrink: 0;
-  border-radius: 12px;
-}
-
-.hero-head {
-  flex: 1;
+  flex-direction: column;
+  gap: var(--space-5);
   min-width: 0;
 }
 
-.hero-name {
-  font-size: 1.25rem;
-  font-weight: 700;
-  color: var(--color-text);
-  margin: 0 0 0.375rem;
-  letter-spacing: -0.02em;
-}
-
-.hero-cat {
-  display: inline-block;
-  font-size: 0.6875rem;
-  font-weight: 600;
-  color: var(--color-text-muted);
-  background: var(--color-table-row-hover);
-  padding: 0.15rem 0.55rem;
-  border-radius: 999px;
-}
-
-.hero-actions {
-  display: flex;
-  gap: 0.375rem;
-  flex-shrink: 0;
-}
-
-.hero-value-row {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 0.625rem;
-  margin-top: 1.25rem;
-}
-
-.hero-value {
-  font-size: 2rem;
-  font-weight: 800;
-  color: #166534;
-  letter-spacing: -0.03em;
-}
-
-html.dark .hero-value {
-  color: #4ade80;
-}
-
-.hero-change {
-  font-size: 0.9375rem;
-  font-weight: 600;
-  color: #166534;
-}
-
-html.dark .hero-change {
-  color: #4ade80;
-}
-
-.hero-change.negative,
-.hero-pct.negative {
-  color: #dc2626;
-}
-
-html.dark .hero-change.negative,
-html.dark .hero-pct.negative {
-  color: #f87171;
-}
-
-.hero-pct {
-  font-size: 0.8125rem;
-  font-weight: 700;
-  color: #166534;
-  background: rgba(22, 101, 52, 0.1);
-  padding: 0.15rem 0.5rem;
-  border-radius: 999px;
-}
-
-html.dark .hero-pct {
-  color: #4ade80;
-  background: rgba(74, 222, 128, 0.12);
-}
-
-.hero-pct.negative {
-  background: rgba(220, 38, 38, 0.1);
-}
-
-.hero-date {
-  font-size: 0.8125rem;
-  color: var(--color-text-muted);
-  margin: 0.5rem 0 0;
-}
-
-.hero-chart {
-  margin-top: 1.25rem;
-}
-
+/* ── Hero ── */
 .chart-placeholder {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 0.625rem;
-  padding: 2.5rem 1rem;
+  gap: var(--space-2);
+  min-height: 220px;
+  padding: var(--space-6);
   border: 1px dashed var(--color-border);
-  border-radius: 12px;
-  color: var(--color-text-muted);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text-subtle);
   text-align: center;
 }
-
 .chart-placeholder p {
   margin: 0;
-  font-size: 0.8125rem;
-  max-width: 28ch;
-}
-
-/* Side cards */
-.side-col {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.info-card {
-  background: var(--color-bg-card);
-  border: 1px solid var(--color-border);
-  border-radius: 16px;
-  padding: 1.25rem;
-}
-
-.info-title {
-  font-size: 0.9375rem;
-  font-weight: 700;
-  color: var(--color-text);
-  margin: 0 0 0.875rem;
-}
-
-.info-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 0.5rem 0;
-}
-
-.info-row + .info-row {
-  border-top: 1px solid var(--color-border);
-}
-
-.info-label {
-  font-size: 0.8125rem;
+  font-size: var(--text-sm);
   color: var(--color-text-muted);
 }
 
-.info-value {
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: var(--color-text);
-}
-
-.info-value.pos {
-  color: #166534;
-}
-
-html.dark .info-value.pos {
-  color: #4ade80;
-}
-
-.info-value.neg {
-  color: #dc2626;
-}
-
-html.dark .info-value.neg {
-  color: #f87171;
-}
-
-/* Valuations */
-.valuations-section {
-  margin-top: 1.5rem;
-  background: var(--color-bg-card);
-  border: 1px solid var(--color-border);
-  border-radius: 16px;
-  padding: 1.25rem 1.5rem 1.5rem;
-}
-
-.valuations-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 1rem;
-}
-
-.section-title {
-  font-size: 1rem;
-  font-weight: 700;
-  color: var(--color-text);
+/* ── Lista de definições ── */
+.def-list {
   margin: 0;
+  display: flex;
+  flex-direction: column;
+}
+.def-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 10px 0;
+}
+.def-row:first-child {
+  padding-top: 0;
+}
+.def-row:last-child {
+  padding-bottom: 0;
+}
+.def-row + .def-row {
+  border-top: 1px solid var(--color-border-subtle);
+}
+.def-row dt {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+.def-row dd {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-strong);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.def-row dd.ui-amount--pos {
+  color: var(--color-income);
+}
+.def-row dd.ui-amount--neg {
+  color: var(--color-expense);
 }
 
-.btn-add {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
-  padding: 0.45rem 0.875rem;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: var(--color-text);
-  background: transparent;
-  border: 1px solid var(--color-border);
-  border-radius: 10px;
-  cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
+/* ── Tabela de avaliações ── */
+.valuations-table td {
   white-space: nowrap;
 }
-
-.btn-add:hover {
-  background: var(--color-table-row-hover);
-  border-color: var(--color-text-muted);
-}
-
-.global-error {
-  margin-bottom: 0.875rem;
-  padding: 0.625rem 0.875rem;
-  border-radius: 10px;
-  background: #fef2f2;
-  border: 1px solid #fecaca;
-  color: #b91c1c;
-  font-size: 0.8125rem;
-}
-
-html.dark .global-error {
-  background: rgba(248, 113, 113, 0.1);
-  border-color: rgba(248, 113, 113, 0.3);
-  color: #f87171;
-}
-
-.table-wrap {
-  overflow-x: auto;
-}
-
-.valuations-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.875rem;
-}
-
-.valuations-table th {
-  text-align: left;
-  font-size: 0.6875rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+.muted {
   color: var(--color-text-muted);
-  padding: 0.5rem 0.75rem;
-  border-bottom: 1px solid var(--color-border);
 }
-
-.valuations-table td {
-  padding: 0.75rem;
-  border-bottom: 1px solid var(--color-border);
-  color: var(--color-text);
-}
-
-.valuations-table tbody tr:last-child td {
-  border-bottom: none;
-}
-
-.valuations-table .num {
+.col-act {
+  width: 48px;
   text-align: right;
 }
 
-.valuations-table .act {
-  width: 72px;
-  text-align: right;
+@media (max-width: 900px) {
+  .detail-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
-
-.row-actions {
-  display: flex;
-  gap: 0.25rem;
-  justify-content: flex-end;
-}
-
-.valuations-table .strong {
-  font-weight: 700;
-}
-
-.valuations-table .pos {
-  color: #166534;
-  font-weight: 600;
-}
-
-html.dark .valuations-table .pos {
-  color: #4ade80;
-}
-
-.valuations-table .neg {
-  color: #dc2626;
-  font-weight: 600;
-}
-
-html.dark .valuations-table .neg {
-  color: #f87171;
-}
-
-.valuations-table .muted {
-  color: var(--color-text-muted);
-}
-
-.row-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border: 1px solid transparent;
-  border-radius: 7px;
-  background: transparent;
-  color: var(--color-text-muted);
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.row-btn:hover {
-  color: var(--color-text);
-  border-color: var(--color-border);
-  background: var(--color-table-row-hover);
-}
-
-.row-btn--del:hover {
-  color: #dc2626;
-  border-color: #fecaca;
-  background: #fef2f2;
-}
-
-html.dark .row-btn--del:hover {
-  color: #f87171;
-  border-color: rgba(248, 113, 113, 0.3);
-  background: rgba(248, 113, 113, 0.1);
-}
-
-.valuations-count {
-  font-size: 0.75rem;
-  color: var(--color-text-muted);
-  margin: 0.875rem 0 0;
-}
-
-/* Shared */
-.action-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  padding: 0;
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  background: transparent;
-  color: var(--color-text-muted);
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.action-btn:hover {
-  background: var(--color-table-row-hover);
-  color: var(--color-text);
-  border-color: var(--color-text-muted);
-}
-
-.action-btn--danger:hover {
-  color: #dc2626;
-  border-color: #fecaca;
-  background: #fef2f2;
-}
-
-html.dark .action-btn--danger:hover {
-  color: #f87171;
-  border-color: rgba(248, 113, 113, 0.3);
-  background: rgba(248, 113, 113, 0.1);
-}
-
-.btn-confirm {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0.5rem 1rem;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: #fff;
-  background: #166534;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  text-decoration: none;
-}
-
-.btn-confirm:hover {
-  background: #15803d;
-}
-
-.empty-card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 3rem 1.5rem;
-  background: var(--color-bg-card);
-  border: 1px dashed var(--color-border);
-  border-radius: 14px;
-  text-align: center;
-}
-
-.empty-text {
-  font-size: 0.9375rem;
-  font-weight: 600;
-  color: var(--color-text);
-  margin: 0;
-}
-
-.loading-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 4rem 1rem;
-  color: var(--color-text-muted);
-}
-
-.spinner {
-  width: 32px;
-  height: 32px;
-  border: 3px solid var(--color-border);
-  border-top-color: #166534;
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
+@media (max-width: 600px) {
+  .col-pct {
+    display: none;
   }
 }
 </style>

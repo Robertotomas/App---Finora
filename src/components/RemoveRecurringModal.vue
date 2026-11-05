@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import { PT_GROUPING } from '@/utils/numberFormat'
 import { ref, computed, watch } from 'vue'
 import BaseModal from './BaseModal.vue'
+import UiButton from './ui/UiButton.vue'
 import type { RecurringTransaction } from '@/types/recurringTransaction'
 import {
   TRANSACTION_CATEGORY_LABELS,
@@ -56,7 +58,7 @@ function confirm() {
 }
 
 function formatAmount(amount: number, type: TransactionType): string {
-  const formatted = new Intl.NumberFormat('pt-PT', {
+  const formatted = new Intl.NumberFormat('pt-PT', { ...PT_GROUPING,
     style: 'currency',
     currency: 'EUR',
     minimumFractionDigits: 2
@@ -69,6 +71,7 @@ function formatAmount(amount: number, type: TransactionType): string {
   <BaseModal
     v-if="open && recurring"
     title="Retirar conta recorrente"
+    size="sm"
     @close="$emit('close')"
   >
     <!-- Passo 1: escolher a opção -->
@@ -81,15 +84,12 @@ function formatAmount(amount: number, type: TransactionType): string {
         <button type="button" class="option-btn" :disabled="loading" @click="choose('current')">
           <span class="option-title">A partir deste mês</span>
           <span class="option-desc">Deixa de ser contabilizada já neste mês e nos próximos</span>
+          <svg class="option-chevron" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
         </button>
         <button type="button" class="option-btn" :disabled="loading" @click="choose('next')">
           <span class="option-title">A partir do próximo mês</span>
           <span class="option-desc">Conta este mês, mas deixa de contar nos próximos</span>
-        </button>
-      </div>
-      <div class="modal-actions">
-        <button type="button" class="btn-cancel" @click="$emit('close')">
-          Cancelar
+          <svg class="option-chevron" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
         </button>
       </div>
     </template>
@@ -101,151 +101,107 @@ function formatAmount(amount: number, type: TransactionType): string {
         <p class="confirm-text">{{ explanation }}</p>
       </div>
       <p v-if="error" class="remove-error">{{ error }}</p>
-      <div class="modal-actions">
-        <button type="button" class="btn-cancel" :disabled="loading" @click="step = 'choose'">
-          Voltar
-        </button>
-        <button type="button" class="btn-confirm" :disabled="loading" @click="confirm">
-          {{ loading ? 'A retirar…' : 'Confirmar' }}
-        </button>
-      </div>
+    </template>
+
+    <template #footer>
+      <UiButton v-if="step === 'choose'" variant="secondary" @click="$emit('close')">Cancelar</UiButton>
+      <template v-else>
+        <UiButton variant="secondary" :disabled="loading" @click="step = 'choose'">Voltar</UiButton>
+        <UiButton variant="danger" :loading="loading" @click="confirm">Confirmar</UiButton>
+      </template>
     </template>
   </BaseModal>
 </template>
 
 <style scoped>
 .modal-message {
-  font-size: 0.875rem;
-  color: var(--color-text-muted);
-  margin: 0 0 1rem 0;
-  line-height: 1.5;
+  margin: 0 0 var(--space-4);
+  font-size: var(--text-base);
+  line-height: 1.55;
+  color: var(--color-text-secondary);
 }
-
 .modal-message strong {
-  color: var(--color-text);
+  color: var(--color-text-strong);
 }
 
 .options {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  margin-bottom: 1.5rem;
+  gap: var(--space-2);
 }
-
 .option-btn {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  padding: 1rem;
+  gap: 2px;
+  width: 100%;
+  padding: var(--space-3) 40px var(--space-3) var(--space-4);
+  background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: 8px;
-  background: var(--color-bg);
-  cursor: pointer;
+  border-radius: var(--radius-md);
+  font-family: inherit;
   text-align: left;
-  transition: border-color 0.15s, background 0.15s;
+  cursor: pointer;
+  transition: border-color var(--transition-fast), background var(--transition-fast), box-shadow var(--transition-fast);
 }
-
 .option-btn:hover:not(:disabled) {
-  border-color: #166534;
-  background: var(--color-table-row-hover);
+  border-color: var(--color-primary-soft-border);
+  background: var(--color-surface-hover);
 }
-
+.option-btn:focus-visible {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: var(--focus-ring);
+}
 .option-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
-
 .option-title {
-  font-size: 0.9375rem;
-  font-weight: 600;
-  color: var(--color-text);
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-strong);
 }
-
 .option-desc {
-  font-size: 0.8125rem;
+  font-size: var(--text-sm);
+  line-height: 1.4;
   color: var(--color-text-muted);
-  margin-top: 0.25rem;
+}
+.option-chevron {
+  position: absolute;
+  right: var(--space-3);
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--color-text-subtle);
 }
 
 .confirm-box {
-  padding: 1rem;
-  margin-bottom: 1.25rem;
+  padding: var(--space-4);
   border: 1px solid var(--color-border);
-  border-radius: 10px;
-  background: var(--color-bg);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
 }
-
 .confirm-heading {
-  margin: 0 0 0.375rem;
-  font-size: 0.9375rem;
-  font-weight: 700;
-  color: var(--color-text);
+  margin: 0 0 6px;
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-strong);
 }
-
 .confirm-text {
   margin: 0;
-  font-size: 0.8438rem;
-  line-height: 1.5;
-  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  line-height: 1.55;
+  color: var(--color-text-secondary);
 }
 
 .remove-error {
-  margin: 0 0 1rem;
-  padding: 0.625rem 0.75rem;
-  font-size: 0.8125rem;
-  color: #dc2626;
-  background: #fef2f2;
-  border: 1px solid #fecaca;
-  border-radius: 8px;
-}
-
-.modal-actions {
-  display: flex;
-  gap: 0.75rem;
-  justify-content: flex-end;
-}
-
-.btn-cancel {
-  padding: 0.5rem 1rem;
-  background: transparent;
-  color: var(--color-text);
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  font-size: 0.875rem;
-  font-family: inherit;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-
-.btn-cancel:hover:not(:disabled) {
-  background: var(--color-table-row-hover);
-}
-
-.btn-cancel:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.btn-confirm {
-  padding: 0.5rem 1.125rem;
-  background: linear-gradient(135deg, #166534 0%, #15803d 100%);
-  color: #fff;
-  border: none;
-  border-radius: 8px;
-  font-size: 0.875rem;
-  font-weight: 650;
-  font-family: inherit;
-  cursor: pointer;
-  transition: transform 0.15s, box-shadow 0.15s;
-}
-
-.btn-confirm:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(22, 101, 52, 0.25);
-}
-
-.btn-confirm:disabled {
-  opacity: 0.7;
-  cursor: not-allowed;
+  margin: var(--space-3) 0 0;
+  padding: 10px 12px;
+  font-size: var(--text-sm);
+  color: var(--color-danger);
+  background: var(--color-danger-soft);
+  border: 1px solid var(--color-danger-border);
+  border-radius: var(--radius-sm);
 }
 </style>

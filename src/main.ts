@@ -2,8 +2,10 @@ import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import App from './App.vue'
 import router from './router'
+import './assets/styles/tokens.css'
 import './assets/styles/global.css'
 import './assets/styles/app-shell.css'
+import './assets/styles/ui.css'
 import './assets/styles/auth-pages.css'
 
 const app = createApp(App)

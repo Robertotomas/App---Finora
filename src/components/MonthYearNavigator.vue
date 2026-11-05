@@ -75,7 +75,7 @@ const displayLabel = computed(() => {
     if (year.value === 0) return 'Todos os períodos'
   if (month.value === -1) return `${props.yearToDateButton} · ${year.value}`
   if (month.value === 0) return `${props.allMonthsInYearTitle} · ${year.value}`
-  return `${props.monthNames[month.value]} - ${year.value}`
+  return `${props.monthNames[month.value]} ${year.value}`
 })
 
 const canPrev = computed(() => {
@@ -187,7 +187,7 @@ function chooseAllPeriods() {
       aria-label="Período anterior"
       @click="prev"
     >
-      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <path d="m15 18-6-6 6-6" />
       </svg>
     </button>
@@ -212,7 +212,7 @@ function chooseAllPeriods() {
       aria-label="Período seguinte"
       @click="next"
     >
-      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <path d="m9 18 6-6-6-6" />
       </svg>
     </button>
@@ -283,117 +283,109 @@ function chooseAllPeriods() {
 </template>
 
 <style scoped>
+/* Controlo compacto: ‹ Mês - Ano ⌄ › com 36px de altura. */
 .month-year-nav {
   position: relative;
   display: inline-flex;
-  align-items: stretch;
-  gap: 0;
-  border-radius: 10px;
-  border: 1px solid var(--color-border);
-  background: #fff;
-  box-shadow: none;
-}
-
-html.dark .month-year-nav {
-  background: rgba(255, 255, 255, 0.04);
+  align-items: center;
+  height: var(--control-h);
+  padding: 2px;
+  gap: 2px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-surface);
+  box-sizing: border-box;
 }
 
 .nav-arrow {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 2rem;
-  min-height: 2.25rem;
+  width: 30px;
+  height: 100%;
   padding: 0;
   border: none;
   background: transparent;
   color: var(--color-text-muted);
   cursor: pointer;
-  border-radius: 8px;
-  transition: background 0.15s ease, color 0.15s ease;
+  border-radius: 6px;
+  transition: background var(--transition-fast), color var(--transition-fast);
 }
-
 .nav-arrow:hover:not(:disabled) {
-  background: rgba(0, 0, 0, 0.06);
-  color: var(--color-text);
+  background: var(--color-surface-muted);
+  color: var(--color-text-strong);
 }
-
-html.dark .nav-arrow:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.08);
+.nav-arrow:focus-visible,
+.nav-center:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
 }
-
 .nav-arrow:disabled {
-  opacity: 0.3;
+  opacity: 0.35;
   cursor: not-allowed;
 }
 
 .nav-center {
   display: flex;
   align-items: center;
-  gap: 0.3rem;
-  min-width: min(12rem, 60vw);
-  padding: 0 0.625rem;
+  justify-content: center;
+  gap: 6px;
+  height: 100%;
+  min-width: 9.5rem;
+  padding: 0 var(--space-2);
   border: none;
   background: transparent;
   cursor: pointer;
   font-family: inherit;
-  border-radius: 8px;
-  transition: background 0.15s ease;
+  border-radius: 6px;
+  transition: background var(--transition-fast);
 }
-
 .nav-center:hover {
-  background: rgba(0, 0, 0, 0.04);
+  background: var(--color-surface-muted);
 }
-
-html.dark .nav-center:hover {
-  background: rgba(255, 255, 255, 0.06);
-}
-
 .nav-center-label {
-  flex: 1;
   text-align: center;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  color: var(--color-text);
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-strong);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
-
 .nav-center-chevron {
   flex-shrink: 0;
-  color: var(--color-text-muted);
-  transition: transform 0.2s ease;
   width: 14px;
   height: 14px;
+  color: var(--color-text-muted);
+  transition: transform var(--transition-base);
 }
-
 .nav-center[aria-expanded='true'] .nav-center-chevron {
   transform: rotate(180deg);
 }
 
+/* ── Painel ── */
 .nav-panel {
   position: absolute;
-  top: calc(100% + 0.5rem);
+  top: calc(100% + 6px);
   left: 0;
   z-index: 50;
-  min-width: min(18rem, calc(100vw - 2rem));
-  padding: 1rem;
-  border-radius: var(--app-radius-md, 12px);
+  width: min(18rem, calc(100vw - 2rem));
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
   border: 1px solid var(--color-border);
-  background: var(--color-bg-card);
-  box-shadow: var(--app-shadow-dropdown, 0 12px 40px -8px rgba(15, 23, 42, 0.18));
+  background: var(--color-surface);
+  box-shadow: var(--shadow-lg);
+  box-sizing: border-box;
 }
-
 .panel-section + .panel-section {
-  margin-top: 1rem;
-  padding-top: 1rem;
-  border-top: 1px solid var(--color-border);
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border-subtle);
 }
-
 .panel-heading {
-  margin: 0 0 0.5rem;
-  font-size: 0.6875rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-caps);
   text-transform: uppercase;
   color: var(--color-text-muted);
 }
@@ -401,120 +393,87 @@ html.dark .nav-center:hover {
 .year-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.375rem;
+  gap: 6px;
 }
-
-.year-chip {
-  padding: 0.4rem 0.75rem;
-  font-size: 0.8125rem;
-  font-weight: 600;
+.year-chip,
+.month-cell {
+  height: var(--control-h-sm);
+  padding: 0 var(--space-3);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
   font-family: inherit;
-  border: 1px solid var(--color-border);
-  border-radius: var(--app-radius-sm, 8px);
-  background: var(--color-bg);
+  font-variant-numeric: tabular-nums;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-muted);
   color: var(--color-text);
   cursor: pointer;
-  transition: border-color 0.15s ease, background 0.15s ease;
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
 }
-
-.year-chip:hover {
-  border-color: #166534;
-  background: var(--color-table-row-hover);
+.year-chip:hover,
+.month-cell:hover {
+  background: var(--color-surface-hover);
+  border-color: var(--color-border);
 }
-
-.year-chip.active {
-  border-color: #166534;
-  background: rgba(22, 101, 52, 0.1);
-  color: #166534;
+.year-chip.active,
+.month-cell.active {
+  background: var(--color-selected);
+  border-color: var(--color-border-strong);
+  color: var(--color-selected-text);
+  font-weight: var(--weight-semibold);
 }
-
-html.dark .year-chip.active {
-  border-color: #4ade80;
-  background: rgba(74, 222, 128, 0.12);
-  color: #4ade80;
-}
-
 .year-chip-wide {
   width: 100%;
-  margin-top: 0.25rem;
+  margin-top: var(--space-1);
 }
 
 .month-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 0.35rem;
+  gap: 6px;
 }
-
 .month-cell {
-  padding: 0.5rem 0.25rem;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  font-family: inherit;
-  border: 1px solid transparent;
-  border-radius: var(--app-radius-sm, 8px);
-  background: var(--color-bg);
-  color: var(--color-text);
-  cursor: pointer;
-  transition: border-color 0.15s ease, background 0.15s ease;
-}
-
-.month-cell:hover {
-  border-color: var(--color-border);
-  background: var(--color-table-row-hover);
-}
-
-.month-cell.active {
-  border-color: #166534;
-  background: rgba(22, 101, 52, 0.12);
-  color: #166534;
-}
-
-html.dark .month-cell.active {
-  border-color: #4ade80;
-  background: rgba(74, 222, 128, 0.14);
-  color: #4ade80;
+  padding: 0 var(--space-1);
 }
 
 .panel-footer-btn {
   width: 100%;
-  margin-top: 0.75rem;
-  padding: 0.5rem 0.75rem;
-  font-size: 0.8125rem;
-  font-weight: 600;
+  height: var(--control-h-sm);
+  margin-top: var(--space-3);
+  padding: 0 var(--space-3);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
   font-family: inherit;
-  border: 1px dashed var(--color-border);
-  border-radius: var(--app-radius-sm, 8px);
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--color-text-muted);
+  color: var(--color-text-secondary);
   cursor: pointer;
-  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+  transition: border-color var(--transition-fast), color var(--transition-fast), background var(--transition-fast);
 }
-
 .panel-footer-btn:hover {
-  border-color: #166534;
-  color: #166534;
-  background: rgba(22, 101, 52, 0.06);
+  border-color: var(--color-border-strong);
+  color: var(--color-selected-text);
+  background: var(--color-selected);
 }
-
 .panel-footer-btn.active {
   border-style: solid;
-  border-color: #166534;
-  color: #166534;
-  background: rgba(22, 101, 52, 0.1);
+  border-color: var(--color-border-strong);
+  color: var(--color-selected-text);
+  background: var(--color-selected);
+  font-weight: var(--weight-semibold);
 }
-
 .panel-footer-btn-secondary {
-  margin-top: 0.5rem;
+  margin-top: var(--space-2);
 }
 
 .panel-enter-active,
 .panel-leave-active {
-  transition: opacity 0.15s ease, transform 0.15s ease;
+  transition: opacity var(--transition-fast), transform var(--transition-fast);
 }
-
 .panel-enter-from,
 .panel-leave-to {
   opacity: 0;
-  transform: translateY(-6px);
+  transform: translateY(-4px);
 }
 </style>

@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import { PT_GROUPING } from '@/utils/numberFormat'
 import { computed } from 'vue'
 import BaseModal from './BaseModal.vue'
+import UiButton from './ui/UiButton.vue'
 import InstrumentLogo from './InstrumentLogo.vue'
 import { INSTRUMENT_TYPE_LABELS, InvestmentOperation, INVESTMENT_OPERATION_LABELS } from '@/types/investment'
 import type { InvestmentHolding, InvestmentTransaction } from '@/types/investment'
@@ -22,13 +24,13 @@ const txs = computed(() => props.holding?.transactions ?? [])
 
 function fmtPrice(v: number): string {
   // Preços/comissões na moeda do instrumento (conforme o ticker).
-  return new Intl.NumberFormat('pt-PT', { style: 'currency', currency: props.holding?.currency || 'EUR' }).format(v)
+  return new Intl.NumberFormat('pt-PT', { ...PT_GROUPING, style: 'currency', currency: props.holding?.currency || 'EUR' }).format(v)
 }
 function fmtEur(v: number): string {
-  return new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(v)
+  return new Intl.NumberFormat('pt-PT', { ...PT_GROUPING, style: 'currency', currency: 'EUR' }).format(v)
 }
 function fmtQty(v: number): string {
-  return new Intl.NumberFormat('pt-PT', { maximumFractionDigits: 6 }).format(v)
+  return new Intl.NumberFormat('pt-PT', { ...PT_GROUPING, maximumFractionDigits: 6 }).format(v)
 }
 function fmtDate(iso: string): string {
   const d = new Date(iso)
@@ -40,14 +42,14 @@ function fmtPct(pct: number): string {
 </script>
 
 <template>
-  <BaseModal v-if="open && holding" :title="holding.providerSymbol || holding.symbol" @close="emit('close')">
+  <BaseModal v-if="open && holding" :title="holding.providerSymbol || holding.symbol" size="lg" @close="emit('close')">
     <div class="pt">
       <!-- Resumo -->
       <div class="pt-head">
         <InstrumentLogo :symbol="holding.symbol" :name="holding.name" :type="holding.type" :domain="holding.logoDomain" :size="40" />
         <div class="pt-head-info">
           <div class="pt-head-top">
-            <span class="pt-badge">{{ INSTRUMENT_TYPE_LABELS[holding.type] }}</span>
+            <span class="ui-badge ui-badge--brand">{{ INSTRUMENT_TYPE_LABELS[holding.type] }}</span>
             <span class="pt-meta">{{ holding.exchange }} · {{ holding.currency }}</span>
           </div>
           <span class="pt-name">{{ holding.name }}</span>
@@ -80,15 +82,17 @@ function fmtPct(pct: number): string {
 
       <!-- Transações -->
       <div class="pt-tx-head">
-        <span class="pt-section">Transações</span>
-        <button type="button" class="pt-add" @click="emit('add')">
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="5" y2="19"/><line x1="5" x2="19" y1="12" y2="12"/></svg>
+        <span class="ui-label">Transações</span>
+        <UiButton variant="secondary" size="sm" @click="emit('add')">
+          <template #icon>
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="5" y2="19"/><line x1="5" x2="19" y1="12" y2="12"/></svg>
+          </template>
           Adicionar
-        </button>
+        </UiButton>
       </div>
 
-      <div class="pt-table-wrap">
-        <table class="pt-table">
+      <div class="pt-table-wrap ui-table-wrap">
+        <table class="ui-table pt-table">
           <thead>
             <tr>
               <th>Data</th>
@@ -103,7 +107,7 @@ function fmtPct(pct: number): string {
             <tr v-for="t in txs" :key="t.id">
               <td>{{ fmtDate(t.date) }}</td>
               <td>
-                <span class="op-tag" :class="t.operation === InvestmentOperation.Buy ? 'buy' : 'sell'">
+                <span class="ui-badge" :class="t.operation === InvestmentOperation.Buy ? 'ui-badge--success' : 'ui-badge--danger'">
                   {{ INVESTMENT_OPERATION_LABELS[t.operation] }}
                 </span>
               </td>
@@ -112,21 +116,24 @@ function fmtPct(pct: number): string {
               <td class="num">{{ fmtPrice(t.commission) }}</td>
               <td class="act">
                 <div class="row-actions">
-                  <button type="button" class="row-btn" title="Editar" @click="emit('edit', t)">
+                  <UiButton variant="ghost" size="sm" icon-only title="Editar" aria-label="Editar transação" @click="emit('edit', t)">
                     <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
-                  </button>
-                  <button type="button" class="row-btn row-btn--del" title="Eliminar" @click="emit('remove', t)">
+                  </UiButton>
+                  <UiButton variant="danger-ghost" size="sm" icon-only title="Eliminar" aria-label="Eliminar transação" @click="emit('remove', t)">
                     <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>
-                  </button>
+                  </UiButton>
                 </div>
               </td>
             </tr>
           </tbody>
         </table>
       </div>
-
-      <button type="button" class="pt-remove-pos" @click="emit('removePosition')">Eliminar posição inteira</button>
     </div>
+
+    <template #footer>
+      <UiButton variant="danger-ghost" class="pt-remove-pos" @click="emit('removePosition')">Eliminar posição inteira</UiButton>
+      <UiButton variant="secondary" @click="emit('close')">Fechar</UiButton>
+    </template>
   </BaseModal>
 </template>
 
@@ -134,251 +141,114 @@ function fmtPct(pct: number): string {
 .pt {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: var(--space-4);
 }
 
 .pt-head {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: var(--space-3);
 }
-
 .pt-head-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   min-width: 0;
 }
-
 .pt-head-top {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--space-2);
 }
-
-.pt-badge {
-  font-size: 0.625rem;
-  font-weight: 600;
-  color: #166534;
-  background: rgba(22, 101, 52, 0.1);
-  padding: 0.05rem 0.4rem;
-  border-radius: 999px;
-}
-
-html.dark .pt-badge {
-  color: #4ade80;
-  background: rgba(74, 222, 128, 0.12);
-}
-
 .pt-meta {
-  font-size: 0.6875rem;
+  font-size: var(--text-xs);
   color: var(--color-text-muted);
 }
-
 .pt-name {
-  font-size: 0.8125rem;
-  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .pt-summary {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 0.5rem;
-  padding: 0.875rem;
-  border: 1px solid var(--color-border);
-  border-radius: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-2);
 }
-
+@media (max-width: 520px) {
+  .pt-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
 .pt-kpi {
   display: flex;
   flex-direction: column;
-  gap: 0.2rem;
+  gap: 4px;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  min-width: 0;
 }
-
 .pt-kpi-label {
-  font-size: 0.625rem;
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: var(--tracking-caps);
   color: var(--color-text-muted);
 }
-
 .pt-kpi-value {
-  font-size: 0.875rem;
-  font-weight: 700;
-  color: var(--color-text);
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-strong);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-
 .pt-kpi-value.pos {
-  color: #166534;
+  color: var(--color-income);
 }
-
-html.dark .pt-kpi-value.pos {
-  color: #4ade80;
-}
-
 .pt-kpi-value.neg {
-  color: #dc2626;
-}
-
-html.dark .pt-kpi-value.neg {
-  color: #f87171;
+  color: var(--color-expense);
 }
 
 .pt-tx-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-}
-
-.pt-section {
-  font-size: 0.9375rem;
-  font-weight: 700;
-  color: var(--color-text);
-}
-
-.pt-add {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  padding: 0.4rem 0.75rem;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--color-text);
-  background: transparent;
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  cursor: pointer;
-  font-family: inherit;
-}
-
-.pt-add:hover {
-  background: var(--color-table-row-hover);
-  border-color: var(--color-text-muted);
+  margin-bottom: calc(-1 * var(--space-2));
 }
 
 .pt-table-wrap {
-  overflow-x: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
 }
-
-.pt-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.8125rem;
-}
-
-.pt-table th {
-  text-align: left;
-  font-size: 0.625rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  color: var(--color-text-muted);
-  padding: 0.5rem 0.5rem;
-  border-bottom: 1px solid var(--color-border);
-  white-space: nowrap;
-}
-
-.pt-table th.num {
-  text-align: right;
-}
-
+.pt-table th,
 .pt-table td {
-  padding: 0.6rem 0.5rem;
-  border-bottom: 1px solid var(--color-border);
-  color: var(--color-text);
+  padding-left: var(--space-3);
+  padding-right: var(--space-3);
+}
+.pt-table td {
+  padding-top: 8px;
+  padding-bottom: 8px;
   white-space: nowrap;
 }
-
-.pt-table tbody tr:last-child td {
-  border-bottom: none;
-}
-
 .pt-table .num {
   text-align: right;
 }
-
-.op-tag {
-  font-size: 0.6875rem;
-  font-weight: 700;
-  padding: 0.05rem 0.45rem;
-  border-radius: 999px;
+.pt-table .act {
+  width: 1%;
 }
-
-.op-tag.buy {
-  color: #059669;
-  background: rgba(5, 150, 105, 0.12);
-}
-
-html.dark .op-tag.buy {
-  color: #34d399;
-}
-
-.op-tag.sell {
-  color: #dc2626;
-  background: rgba(220, 38, 38, 0.12);
-}
-
-html.dark .op-tag.sell {
-  color: #f87171;
-}
-
-.act {
-  width: 64px;
-  text-align: right;
-}
-
 .row-actions {
   display: flex;
-  gap: 0.2rem;
   justify-content: flex-end;
-}
-
-.row-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--color-text-muted);
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.row-btn:hover {
-  color: var(--color-text);
-  border-color: var(--color-border);
-  background: var(--color-table-row-hover);
-}
-
-.row-btn--del:hover {
-  color: #dc2626;
-  border-color: #fecaca;
-  background: #fef2f2;
-}
-
-html.dark .row-btn--del:hover {
-  color: #f87171;
-  border-color: rgba(248, 113, 113, 0.3);
-  background: rgba(248, 113, 113, 0.1);
+  gap: 2px;
 }
 
 .pt-remove-pos {
-  align-self: flex-start;
-  background: transparent;
-  border: none;
-  color: #dc2626;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  cursor: pointer;
-  font-family: inherit;
-  padding: 0.25rem 0;
-}
-
-html.dark .pt-remove-pos {
-  color: #f87171;
-}
-
-.pt-remove-pos:hover {
-  text-decoration: underline;
+  margin-right: auto;
 }
 </style>

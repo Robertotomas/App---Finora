@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import BaseModal from './BaseModal.vue'
+import UiButton from './ui/UiButton.vue'
 import InstrumentAutocomplete from './InstrumentAutocomplete.vue'
 import InstrumentLogo from './InstrumentLogo.vue'
 import InstrumentMiniChart from './InstrumentMiniChart.vue'
@@ -137,7 +138,7 @@ function handleClose() {
 
 <template>
   <BaseModal v-if="open" :title="isEdit ? 'Editar transação' : 'Adicionar transação'" @close="handleClose">
-    <form class="tx-form" @submit.prevent="handleSubmit">
+    <form id="investment-tx-form" class="modal-form" @submit.prevent="handleSubmit">
       <!-- Escolher instrumento -->
       <div v-if="!picked" class="form-group">
         <label>Produto</label>
@@ -145,10 +146,12 @@ function handleClose() {
         <span v-if="errors.instrument" class="error-text">{{ errors.instrument }}</span>
 
         <div class="import-divider"><span>ou</span></div>
-        <button type="button" class="import-btn" @click="emit('import')">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+        <UiButton variant="secondary" block @click="emit('import')">
+          <template #icon>
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+          </template>
           Importar de corretora (Excel/CSV)
-        </button>
+        </UiButton>
       </div>
 
       <!-- Instrumento escolhido -->
@@ -157,12 +160,12 @@ function handleClose() {
         <div class="picked-body">
           <div class="picked-info">
             <span class="picked-symbol">{{ picked.providerSymbol || picked.symbol }}</span>
-            <span class="picked-badge">{{ INSTRUMENT_TYPE_LABELS[picked.type] }}</span>
+            <span class="ui-badge ui-badge--brand">{{ INSTRUMENT_TYPE_LABELS[picked.type] }}</span>
             <span class="picked-meta">{{ picked.exchange }} · {{ picked.currency }}</span>
           </div>
           <span class="picked-name">{{ picked.name }}</span>
         </div>
-        <button v-if="!instrument && !isEdit" type="button" class="picked-change" @click="clearPicked">Trocar</button>
+        <UiButton v-if="!instrument && !isEdit" variant="ghost" size="sm" @click="clearPicked">Trocar</UiButton>
       </div>
 
       <!-- Comportamento real do ticker -->
@@ -175,19 +178,19 @@ function handleClose() {
       <template v-if="picked">
         <div class="form-group">
           <label>Operação</label>
-          <div class="op-toggle">
+          <div class="type-toggle">
             <button
               type="button"
-              class="op-btn"
-              :class="{ 'active-buy': operation === InvestmentOperation.Buy }"
+              class="type-toggle-btn"
+              :class="{ 'active-income': operation === InvestmentOperation.Buy }"
               @click="operation = InvestmentOperation.Buy"
             >
               Comprar
             </button>
             <button
               type="button"
-              class="op-btn"
-              :class="{ 'active-sell': operation === InvestmentOperation.Sell }"
+              class="type-toggle-btn"
+              :class="{ 'active-expense': operation === InvestmentOperation.Sell }"
               @click="operation = InvestmentOperation.Sell"
             >
               Vender
@@ -264,312 +267,72 @@ function handleClose() {
         </div>
       </template>
 
-      <div class="modal-actions">
-        <button type="button" class="btn-cancel" @click="handleClose">Cancelar</button>
-        <button type="submit" class="btn-primary" :disabled="loading">
-          {{ loading ? 'A guardar...' : isEdit ? 'Guardar' : 'Adicionar' }}
-        </button>
-      </div>
     </form>
+
+    <template #footer>
+      <UiButton variant="secondary" :disabled="loading" @click="handleClose">Cancelar</UiButton>
+      <UiButton type="submit" form="investment-tx-form" :loading="loading">{{ isEdit ? 'Guardar' : 'Adicionar' }}</UiButton>
+    </template>
   </BaseModal>
 </template>
 
 <style scoped>
-.tx-form {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.form-group {
-  display: flex;
-  flex-direction: column;
-  gap: 0.375rem;
-  min-width: 0;
-}
-
-.form-group label {
-  font-size: 0.8125rem;
-  font-weight: 500;
-  color: var(--color-text-muted, #475569);
-}
-
-.form-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1rem;
-}
-
-.form-row--3 {
-  grid-template-columns: 1fr 1fr 1fr;
-}
-
-.op-toggle {
-  display: flex;
-  gap: 4px;
-  padding: 4px;
-  border: 1.5px solid var(--color-border, #e2e8f0);
-  border-radius: 10px;
-  background: var(--color-bg, #f8fafc);
-}
-
-.op-btn {
-  flex: 1;
-  padding: 0.55rem 0.5rem;
-  border: none;
-  background: transparent;
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: var(--color-text-muted, #64748b);
-  cursor: pointer;
-  border-radius: 7px;
-  transition: background 0.15s, color 0.15s;
-  font-family: inherit;
-}
-
-.op-btn.active-buy {
-  background: #059669;
-  color: #fff;
-}
-
-html.dark .op-btn.active-buy {
-  background: #047857;
-}
-
-.op-btn.active-sell {
-  background: #dc2626;
-  color: #fff;
-}
-
 .picked {
-  position: relative;
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  padding: 0.875rem 1rem;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4);
   border: 1px solid var(--color-border);
-  border-radius: 10px;
-  background: var(--color-table-row-hover);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
 }
-
 .picked-body {
   min-width: 0;
   flex: 1;
 }
-
 .picked-info {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  flex-wrap: wrap;
+  gap: var(--space-2);
 }
-
 .picked-symbol {
-  font-size: 0.9375rem;
-  font-weight: 700;
-  color: var(--color-text);
+  font-size: var(--text-base);
+  font-weight: var(--weight-bold);
+  color: var(--color-text-strong);
 }
-
-.picked-badge {
-  font-size: 0.625rem;
-  font-weight: 600;
-  color: #166534;
-  background: rgba(22, 101, 52, 0.12);
-  padding: 0.05rem 0.4rem;
-  border-radius: 999px;
-}
-
-html.dark .picked-badge {
-  color: #4ade80;
-  background: rgba(74, 222, 128, 0.14);
-}
-
 .picked-meta {
-  font-size: 0.6875rem;
+  font-size: var(--text-xs);
   color: var(--color-text-muted);
 }
-
 .picked-name {
   display: block;
-  margin-top: 0.15rem;
-  font-size: 0.8125rem;
+  margin-top: 2px;
+  font-size: var(--text-sm);
   color: var(--color-text-muted);
-}
-
-.picked-change {
-  position: absolute;
-  top: 0.75rem;
-  right: 0.875rem;
-  background: transparent;
-  border: none;
-  color: #166534;
-  font-size: 0.75rem;
-  font-weight: 600;
-  cursor: pointer;
-  font-family: inherit;
-}
-
-html.dark .picked-change {
-  color: #4ade80;
-}
-
-.amount-wrap {
-  position: relative;
-}
-
-.amount-input {
-  width: 100%;
-  padding-right: 2.25rem;
-  -moz-appearance: textfield;
-  appearance: textfield;
-}
-
-.amount-input::-webkit-outer-spin-button,
-.amount-input::-webkit-inner-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
-
-.amount-suffix {
-  position: absolute;
-  right: 0.75rem;
-  top: 50%;
-  transform: translateY(-50%);
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: var(--color-text-muted, #64748b);
-  pointer-events: none;
-}
-
-.input {
-  padding: 0.625rem 0.75rem;
-  border: 1px solid var(--color-input-border, #e2e8f0);
-  border-radius: 8px;
-  font-size: 0.9375rem;
-  background: var(--color-input-bg, #fff);
-  color: var(--color-text, #0f172a);
-  font-family: inherit;
-}
-
-.input:focus {
-  outline: none;
-  border-color: #166534;
-  box-shadow: 0 0 0 2px rgba(22, 101, 52, 0.2);
-}
-
-html.dark .input:focus {
-  border-color: #4ade80;
-  box-shadow: 0 0 0 2px rgba(74, 222, 128, 0.2);
-}
-
-.input-error {
-  border-color: #dc2626;
-}
-
-.error-text {
-  font-size: 0.75rem;
-  color: #dc2626;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .import-divider {
   display: flex;
   align-items: center;
-  text-align: center;
-  margin: 0.75rem 0 0.25rem;
-  color: var(--color-text-muted);
-  font-size: 0.6875rem;
+  margin: var(--space-3) 0 var(--space-1);
+  font-size: var(--text-xs);
+  color: var(--color-text-subtle);
 }
-
 .import-divider::before,
 .import-divider::after {
   content: '';
   flex: 1;
-  border-top: 1px solid var(--color-border);
+  border-top: 1px solid var(--color-border-subtle);
 }
-
 .import-divider span {
-  padding: 0 0.625rem;
-}
-
-.import-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  width: 100%;
-  padding: 0.625rem 0.875rem;
-  background: transparent;
-  border: 1.5px solid var(--color-border);
-  border-radius: 10px;
-  font-size: 0.875rem;
-  font-weight: 600;
-  font-family: inherit;
-  color: var(--color-text);
-  cursor: pointer;
-  transition: border-color 0.15s, background 0.15s, color 0.15s;
-}
-
-.import-btn:hover {
-  border-color: #166534;
-  color: #166534;
-  background: rgba(22, 101, 52, 0.04);
-}
-
-html.dark .import-btn:hover {
-  border-color: #4ade80;
-  color: #4ade80;
-  background: rgba(74, 222, 128, 0.06);
-}
-
-.hint {
-  font-size: 0.75rem;
-  color: var(--color-text-muted, #64748b);
-  line-height: 1.4;
+  padding: 0 10px;
 }
 
 .fx-wrap {
   max-width: 140px;
-}
-
-.modal-actions {
-  display: flex;
-  gap: 0.75rem;
-  justify-content: flex-end;
-  margin-top: 0.5rem;
-}
-
-.btn-cancel {
-  padding: 0.5rem 1rem;
-  background: var(--color-bg, #f1f5f9);
-  color: var(--color-text-muted, #475569);
-  border: 1px solid var(--color-border, #e2e8f0);
-  border-radius: 8px;
-  font-size: 0.875rem;
-  cursor: pointer;
-  font-family: inherit;
-}
-
-.btn-cancel:hover {
-  background: var(--color-table-row-hover, #e2e8f0);
-}
-
-.btn-primary {
-  padding: 0.5rem 1rem;
-  background: linear-gradient(135deg, #166534 0%, #15803d 100%);
-  color: white;
-  border: none;
-  border-radius: 8px;
-  font-size: 0.875rem;
-  font-weight: 600;
-  cursor: pointer;
-  font-family: inherit;
-}
-
-.btn-primary:hover:not(:disabled) {
-  opacity: 0.95;
-}
-
-.btn-primary:disabled {
-  opacity: 0.7;
-  cursor: not-allowed;
 }
 </style>

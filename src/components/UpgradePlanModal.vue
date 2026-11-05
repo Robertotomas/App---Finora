@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import BaseModal from './BaseModal.vue'
+import UiButton from '@/components/ui/UiButton.vue'
 import { useSubscriptionStore } from '@/stores/subscription'
 import type { SubscriptionPlan } from '@/types/subscription'
 
@@ -64,49 +65,54 @@ async function handleChoose(target: SubscriptionPlan) {
     @close="emit('close')"
   >
     <div class="modal-body">
-      <p v-if="reason" class="reason-text">{{ reason }}</p>
-      <div class="plan-grid">
-        <div class="plan-card">
-          <div class="plan-name">
-            {{ planTitle('Free') }}
+      <div class="upgrade-intro">
+        <div class="upgrade-icon" aria-hidden="true">
+          <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 14.5 9.5 21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5Z"/></svg>
+        </div>
+        <p class="reason-text">{{ reason || 'Escolha o plano que melhor se adapta a si.' }}</p>
+      </div>
+
+      <div class="plan-list">
+        <div class="plan-card" :class="{ 'plan-card--current': currentPlan === 'Free' }">
+          <div class="plan-info">
+            <div class="plan-name">
+              {{ planTitle('Free') }}
+              <span v-if="currentPlan === 'Free'" class="ui-badge ui-badge--success">Atual</span>
+            </div>
+            <div class="plan-summary">{{ planSummary('Free') }}</div>
           </div>
-          <div class="plan-desc">{{ planSummary('Free') }}</div>
-          <div class="plan-badge" :class="{ active: currentPlan === 'Free' }">
-            {{ currentPlan === 'Free' ? 'Atual' : '—' }}
-          </div>
-          <button type="button" class="btn-disabled" disabled>
-            Atual
-          </button>
+          <UiButton variant="secondary" size="sm" disabled>Atual</UiButton>
         </div>
 
-        <div class="plan-card">
-          <div class="plan-name">
-            {{ planTitle('Pro') }}
+        <div class="plan-card" :class="{ 'plan-card--current': currentPlan === 'Pro' }">
+          <div class="plan-info">
+            <div class="plan-name">
+              {{ planTitle('Pro') }}
+              <span v-if="currentPlan === 'Pro'" class="ui-badge ui-badge--success">Atual</span>
+            </div>
+            <div class="plan-summary">{{ planSummary('Pro') }}</div>
           </div>
-          <div class="plan-desc">{{ planSummary('Pro') }}</div>
-          <div class="plan-badge" :class="{ active: currentPlan === 'Pro' }">
-            {{ currentPlan === 'Pro' ? 'Atual' : '—' }}
-          </div>
-          <button type="button" class="btn-primary" :disabled="updating" @click="handleChoose('Pro')">
+          <UiButton size="sm" :disabled="updating" @click="handleChoose('Pro')">
             {{ currentPlan === 'Pro' ? 'Selecionado' : 'Escolher Pro' }}
-          </button>
+          </UiButton>
         </div>
 
-        <div class="plan-card">
-          <div class="plan-name">
-            {{ planTitle('Couple') }}
+        <div class="plan-card plan-card--featured" :class="{ 'plan-card--current': currentPlan === 'Couple' }">
+          <div class="plan-info">
+            <div class="plan-name">
+              {{ planTitle('Couple') }}
+              <span v-if="currentPlan === 'Couple'" class="ui-badge ui-badge--success">Atual</span>
+              <span v-else class="ui-badge ui-badge--brand">Recomendado</span>
+            </div>
+            <div class="plan-summary">{{ planSummary('Couple') }}</div>
           </div>
-          <div class="plan-desc">{{ planSummary('Couple') }}</div>
-          <div class="plan-badge" :class="{ active: currentPlan === 'Couple' }">
-            {{ currentPlan === 'Couple' ? 'Atual' : '—' }}
-          </div>
-          <button type="button" class="btn-primary btn-couple" :disabled="updating" @click="handleChoose('Couple')">
+          <UiButton size="sm" :disabled="updating" @click="handleChoose('Couple')">
             {{ currentPlan === 'Couple' ? 'Selecionado' : 'Escolher Couple' }}
-          </button>
+          </UiButton>
         </div>
       </div>
 
-      <p v-if="subscriptionStore.error" class="error-text">
+      <p v-if="subscriptionStore.error" class="error-text" role="alert">
         {{ subscriptionStore.error }}
       </p>
     </div>
@@ -117,91 +123,84 @@ async function handleChoose(target: SubscriptionPlan) {
 .modal-body {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: var(--space-4);
+}
+
+.upgrade-intro {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.upgrade-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--color-primary-soft);
+  color: var(--color-primary-text);
 }
 
 .reason-text {
   margin: 0;
+  font-size: var(--text-base);
+  line-height: 1.5;
   color: var(--color-text-muted);
-  font-size: 0.9rem;
 }
 
-.plan-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 0.8rem;
-}
-
-@media (min-width: 640px) {
-  .plan-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
+.plan-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
 }
 
 .plan-card {
-  border: 1px solid var(--color-border);
-  background: var(--color-bg);
-  border-radius: 12px;
-  padding: 0.85rem 0.9rem;
   display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.plan-card--featured {
+  background: var(--color-surface);
+  border: 2px solid var(--color-primary);
+  padding: calc(var(--space-3) - 2px) calc(var(--space-4) - 2px);
+}
+
+.plan-card--current {
+  background: var(--color-surface);
+}
+
+.plan-info {
+  min-width: 0;
 }
 
 .plan-name {
-  font-weight: 750;
-  color: var(--color-text);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-strong);
 }
 
-.plan-desc {
-  font-size: 0.82rem;
+.plan-summary {
+  margin-top: 2px;
+  font-size: var(--text-sm);
+  line-height: 1.4;
   color: var(--color-text-muted);
-  line-height: 1.3;
-  min-height: 2.4em;
-}
-
-.plan-badge {
-  font-size: 0.75rem;
-  color: var(--color-text-muted);
-}
-
-.plan-badge.active {
-  color: #059669;
-  font-weight: 700;
-}
-
-.btn-primary {
-  background: #166534;
-  color: #fff;
-  border: none;
-  border-radius: 10px;
-  padding: 0.6rem 0.7rem;
-  font-weight: 650;
-  cursor: pointer;
-}
-
-.btn-couple {
-  background: #0f766e;
-}
-
-.btn-primary:disabled {
-  opacity: 0.7;
-  cursor: not-allowed;
-}
-
-.btn-disabled {
-  background: transparent;
-  color: var(--color-text-muted);
-  border: 1px solid var(--color-border);
-  border-radius: 10px;
-  padding: 0.6rem 0.7rem;
-  font-weight: 650;
 }
 
 .error-text {
   margin: 0;
-  color: var(--color-error);
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
+  color: var(--color-danger);
 }
 </style>
-

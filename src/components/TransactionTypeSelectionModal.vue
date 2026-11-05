@@ -19,28 +19,35 @@ function handleClose() {
   <BaseModal
     v-if="open"
     title="Novo movimento"
+    subtitle="Que tipo de movimento quer criar?"
+    size="sm"
     @close="handleClose"
   >
     <div class="selection-body">
-      <p class="selection-hint">Que tipo de movimento quer criar?</p>
       <div class="selection-options">
         <button type="button" class="selection-card" @click="emit('select', 'income-expense')">
           <span class="selection-icon">
-            <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="m3 16 4 4 4-4"/><path d="M7 20V4"/><path d="m21 8-4-4-4 4"/><path d="M17 4v16"/>
             </svg>
           </span>
-          <span class="selection-label">Receita ou Despesa</span>
-          <span class="selection-desc">Registar uma entrada ou saída de dinheiro</span>
+          <span class="selection-text">
+            <span class="selection-label">Receita ou Despesa</span>
+            <span class="selection-desc">Registar uma entrada ou saída de dinheiro</span>
+          </span>
+          <svg class="selection-chevron" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
         </button>
         <button type="button" class="selection-card" @click="emit('select', 'transfer')">
           <span class="selection-icon selection-icon--transfer">
-            <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="m16 3 4 4-4 4"/><path d="M20 7H4"/><path d="m8 21-4-4 4-4"/><path d="M4 17h16"/>
             </svg>
           </span>
-          <span class="selection-label">Transferência interna</span>
-          <span class="selection-desc">Mover dinheiro entre as suas contas</span>
+          <span class="selection-text">
+            <span class="selection-label">Transferência interna</span>
+            <span class="selection-desc">Mover dinheiro entre as suas contas</span>
+          </span>
+          <svg class="selection-chevron" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
         </button>
       </div>
     </div>
@@ -48,80 +55,76 @@ function handleClose() {
 </template>
 
 <style scoped>
-.selection-body {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.selection-hint {
-  font-size: 0.875rem;
-  color: var(--color-text-muted, #64748b);
-  margin: 0;
-}
-
 .selection-options {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: var(--space-2);
 }
 
 .selection-card {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.375rem;
-  padding: 1rem 1.25rem;
-  background: var(--color-bg-card, #fff);
-  border: 1.5px solid var(--color-border, #e2e8f0);
-  border-radius: 12px;
-  cursor: pointer;
-  transition: border-color 0.2s, box-shadow 0.2s, transform 0.15s;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-3) var(--space-4) var(--space-3) var(--space-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-family: inherit;
   text-align: left;
+  cursor: pointer;
+  transition: border-color var(--transition-fast), background var(--transition-fast), box-shadow var(--transition-fast);
 }
-
 .selection-card:hover {
-  border-color: #166534;
-  box-shadow: 0 2px 8px rgba(22, 101, 52, 0.12);
-  transform: translateY(-1px);
+  border-color: var(--color-primary-soft-border);
+  background: var(--color-surface-hover);
+}
+.selection-card:focus-visible {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: var(--focus-ring);
 }
 
 .selection-icon {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
-  border-radius: 10px;
-  background: #f0fdf4;
-  color: #166534;
-  margin-bottom: 0.25rem;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  background: var(--color-primary-soft);
+  color: var(--color-primary-text);
 }
-
-html.dark .selection-icon {
-  background: rgba(22, 101, 52, 0.2);
-  color: #4ade80;
-}
-
 .selection-icon--transfer {
-  background: #eff6ff;
-  color: #2563eb;
+  background: var(--color-info-soft);
+  color: var(--color-transfer);
 }
 
-html.dark .selection-icon--transfer {
-  background: rgba(37, 99, 235, 0.2);
-  color: #60a5fa;
+.selection-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
 }
-
 .selection-label {
-  font-size: 0.9375rem;
-  font-weight: 600;
-  color: var(--color-text, #1e293b);
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-strong);
 }
-
 .selection-desc {
-  font-size: 0.8125rem;
-  color: var(--color-text-muted, #64748b);
+  font-size: var(--text-sm);
   line-height: 1.4;
+  color: var(--color-text-muted);
+}
+.selection-chevron {
+  flex-shrink: 0;
+  color: var(--color-text-subtle);
+  transition: transform var(--transition-fast), color var(--transition-fast);
+}
+.selection-card:hover .selection-chevron {
+  color: var(--color-text-muted);
+  transform: translateX(2px);
 }
 </style>
