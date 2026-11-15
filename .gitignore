@@ -34,3 +34,5 @@ coverage/
 *.sln
 *.sw?
 .cursor
+.vercel
+.env*
