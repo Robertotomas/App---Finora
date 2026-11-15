@@ -193,14 +193,30 @@ export interface InvestmentHolding {
   logoDomain?: string | null
   /** Quantidade líquida (compras − vendas), calculada das transações. */
   quantity: number
-  /** Custo médio por unidade (das compras, incl. comissões). */
+  /** Custo médio ponderado por unidade (incl. comissões), na moeda do instrumento. */
   averageCost: number
   currentPrice: number | null
   priceAsOf: string | null
   investedEur: number
   currentValueEur: number | null
+  /** Retorno NÃO realizado (valor − custo das unidades detidas). */
   returnEur: number | null
   returnPct: number | null
+  /** Fecho da sessão anterior (moeda do instrumento). */
+  previousClose: number | null
+  /** Variação de hoje da quantidade detida (EUR / %). Null se desconhecida. */
+  dayChangeEur: number | null
+  dayChangePct: number | null
+  /** Ganho realizado nas vendas (EUR), pelo custo médio ponderado à data da venda. */
+  realizedGainEur: number
+  /** Custo (EUR) das unidades vendidas — base da % realizada. */
+  realizedCostEur: number
+  /** Dividendos líquidos recebidos (EUR). */
+  dividendsEur: number
+  /** Retorno total = não realizado + realizado + dividendos (EUR). Null se aberta sem cotação. */
+  totalReturnEur: number | null
+  /** Retorno total em % do total gasto em compras. */
+  totalReturnPct: number | null
   transactions: InvestmentTransaction[]
 }
 
@@ -251,6 +267,74 @@ export interface BrokerDeposit {
   externalId: string
 }
 
+/**
+ * Outro movimento de caixa da corretora (juros sobre fundos livres, taxas, spinoffs…). Não é depósito
+ * nem dividendo — só entra nos Fundos livres (e, por isso, no Património).
+ */
+export interface BrokerCashMovement {
+  date: string
+  amount: number // + entrada, − saída
+  currency: string
+  kind: 'interest' | 'fee' | 'spinoff' | 'other'
+  description?: string
+  externalId: string
+}
+
+/** Dividendo do extrato da corretora (parseado no cliente). */
+export interface BrokerDividend {
+  providerSymbol: string
+  date: string
+  amountGross: number
+  /** Retenção na fonte (positivo). */
+  withholdingTax: number
+  currency: string
+  externalId: string
+}
+
+/** Um dividendo recebido. */
+export interface InvestmentDividendItem {
+  id: string
+  holdingId: string | null
+  symbol: string
+  date: string
+  amountGross: number
+  withholdingTax: number
+  amountNet: number
+  currency: string
+  fxRateToEur: number
+  grossEur: number
+  taxEur: number
+  netEur: number
+  source: 'import' | 'manual'
+}
+
+/** Resumo dos dividendos do agregado (totais em EUR + lista). */
+export interface InvestmentDividends {
+  totalGrossEur: number
+  totalTaxEur: number
+  totalNetEur: number
+  count: number
+  items: InvestmentDividendItem[]
+}
+
+/** Definições de investimentos do agregado. */
+export interface InvestmentSettings {
+  /** Taxa de conversão de moeda da corretora (%), ex.: 0,5 na XTB. 0 = sem taxa. */
+  brokerFxFeePercent: number
+}
+
+/** Limite máximo aceite para a taxa de conversão da corretora (%). */
+export const MAX_BROKER_FX_FEE_PERCENT = 5
+
+/** Adicionar/editar um dividendo à mão. */
+export interface SaveDividendRequest {
+  holdingId: string
+  date: string
+  amountGross: number
+  withholdingTax: number
+  currency?: string | null
+}
+
 /** Um movimento de depósito/levantamento. */
 export interface InvestmentDepositItem {
   id: string
@@ -264,6 +348,8 @@ export interface InvestmentDepositItem {
 /** Resumo dos depósitos do agregado (total líquido em EUR + lista). */
 export interface InvestmentDeposits {
   totalEur: number
+  /** Dinheiro parado na corretora (depósitos − compras + vendas, ≥ 0). Conta para o Património. */
+  uninvestedCashEur: number
   count: number
   items: InvestmentDepositItem[]
 }
@@ -295,6 +381,10 @@ export interface InvestmentImportResult {
   hasUnparsedRows: boolean
   error?: string | null
   depositsImported: number
+  dividendsImported?: number
+  cashMovementsImported?: number
+  /** Taxa de conversão inferida no servidor (dry-run) a partir dos montantes em € vs. BCE. */
+  fxFeeEstimate?: { percent: number; source: 'explicit' | 'inferred'; sampleSize: number } | null
   items: InvestmentImportItem[]
 }
 

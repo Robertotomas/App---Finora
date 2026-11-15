@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
+import UiButton from '@/components/ui/UiButton.vue'
 
 withDefaults(
   defineProps<{
@@ -33,27 +34,27 @@ function goToPlans() {
 <template>
   <Transition name="upsell">
     <div v-if="open" class="upsell-overlay" @click.self="emit('close')">
-      <div class="upsell-modal" role="dialog" aria-modal="true">
-        <div class="upsell-icon">
-          <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
+      <div class="upsell-modal" role="dialog" aria-modal="true" aria-labelledby="upsell-modal-title">
+        <div class="upsell-icon" aria-hidden="true">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
         </div>
 
-        <h2 class="upsell-title">{{ title }}</h2>
+        <h2 id="upsell-modal-title" class="upsell-title">{{ title }}</h2>
         <p class="upsell-desc">{{ description }}</p>
 
         <div class="upsell-features">
           <span class="upsell-features-title">{{ featuresTitle }}</span>
           <ul>
             <li v-for="(f, i) in features" :key="i">
-              <svg class="upsell-check" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              <svg class="upsell-check" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
               <span>{{ f }}</span>
             </li>
           </ul>
         </div>
 
         <div class="upsell-actions">
-          <button type="button" class="upsell-btn-ghost" @click="emit('close')">Agora não</button>
-          <button type="button" class="upsell-btn-primary" @click="goToPlans">Ver planos</button>
+          <UiButton variant="ghost" @click="emit('close')">Agora não</UiButton>
+          <UiButton @click="goToPlans">Ver planos</UiButton>
         </div>
       </div>
     </div>
@@ -64,80 +65,75 @@ function goToPlans() {
 .upsell-overlay {
   position: fixed;
   inset: 0;
-  background: var(--color-modal-overlay, rgba(15, 23, 42, 0.5));
+  z-index: var(--z-modal);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 60;
-  padding: 1rem;
+  padding: var(--space-4);
+  background: var(--color-modal-overlay);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
 }
 
 .upsell-modal {
-  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
-  gap: 0.6rem;
   width: 100%;
-  max-width: 440px;
-  padding: 2rem 1.75rem 1.5rem;
-  background: var(--color-bg-card, #fff);
-  border: 1px solid var(--color-border, #e2e8f0);
-  border-radius: 18px;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  max-width: 420px;
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+  padding: var(--space-8) var(--space-6) var(--space-6);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
 }
 
 .upsell-icon {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 52px;
-  height: 52px;
-  margin-bottom: 0.25rem;
+  width: 48px;
+  height: 48px;
+  margin-bottom: var(--space-4);
   border-radius: 50%;
-  background: rgba(22, 101, 52, 0.1);
-  color: #166534;
-}
-
-html.dark .upsell-icon {
-  background: rgba(74, 222, 128, 0.12);
-  color: #4ade80;
+  background: var(--color-primary-soft);
+  color: var(--color-primary-text);
 }
 
 .upsell-title {
   margin: 0;
-  font-size: 1.1875rem;
-  font-weight: 700;
-  color: var(--color-text);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-strong);
 }
 
 .upsell-desc {
-  margin: 0;
-  font-size: 0.875rem;
+  margin: var(--space-2) 0 0;
+  max-width: 34ch;
+  font-size: var(--text-base);
   line-height: 1.5;
   color: var(--color-text-muted);
-  max-width: 34ch;
 }
 
 .upsell-features {
   width: 100%;
-  margin-top: 0.75rem;
-  padding: 1rem 1.125rem;
+  margin-top: var(--space-5);
+  padding: var(--space-4);
   text-align: left;
-  background: var(--color-bg, transparent);
+  background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: 12px;
+  border-radius: var(--radius-md);
 }
 
 .upsell-features-title {
   display: block;
-  margin-bottom: 0.625rem;
-  font-size: 0.8125rem;
-  font-weight: 700;
-  color: var(--color-text);
+  margin-bottom: var(--space-3);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-strong);
 }
 
 .upsell-features ul {
@@ -146,69 +142,35 @@ html.dark .upsell-icon {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: var(--space-2);
 }
 
 .upsell-features li {
   display: flex;
   align-items: flex-start;
-  gap: 0.5rem;
-  font-size: 0.8125rem;
-  line-height: 1.4;
-  color: var(--color-text-muted);
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+  color: var(--color-text);
 }
 
 .upsell-check {
   flex-shrink: 0;
   margin-top: 1px;
-  color: #166534;
-}
-
-html.dark .upsell-check {
-  color: #4ade80;
+  color: var(--color-primary-text);
 }
 
 .upsell-actions {
   display: flex;
-  gap: 0.625rem;
-  margin-top: 1.25rem;
-}
-
-.upsell-btn-ghost,
-.upsell-btn-primary {
-  padding: 0.625rem 1.5rem;
-  font-size: 0.875rem;
-  font-weight: 650;
-  font-family: inherit;
-  border-radius: 999px;
-  cursor: pointer;
-  transition: background 0.15s, transform 0.15s, box-shadow 0.15s;
-}
-
-.upsell-btn-ghost {
-  background: transparent;
-  color: var(--color-text);
-  border: 1px solid var(--color-border);
-}
-
-.upsell-btn-ghost:hover {
-  background: var(--color-table-row-hover, rgba(0, 0, 0, 0.04));
-}
-
-.upsell-btn-primary {
-  background: linear-gradient(135deg, #166534 0%, #15803d 100%);
-  color: #fff;
-  border: none;
-}
-
-.upsell-btn-primary:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(22, 101, 52, 0.25);
+  justify-content: center;
+  gap: var(--space-2);
+  width: 100%;
+  margin-top: var(--space-6);
 }
 
 .upsell-enter-active,
 .upsell-leave-active {
-  transition: opacity 0.2s ease;
+  transition: opacity var(--transition-base);
 }
 .upsell-enter-from,
 .upsell-leave-to {

@@ -4,6 +4,7 @@ import BaseModal from './BaseModal.vue'
 import BaseSelect from './BaseSelect.vue'
 import CategorySelect from './CategorySelect.vue'
 import BrandAutocomplete from './BrandAutocomplete.vue'
+import UiButton from './ui/UiButton.vue'
 import type { CreateRecurringTransactionRequest, RecurringTransaction } from '@/types/recurringTransaction'
 import {
   RecurringFrequency,
@@ -133,7 +134,7 @@ watch(type, () => {
 function validate(): boolean {
   const e: Record<string, string> = {}
   if (!accountId.value) e.accountId = 'Selecione uma conta'
-  if (!amount.value || amount.value === 0) e.amount = 'Indica o montante'
+  if (!amount.value || amount.value === 0) e.amount = 'Indique o montante'
   if (isTransferMode.value) {
     if (!destinationAccountId.value) e.destinationAccountId = 'Selecione a conta de destino'
     if (destinationAccountId.value === accountId.value) e.destinationAccountId = 'A conta de destino deve ser diferente'
@@ -214,7 +215,7 @@ const modalTitle = computed(() => {
     :title="modalTitle"
     @close="handleClose"
   >
-    <form @submit.prevent="handleSubmit" class="recurring-form">
+    <form id="recurring-form" class="modal-form" @submit.prevent="handleSubmit">
       <!-- Frequência -->
       <div class="form-group">
         <label>Frequência</label>
@@ -262,7 +263,7 @@ const modalTitle = computed(() => {
             <span>Diluir pelos 12 meses</span>
           </label>
           <span class="field-hint">
-            Distribui o montante igualmente por todos os meses no orçamento. Desmarca para o lançar
+            Distribui o montante igualmente por todos os meses no orçamento. Desmarque para o lançar
             apenas no mês em que sai.
           </span>
         </div>
@@ -324,7 +325,7 @@ const modalTitle = computed(() => {
             <span class="amount-suffix">€</span>
           </div>
           <span v-if="errors.amount" class="error-text">{{ errors.amount }}</span>
-          <span v-if="frequencyHint" class="monthly-hint">{{ frequencyHint }}</span>
+          <span v-if="frequencyHint" class="hint hint--accent">{{ frequencyHint }}</span>
         </div>
 
         <div class="form-group">
@@ -403,7 +404,7 @@ const modalTitle = computed(() => {
             <span class="amount-suffix">€</span>
           </div>
           <span v-if="errors.amount" class="error-text">{{ errors.amount }}</span>
-          <span v-if="frequencyHint" class="monthly-hint">{{ frequencyHint }}</span>
+          <span v-if="frequencyHint" class="hint hint--accent">{{ frequencyHint }}</span>
         </div>
 
         <div class="form-group">
@@ -460,120 +461,47 @@ const modalTitle = computed(() => {
         />
         <span v-if="errors.responsible" class="error-text">{{ errors.responsible }}</span>
       </div>
-
-      <div class="modal-actions">
-        <button type="button" class="btn-cancel" @click="handleClose">
-          Cancelar
-        </button>
-        <button type="submit" class="btn-primary" :disabled="loading">
-          {{ loading ? 'A guardar...' : (isEdit ? 'Guardar' : 'Criar') }}
-        </button>
-      </div>
     </form>
+
+    <template #footer>
+      <UiButton variant="secondary" :disabled="loading" @click="handleClose">Cancelar</UiButton>
+      <UiButton type="submit" form="recurring-form" :loading="loading">
+        {{ isEdit ? 'Guardar' : 'Criar' }}
+      </UiButton>
+    </template>
   </BaseModal>
 </template>
 
 <style scoped>
-.recurring-form {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.form-group {
-  display: flex;
-  flex-direction: column;
-  gap: 0.375rem;
-}
-
-.form-group label {
-  font-size: 0.8125rem;
-  font-weight: 500;
-  color: var(--color-text-muted, #475569);
-}
-
-.form-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1rem;
-}
-
-.form-row--entity {
+.bm-body .form-row--entity {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr);
 }
-
-.form-row .input {
-  min-width: 0;
+@media (max-width: 520px) {
+  .bm-body .form-row--entity {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
-.input {
-  padding: 0.625rem 0.875rem;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  font-size: 0.9375rem;
+.bm-body .type-toggle--freq .type-toggle-btn {
+  font-size: var(--text-xs);
+  padding: 0 4px;
 }
 
-.input:focus {
-  outline: none;
-  border-color: #166534;
-  box-shadow: 0 0 0 2px rgba(22, 101, 52, 0.2);
-}
-
-html.dark .input:focus {
-  border-color: #4ade80;
-  box-shadow: 0 0 0 2px rgba(74, 222, 128, 0.2);
-}
-
-.input-error {
-  border-color: #dc2626;
-}
-
-.error-text {
-  font-size: 0.75rem;
-  color: #dc2626;
-}
-
-.type-toggle {
-  display: flex;
-  gap: 4px;
-  padding: 4px;
-  border: 1.5px solid var(--color-border, #e2e8f0);
-  border-radius: 10px;
-  background: var(--color-bg, #f8fafc);
-}
-
-.type-toggle--freq .type-toggle-btn {
-  font-size: 0.8125rem;
-  padding: 0.5rem 0.25rem;
-}
-
-.checkbox-row {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  cursor: pointer;
-  font-weight: 500;
-  color: var(--color-text, #1e293b);
-}
-
-.checkbox-row input {
-  width: 16px;
-  height: 16px;
-  accent-color: #166534;
-  cursor: pointer;
-}
-
-.field-hint {
-  font-size: 0.75rem;
-  color: var(--color-text-muted, #64748b);
-  line-height: 1.4;
+.bm-body .hint--accent {
+  color: var(--color-primary-text);
+  font-weight: var(--weight-medium);
 }
 
 /* ── Label com info (i) ── */
 .label-row {
   display: flex;
   align-items: center;
-  gap: 0.375rem;
+  gap: 6px;
+}
+.label-row label {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-strong);
 }
 
 .info-tip {
@@ -581,183 +509,45 @@ html.dark .input:focus {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: var(--color-text-muted, #64748b);
+  flex-shrink: 0;
+  color: var(--color-text-muted);
   cursor: help;
   outline: none;
-  flex-shrink: 0;
-  transition: color 0.15s ease;
+  border-radius: var(--radius-full);
+  transition: color var(--transition-fast);
 }
-
 .info-tip:hover,
 .info-tip:focus-visible {
-  color: #166534;
-}
-
-html.dark .info-tip:hover,
-html.dark .info-tip:focus-visible {
-  color: #4ade80;
+  color: var(--color-primary-text);
 }
 
 .info-tooltip {
   position: absolute;
   bottom: calc(100% + 8px);
   left: 50%;
-  transform: translateX(-50%) translateY(4px);
+  z-index: 30;
   width: max-content;
   max-width: 240px;
-  padding: 0.625rem 0.75rem;
-  background: var(--color-bg-card, #ffffff);
-  color: var(--color-text, #0f172a);
-  border: 1px solid var(--color-border, #e2e8f0);
-  border-radius: 10px;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
-  font-size: 0.75rem;
-  font-weight: 500;
-  line-height: 1.4;
+  padding: 10px 12px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-md);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  line-height: 1.45;
   white-space: normal;
-  z-index: 30;
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
-  transition: opacity 0.15s ease, transform 0.15s ease, visibility 0.15s;
+  transform: translateX(-50%) translateY(4px);
+  transition: opacity var(--transition-fast), transform var(--transition-fast), visibility var(--transition-fast);
 }
-
-.info-tooltip::after {
-  content: '';
-  position: absolute;
-  top: 100%;
-  left: 50%;
-  transform: translateX(-50%);
-  border: 6px solid transparent;
-  border-top-color: var(--color-border, #e2e8f0);
-}
-
 .info-tip:hover .info-tooltip,
 .info-tip:focus-visible .info-tooltip {
   opacity: 1;
   visibility: visible;
   transform: translateX(-50%) translateY(0);
-}
-
-.type-toggle-btn {
-  flex: 1;
-  padding: 0.625rem 0.5rem;
-  border: none;
-  background: transparent;
-  font-size: 0.9375rem;
-  font-weight: 600;
-  color: var(--color-text-muted, #64748b);
-  cursor: pointer;
-  border-radius: 7px;
-  transition: background 0.15s, color 0.15s;
-  font-family: inherit;
-}
-
-.type-toggle-btn:hover {
-  color: var(--color-text, #1e293b);
-}
-
-.type-toggle-btn.active-expense {
-  background: #dc2626;
-  color: #fff;
-}
-
-.type-toggle-btn.active-income {
-  background: #059669;
-  color: #fff;
-}
-
-.type-toggle-btn.active-neutral {
-  background: #166534;
-  color: #fff;
-}
-
-html.dark .type-toggle-btn.active-income {
-  background: #047857;
-}
-
-html.dark .type-toggle-btn.active-neutral {
-  background: #15803d;
-}
-
-.amount-wrap {
-  position: relative;
-}
-
-.amount-input {
-  width: 100%;
-  padding-right: 2rem;
-  -moz-appearance: textfield;
-  appearance: textfield;
-}
-
-.amount-input::-webkit-outer-spin-button,
-.amount-input::-webkit-inner-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
-
-.amount-suffix {
-  position: absolute;
-  right: 0.875rem;
-  top: 50%;
-  transform: translateY(-50%);
-  font-size: 0.9375rem;
-  font-weight: 600;
-  color: var(--color-text-muted, #64748b);
-  pointer-events: none;
-}
-
-.monthly-hint {
-  font-size: 0.75rem;
-  color: #166534;
-  font-weight: 500;
-}
-
-html.dark .monthly-hint {
-  color: #4ade80;
-}
-
-.modal-actions {
-  display: flex;
-  gap: 0.75rem;
-  justify-content: flex-end;
-  margin-top: 0.5rem;
-}
-
-.btn-cancel {
-  padding: 0.5rem 1rem;
-  background: var(--color-btn-secondary-hover, #f1f5f9);
-  color: var(--color-text-muted, #475569);
-  border: none;
-  border-radius: 8px;
-  font-size: 0.875rem;
-  cursor: pointer;
-  font-family: inherit;
-}
-
-.btn-cancel:hover {
-  opacity: 0.85;
-}
-
-.btn-primary {
-  padding: 0.5rem 1rem;
-  background: linear-gradient(135deg, #166534 0%, #15803d 100%);
-  color: white;
-  border: none;
-  border-radius: 8px;
-  font-size: 0.875rem;
-  font-weight: 600;
-  cursor: pointer;
-  font-family: inherit;
-}
-
-.btn-primary:hover:not(:disabled) {
-  opacity: 0.95;
-}
-
-.btn-primary:disabled {
-  opacity: 0.7;
-  cursor: not-allowed;
 }
 </style>

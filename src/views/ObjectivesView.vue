@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import PageSkeleton from '@/components/PageSkeleton.vue'
+import { PT_GROUPING } from '@/utils/numberFormat'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useHouseholdStore } from '@/stores/household'
@@ -6,6 +8,14 @@ import { objectivesApi } from '@/api/objectives'
 import { useSubscriptionStore } from '@/stores/subscription'
 import ConfirmDeleteModal from '@/components/ConfirmDeleteModal.vue'
 import PlanUpsellCard from '@/components/PlanUpsellCard.vue'
+import PageHeader from '@/components/ui/PageHeader.vue'
+import UiButton from '@/components/ui/UiButton.vue'
+import FilterChips from '@/components/ui/FilterChips.vue'
+import EmptyState from '@/components/ui/EmptyState.vue'
+import ActionMenu, { type ActionMenuItem } from '@/components/ui/ActionMenu.vue'
+import ObjectiveKpi from '@/components/goals/ObjectiveKpi.vue'
+import ProgressMeter from '@/components/planning/ProgressMeter.vue'
+import { useToast } from '@/composables/useToast'
 import type {
   CreateSavingsObjectiveRequest,
   SavingsObjectiveActive,
@@ -18,6 +28,7 @@ const route = useRoute()
 const router = useRouter()
 const householdStore = useHouseholdStore()
 const subscriptionStore = useSubscriptionStore()
+const toast = useToast()
 
 const pageReady = ref(false)
 const loading = ref(true)
@@ -39,6 +50,7 @@ const showHistory = computed(() => sectionFilter.value !== 'active')
 const overview = ref<SavingsObjectivesOverview>({
   totalSavings: 0,
   reservedByCompletedObjectives: 0,
+  investedFromSavings: 0,
   availableForActiveObjectives: 0,
   activeObjectives: [],
   historyObjectives: [],
@@ -54,16 +66,20 @@ const statTooltips = computed(() =>
           'Receitas − Despesas\nTotal que pouparam desde o início até ao último mês.\nPode ser negativo se as despesas forem superiores às receitas.',
         reserved:
           'Valor reservado para objetivos concluídos mas ainda não liquidados. Não está disponível para outros objetivos.',
+        invested:
+          'Depósitos na corretora debitados de uma conta. É poupança que já foi investida, por isso não está disponível para objetivos.',
         available:
-          'Poupança disponível para distribuir pelos objetivos ativos, depois de descontado o valor reservado.',
+          'Poupança disponível para distribuir pelos objetivos ativos, depois de descontado o valor reservado e o enviado para investimentos.',
       }
     : {
         savings:
-          'Receitas − Despesas\nTotal que poupaste desde o início até ao último mês.\nPode ser negativo se as despesas forem superiores às receitas.',
+          'Receitas − Despesas\nTotal que poupou desde o início até ao último mês.\nPode ser negativo se as despesas forem superiores às receitas.',
         reserved:
           'Valor reservado para objetivos concluídos mas ainda não liquidados. Não está disponível para outros objetivos.',
+        invested:
+          'Depósitos na corretora debitados de uma conta. É poupança que já foi investida, por isso não está disponível para objetivos.',
         available:
-          'Poupança disponível para distribuir pelos objetivos ativos, depois de descontado o valor reservado.',
+          'Poupança disponível para distribuir pelos objetivos ativos, depois de descontado o valor reservado e o enviado para investimentos.',
       },
 )
 
@@ -147,6 +163,7 @@ function normalizeOverview(payload: unknown): SavingsObjectivesOverview {
   return {
     totalSavings: Number(pick('totalSavings')) || 0,
     reservedByCompletedObjectives: Number(pick('reservedByCompletedObjectives')) || 0,
+    investedFromSavings: Number(pick('investedFromSavings')) || 0,
     availableForActiveObjectives: Number(pick('availableForActiveObjectives')) || 0,
     activeObjectives: list('activeObjectives').map((x) => {
       const item = x as Record<string, unknown>
@@ -202,7 +219,7 @@ async function loadOverview() {
     overview.value = distributeLocalSavings(normalizeOverview(data))
   } catch (e: unknown) {
     const err = e as { response?: { data?: { message?: string } }; message?: string }
-    error.value = err.response?.data?.message || err.message || 'Erro ao carregar objetivos.'
+    error.value = err.response?.data?.message || err.message || 'Não foi possível carregar os objetivos.'
   } finally {
     loading.value = false
   }
@@ -224,7 +241,7 @@ watch(
 async function submitForm() {
   if (objectivesLocked.value) return
   if (!formName.value.trim() || !formTarget.value || formTarget.value <= 0) {
-    error.value = 'Preenche nome e valor alvo válido.'
+    error.value = 'Indique um nome e um valor alvo superior a zero.'
     return
   }
 
@@ -242,6 +259,7 @@ async function submitForm() {
       }
       const { data } = await objectivesApi.update(editingId.value, payload)
       overview.value = distributeLocalSavings(normalizeOverview(data))
+      toast.success('Objetivo atualizado')
     } else {
       const payload: CreateSavingsObjectiveRequest = {
         name: formName.value.trim(),
@@ -250,11 +268,12 @@ async function submitForm() {
       }
       const { data } = await objectivesApi.create(payload)
       overview.value = distributeLocalSavings(normalizeOverview(data))
+      toast.success('Objetivo criado')
     }
     resetForm()
   } catch (e: unknown) {
     const err = e as { response?: { data?: { message?: string } }; message?: string }
-    error.value = err.response?.data?.message || err.message || 'Não foi possível guardar objetivo.'
+    error.value = err.response?.data?.message || err.message || 'Não foi possível guardar o objetivo.'
   } finally {
     saving.value = false
   }
@@ -268,9 +287,10 @@ async function finalizeObjective(item: SavingsObjectiveActive) {
     const { data } = await objectivesApi.finalize(item.id)
     overview.value = distributeLocalSavings(normalizeOverview(data))
     sectionFilter.value = 'all'
+    toast.success(`«${item.name}» marcado como concluído`)
   } catch (e: unknown) {
     const err = e as { response?: { data?: { message?: string } }; message?: string }
-    error.value = err.response?.data?.message || err.message || 'Não foi possível finalizar objetivo.'
+    error.value = err.response?.data?.message || err.message || 'Não foi possível concluir o objetivo.'
   } finally {
     saving.value = false
   }
@@ -295,6 +315,7 @@ async function confirmDeleteObjective() {
     overview.value = distributeLocalSavings(normalizeOverview(data))
     if (editingId.value === id) resetForm()
     objectiveToDelete.value = null
+    toast.success('Objetivo eliminado')
   } catch (e: unknown) {
     const err = e as { response?: { data?: { message?: string } }; message?: string }
     error.value = err.response?.data?.message || err.message || 'Não foi possível eliminar o objetivo.'
@@ -304,11 +325,39 @@ async function confirmDeleteObjective() {
 }
 
 function formatCurrency(value: number): string {
-  return new Intl.NumberFormat('pt-PT', {
+  return new Intl.NumberFormat('pt-PT', { ...PT_GROUPING,
     style: 'currency',
     currency: 'EUR',
     minimumFractionDigits: 2,
   }).format(value)
+}
+
+const filterOptions = computed(() => [
+  { value: 'all' as SectionFilter, label: 'Todos', count: activeObjectives.value.length + historyObjectives.value.length },
+  { value: 'active' as SectionFilter, label: 'Ativos', count: activeObjectives.value.length },
+  { value: 'history' as SectionFilter, label: 'Concluídos', count: historyObjectives.value.length },
+])
+
+function activeActions(goal: SavingsObjectiveActive): ActionMenuItem[] {
+  return [
+    { label: 'Editar', disabled: saving.value, onSelect: () => openEditForm(goal) },
+    {
+      label: 'Marcar como concluído',
+      disabled: saving.value || !goal.canFinalize,
+      onSelect: () => finalizeObjective(goal),
+    },
+    { label: 'Eliminar', danger: true, disabled: saving.value, onSelect: () => openDeleteObjective(goal) },
+  ]
+}
+
+function historyActions(item: SavingsObjectiveHistory): ActionMenuItem[] {
+  return [
+    { label: 'Eliminar', danger: true, disabled: saving.value, onSelect: () => openDeleteObjective(item) },
+  ]
+}
+
+function formatPercent(value: number): string {
+  return `${value.toFixed(1).replace('.', ',')}%`
 }
 
 function formatDate(value: string): string {
@@ -347,36 +396,29 @@ watch(() => route.query.action, (action) => {
 
 <template>
   <div class="objectives-page">
-    <!-- Loading until household + subscription resolved -->
-    <div v-if="!pageReady" class="loading-state">
-      <div class="spinner"></div>
-      <p>A carregar...</p>
-    </div>
+    <!-- A carregar agregado + subscrição -->
+    <PageSkeleton v-if="!pageReady" variant="cards" :rows="3" />
 
-    <!-- No household -->
-    <div v-else-if="!householdStore.household" class="empty-state">
-      <p>Configure primeiro o seu household.</p>
-      <router-link to="/household" class="link">Ir para Household</router-link>
-    </div>
+    <!-- Sem agregado -->
+    <EmptyState
+      v-else-if="!householdStore.household"
+      title="Ainda não tem um agregado"
+      description="Configure primeiro o seu agregado para começar a definir objetivos."
+    >
+      <router-link to="/household" class="link-btn">Configurar agregado</router-link>
+    </EmptyState>
 
-    <!-- Main content -->
     <template v-else>
-      <!-- Page header -->
-      <div class="page-header">
-        <div class="page-header-text">
-          <h1 class="page-title">Objetivos</h1>
-          <p class="page-subtitle">Defina objetivos de poupança e acompanhe o progresso</p>
-        </div>
-        <button
-          v-if="!objectivesLocked"
-          type="button"
-          class="btn-add"
-          @click="openCreateForm"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="5" y2="19"/><line x1="5" x2="19" y1="12" y2="12"/></svg>
-          Adicionar
-        </button>
-      </div>
+      <PageHeader title="Objetivos">
+        <template v-if="!objectivesLocked" #actions>
+          <UiButton variant="primary" @click="openCreateForm">
+            <template #icon>
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" x2="12" y1="5" y2="19"/><line x1="5" x2="19" y1="12" y2="12"/></svg>
+            </template>
+            Novo objetivo
+          </UiButton>
+        </template>
+      </PageHeader>
 
       <PlanUpsellCard
         v-if="objectivesLocked"
@@ -393,223 +435,189 @@ watch(() => route.query.action, (action) => {
         </template>
       </PlanUpsellCard>
 
-      <div v-else class="objectives-shell-wrap">
-        <div class="objectives-shell objectives-shell-inner">
-
-          <!-- Summary stats -->
-          <div class="stats-grid">
-            <div class="stat-card">
-              <div class="stat-header">
-                <p class="stat-label">Poupança acumulada</p>
-                <span class="stat-info" tabindex="0" role="button" aria-label="O que é a poupança acumulada?">
-                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="16" y2="12"/><line x1="12" x2="12.01" y1="8" y2="8"/></svg>
-                  <span class="stat-tooltip" role="tooltip">{{ statTooltips.savings }}</span>
-                </span>
-              </div>
-              <p class="stat-value" :class="{ 'stat-value--negative': overview.totalSavings < 0 }">
-                {{ formatCurrency(overview.totalSavings) }}
-              </p>
-            </div>
-            <div class="stat-card">
-              <div class="stat-header">
-                <p class="stat-label">Reservado por finalizados</p>
-                <span class="stat-info" tabindex="0" role="button" aria-label="O que é o reservado por finalizados?">
-                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="16" y2="12"/><line x1="12" x2="12.01" y1="8" y2="8"/></svg>
-                  <span class="stat-tooltip" role="tooltip">{{ statTooltips.reserved }}</span>
-                </span>
-              </div>
-              <p class="stat-value">{{ formatCurrency(overview.reservedByCompletedObjectives) }}</p>
-            </div>
-            <div class="stat-card">
-              <div class="stat-header">
-                <p class="stat-label">Disponível para ativos</p>
-                <span class="stat-info" tabindex="0" role="button" aria-label="O que é o disponível para ativos?">
-                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="16" y2="12"/><line x1="12" x2="12.01" y1="8" y2="8"/></svg>
-                  <span class="stat-tooltip" role="tooltip">{{ statTooltips.available }}</span>
-                </span>
-              </div>
-              <p class="stat-value">{{ formatCurrency(overview.availableForActiveObjectives) }}</p>
-            </div>
-          </div>
-
-          <!-- Filtro de secções -->
-          <div class="filter-chips" role="tablist">
-            <button type="button" class="filter-chip" :class="{ active: sectionFilter === 'all' }" role="tab" :aria-selected="sectionFilter === 'all'" @click="sectionFilter = 'all'">Todos</button>
-            <button type="button" class="filter-chip" :class="{ active: sectionFilter === 'active' }" role="tab" :aria-selected="sectionFilter === 'active'" @click="sectionFilter = 'active'">Ativos</button>
-            <button type="button" class="filter-chip" :class="{ active: sectionFilter === 'history' }" role="tab" :aria-selected="sectionFilter === 'history'" @click="sectionFilter = 'history'">Concluídos</button>
-          </div>
-
-          <!-- Error -->
-          <div v-if="error" class="global-error">{{ error }}</div>
-
-          <!-- ═══ ATIVOS ═══ -->
-          <section v-if="showActive" id="sec-ativos" class="objectives-section">
-            <!-- Create/Edit form -->
-            <div v-if="formOpen" class="form-card">
-              <h2 class="form-title">{{ editingId ? 'Editar objetivo' : 'Novo objetivo' }}</h2>
-              <div class="form-grid">
-                <label class="field">
-                  <span class="field-label">Nome do objetivo</span>
-                  <input v-model="formName" class="field-input" type="text" maxlength="200" placeholder="Ex.: Viagem, fundo de emergência..." />
-                </label>
-                <label class="field">
-                  <span class="field-label">Valor necessário</span>
-                  <div class="input-wrap">
-                    <input v-model.number="formTarget" class="field-input field-input--suffixed" type="number" min="0.01" step="0.01" placeholder="0,00" />
-                    <span class="input-suffix">&euro;</span>
-                  </div>
-                </label>
-                <label class="field field-span-full">
-                  <span class="field-label">Atingir até (opcional)</span>
-                  <input v-model="formTargetDate" class="field-input" type="date" />
-                </label>
-              </div>
-              <div class="form-actions">
-                <button type="button" class="btn-cancel" :disabled="saving" @click="resetForm">Cancelar</button>
-                <button type="button" class="btn-confirm" :disabled="saving" @click="submitForm">
-                  {{ saving ? 'A guardar...' : 'Guardar' }}
-                </button>
-              </div>
-            </div>
-
-            <h2 class="section-heading">Ativos</h2>
-
-            <!-- Loading -->
-            <div v-if="loading && !objectivesLocked" class="loading-state">
-              <div class="spinner"></div>
-              <p>A carregar objetivos...</p>
-            </div>
-
-            <!-- Empty -->
-            <div v-else-if="activeObjectives.length === 0 && !formOpen && !loading" class="empty-card">
-              <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="empty-icon"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/><line x1="22" x2="12" y1="2" y2="12"/></svg>
-              <p class="empty-text">Ainda não tem objetivos ativos</p>
-              <p class="empty-hint">Crie um objetivo de poupança para começar a acompanhar o progresso.</p>
-              <button
-                type="button"
-                class="btn-confirm"
-                @click="openCreateForm()"
-              >
-                Criar primeiro objetivo
-              </button>
-            </div>
-
-            <!-- Goals grid -->
-            <div v-else-if="activeObjectives.length > 0" class="goals-grid">
-              <article v-for="goal in activeObjectives" :key="goal.id" class="goal-card">
-                <div class="goal-top">
-                  <div class="goal-icon-wrap">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/><line x1="22" x2="12" y1="2" y2="12"/></svg>
-                  </div>
-                  <div class="goal-info">
-                    <div class="goal-name-row">
-                      <h3 class="goal-name">{{ goal.name }}</h3>
-                      <span class="goal-order">#{{ goal.sortOrder }}</span>
-                    </div>
-                    <p class="goal-amounts">
-                      {{ formatCurrency(goal.allocatedAmount) }}
-                      <span class="goal-amounts-separator">/</span>
-                      {{ formatCurrency(goal.targetAmount) }}
-                    </p>
-                    <p v-if="goal.targetDate" class="goal-date">Meta: {{ formatDate(goal.targetDate) }}</p>
-                  </div>
-                </div>
-
-                <!-- Progress -->
-                <div class="progress-section">
-                  <div class="progress-header">
-                    <span class="progress-pct">{{ goal.progressPercent.toFixed(1) }}%</span>
-                    <span v-if="goal.canFinalize" class="badge badge--ready">Pronto</span>
-                  </div>
-                  <div class="progress-track">
-                    <div
-                      class="progress-fill"
-                      :class="{ 'progress-fill--complete': goal.canFinalize }"
-                      :style="{ width: `${Math.min(100, goal.progressPercent)}%` }"
-                    ></div>
-                  </div>
-                </div>
-
-                <!-- Actions -->
-                <div class="goal-actions">
-                  <button
-                    type="button"
-                    class="action-btn"
-                    title="Editar"
-                    :disabled="saving || objectivesLocked"
-                    @click="openEditForm(goal)"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
-                  </button>
-                  <button
-                    type="button"
-                    class="action-btn action-btn--finalize"
-                    title="Finalizar"
-                    :disabled="saving || !goal.canFinalize || objectivesLocked"
-                    @click="finalizeObjective(goal)"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                  </button>
-                  <button
-                    type="button"
-                    class="action-btn action-btn--danger"
-                    title="Eliminar"
-                    :disabled="saving || objectivesLocked"
-                    @click="openDeleteObjective(goal)"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
-                  </button>
-                </div>
-              </article>
-            </div>
-          </section>
-
-          <!-- ═══ CONCLUÍDOS ═══ -->
-          <section v-if="!loading && showHistory" id="sec-concluidos" class="objectives-section" :class="{ 'objectives-section--history': sectionFilter === 'all' }">
-            <h2 class="section-heading">Concluídos</h2>
-
-            <div v-if="historyObjectives.length === 0" class="empty-card">
-              <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="empty-icon"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-              <p class="empty-text">Sem objetivos finalizados</p>
-              <p class="empty-hint">Quando finalizar um objetivo ativo, ele aparece aqui.</p>
-            </div>
-
-            <div v-else class="goals-grid">
-              <article v-for="item in historyObjectives" :key="item.id" class="goal-card goal-card--completed">
-                <div class="goal-top">
-                  <div class="goal-icon-wrap goal-icon-wrap--completed">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                  </div>
-                  <div class="goal-info">
-                    <div class="goal-name-row">
-                      <h3 class="goal-name">{{ item.name }}</h3>
-                      <span v-if="item.liquidatedAt" class="badge badge--liquidated">Liquidado</span>
-                      <span v-else class="badge badge--completed">Concluído</span>
-                    </div>
-                    <p class="goal-amounts">{{ formatCurrency(item.targetAmount) }}</p>
-                    <div class="goal-meta">
-                      <span v-if="item.targetDate" class="goal-meta-item">Meta: {{ formatDate(item.targetDate) }}</span>
-                      <span class="goal-meta-item">Finalizado: {{ formatDate(item.completedAt) }}</span>
-                      <span v-if="item.liquidatedAt" class="goal-meta-item">Liquidado: {{ formatDate(item.liquidatedAt) }}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div class="goal-actions">
-                  <button
-                    type="button"
-                    class="action-btn action-btn--danger"
-                    title="Eliminar"
-                    :disabled="saving || objectivesLocked"
-                    @click="openDeleteObjective(item)"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
-                  </button>
-                </div>
-              </article>
-            </div>
-          </section>
+      <div v-else class="ui-stack">
+        <!-- Resumo da poupança -->
+        <div class="kpi-row" :class="{ 'kpi-row--4': overview.investedFromSavings > 0 }">
+          <ObjectiveKpi
+            label="Poupança total"
+            :value="formatCurrency(overview.totalSavings)"
+            :hint="statTooltips.savings"
+            :negative="overview.totalSavings < 0"
+            :note="overview.totalSavings < 0 ? 'Défice acumulado: as despesas superaram as receitas.' : undefined"
+          />
+          <ObjectiveKpi
+            label="Reservado"
+            :value="formatCurrency(overview.reservedByCompletedObjectives)"
+            :hint="statTooltips.reserved"
+          />
+          <ObjectiveKpi
+            v-if="overview.investedFromSavings > 0"
+            label="Enviado para investimentos"
+            :value="formatCurrency(overview.investedFromSavings)"
+            :hint="statTooltips.invested"
+          />
+          <ObjectiveKpi
+            label="Disponível para objetivos"
+            :value="formatCurrency(overview.availableForActiveObjectives)"
+            :hint="statTooltips.available"
+            highlight
+          />
         </div>
+
+        <FilterChips v-model="sectionFilter" :options="filterOptions" aria-label="Filtrar objetivos" />
+
+        <div v-if="error" class="inline-error" role="alert">{{ error }}</div>
+
+        <!-- Formulário criar/editar -->
+        <section v-if="formOpen && showActive" class="form-card">
+          <h2 class="card-title">{{ editingId ? 'Editar objetivo' : 'Novo objetivo' }}</h2>
+          <div class="form-grid">
+            <label class="field">
+              <span class="field-label">Nome do objetivo</span>
+              <input v-model="formName" class="field-input" type="text" maxlength="200" placeholder="Ex.: Viagem, fundo de emergência…" />
+            </label>
+            <label class="field">
+              <span class="field-label">Valor alvo</span>
+              <span class="input-wrap">
+                <input v-model.number="formTarget" class="field-input field-input--suffixed" type="number" min="0.01" step="0.01" placeholder="0,00" />
+                <span class="input-suffix">€</span>
+              </span>
+            </label>
+            <label class="field">
+              <span class="field-label">Atingir até <span class="field-optional">(opcional)</span></span>
+              <input v-model="formTargetDate" class="field-input" type="date" />
+            </label>
+          </div>
+          <div class="form-actions">
+            <UiButton variant="secondary" :disabled="saving" @click="resetForm">Cancelar</UiButton>
+            <UiButton variant="primary" :loading="saving" @click="submitForm">
+              {{ editingId ? 'Guardar alterações' : 'Criar objetivo' }}
+            </UiButton>
+          </div>
+        </section>
+
+        <!-- ═══ ATIVOS ═══ -->
+        <section v-if="showActive" id="sec-ativos" class="section">
+          <h2 class="section-title">
+            Ativos
+            <span v-if="!loading" class="section-count">{{ activeObjectives.length }}</span>
+          </h2>
+
+          <PageSkeleton v-if="loading" variant="cards" :rows="3" />
+
+          <EmptyState
+            v-else-if="activeObjectives.length === 0 && !formOpen"
+            class="empty-card"
+            title="Ainda não tem objetivos ativos"
+            description="Crie um objetivo de poupança para começar a acompanhar o progresso."
+          >
+            <template #icon>
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+            </template>
+            <UiButton variant="secondary" @click="openCreateForm()">Criar primeiro objetivo</UiButton>
+          </EmptyState>
+
+          <div v-else-if="activeObjectives.length > 0" class="goals-grid">
+            <article v-for="goal in activeObjectives" :key="goal.id" class="goal-card">
+              <header class="goal-head">
+                <span class="goal-icon" aria-hidden="true">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+                </span>
+                <div class="goal-title">
+                  <h3 class="goal-name" :title="goal.name">{{ goal.name }}</h3>
+                  <p class="goal-sub">Prioridade {{ goal.sortOrder }}</p>
+                </div>
+                <span v-if="goal.canFinalize" class="ui-badge ui-badge--success">Atingido</span>
+                <ActionMenu :items="activeActions(goal)" :aria-label="`Ações de ${goal.name}`" />
+              </header>
+
+              <div class="goal-amounts">
+                <span class="ui-amount goal-amount-main">{{ formatCurrency(goal.allocatedAmount) }}</span>
+                <span class="goal-amount-target">de {{ formatCurrency(goal.targetAmount) }}</span>
+              </div>
+
+              <div class="goal-progress">
+                <ProgressMeter :value="goal.progressPercent" :label="`Progresso de ${goal.name}`" />
+                <span class="goal-pct">{{ formatPercent(goal.progressPercent) }}</span>
+              </div>
+
+              <dl class="goal-meta">
+                <div>
+                  <dt>Em falta</dt>
+                  <dd class="ui-amount">{{ formatCurrency(Math.max(0, goal.targetAmount - goal.allocatedAmount)) }}</dd>
+                </div>
+                <div>
+                  <dt>Prazo</dt>
+                  <dd>{{ goal.targetDate ? formatDate(goal.targetDate) : 'Sem prazo' }}</dd>
+                </div>
+              </dl>
+
+              <UiButton
+                v-if="goal.canFinalize"
+                variant="secondary"
+                size="sm"
+                block
+                :disabled="saving"
+                @click="finalizeObjective(goal)"
+              >
+                Marcar como concluído
+              </UiButton>
+            </article>
+          </div>
+        </section>
+
+        <!-- ═══ CONCLUÍDOS ═══ -->
+        <section v-if="!loading && showHistory" id="sec-concluidos" class="section">
+          <h2 class="section-title">
+            Concluídos
+            <span class="section-count">{{ historyObjectives.length }}</span>
+          </h2>
+
+          <EmptyState
+            v-if="historyObjectives.length === 0"
+            class="empty-card"
+            title="Sem objetivos concluídos"
+            description="Quando concluir um objetivo ativo, ele aparece aqui."
+            compact
+          >
+            <template #icon>
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            </template>
+          </EmptyState>
+
+          <div v-else class="goals-grid">
+            <article v-for="item in historyObjectives" :key="item.id" class="goal-card">
+              <header class="goal-head">
+                <span class="goal-icon goal-icon--done" aria-hidden="true">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                </span>
+                <div class="goal-title">
+                  <h3 class="goal-name" :title="item.name">{{ item.name }}</h3>
+                  <p class="goal-sub">Concluído a {{ formatDate(item.completedAt) }}</p>
+                </div>
+                <span v-if="item.liquidatedAt" class="ui-badge">Liquidado</span>
+                <span v-else class="ui-badge ui-badge--success">Concluído</span>
+                <ActionMenu :items="historyActions(item)" :aria-label="`Ações de ${item.name}`" />
+              </header>
+
+              <div class="goal-amounts">
+                <span class="ui-amount goal-amount-main">{{ formatCurrency(item.targetAmount) }}</span>
+                <span class="goal-amount-target">{{ item.liquidatedAt ? 'já gasto' : 'reservado' }}</span>
+              </div>
+
+              <dl class="goal-meta">
+                <div>
+                  <dt>Prazo</dt>
+                  <dd>{{ item.targetDate ? formatDate(item.targetDate) : 'Sem prazo' }}</dd>
+                </div>
+                <div v-if="item.liquidatedAt">
+                  <dt>Liquidado a</dt>
+                  <dd>{{ formatDate(item.liquidatedAt) }}</dd>
+                </div>
+              </dl>
+            </article>
+          </div>
+        </section>
       </div>
     </template>
 
@@ -630,686 +638,267 @@ watch(() => route.query.action, (action) => {
 
 <style scoped>
 .objectives-page {
-  max-width: min(860px, 100%);
+  max-width: var(--page-max);
   margin: 0 auto;
-  padding: 0 0 3rem;
+  padding: 0 0 var(--space-12);
 }
 
-/* ── Page header ── */
-.page-header {
+/* ── Resumo ── */
+.kpi-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+.kpi-row--4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.inline-error {
+  padding: 10px var(--space-4);
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+  border: 1px solid var(--color-danger-border);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+}
+
+/* ── Formulário ── */
+.form-card {
+  padding: var(--space-5);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+.card-title {
+  margin: 0 0 var(--space-4);
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-strong);
+}
+.form-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr;
+  gap: var(--space-4);
+}
+.field {
   display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 1.5rem;
-}
-
-.page-header-text {
+  flex-direction: column;
+  gap: 6px;
   min-width: 0;
 }
-
-.page-title {
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: var(--color-text);
-  margin: 0;
-  letter-spacing: -0.02em;
+.field-label {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--color-text-secondary);
 }
-
-.page-subtitle {
-  font-size: 0.8125rem;
-  color: var(--color-text-muted);
-  margin: 0.25rem 0 0;
+.field-optional {
+  color: var(--color-text-subtle);
+  font-weight: var(--weight-regular);
 }
-
-.btn-add {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
-  padding: 0.5rem 1rem;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: #fff;
-  background: #166534;
-  border: none;
-  border-radius: 10px;
-  cursor: pointer;
-  transition: background 0.15s, transform 0.15s;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
-.btn-add:hover:not(:disabled) {
-  background: #15803d;
-  transform: translateY(-1px);
-}
-
-.btn-add:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-/* ── Stats grid ── */
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 0.875rem;
-  margin-bottom: 1.5rem;
-}
-
-.stat-card {
-  background: var(--color-bg-card);
-  border: 1px solid var(--color-border);
-  border-radius: 14px;
-  padding: 1.125rem 1.25rem;
-  box-shadow: var(--app-shadow-card, 0 1px 3px rgba(0, 0, 0, 0.06));
-}
-
-.stat-header {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-}
-
-.stat-label {
-  font-size: 0.75rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--color-text-muted);
-  margin: 0;
-}
-
-/* ── Info tooltip (i) ── */
-.stat-info {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--color-text-muted);
-  cursor: help;
-  outline: none;
-  flex-shrink: 0;
-  transition: color 0.15s ease;
-}
-
-.stat-info:hover,
-.stat-info:focus-visible {
-  color: var(--color-success);
-}
-
-.stat-tooltip {
-  position: absolute;
-  bottom: calc(100% + 8px);
-  left: 50%;
-  transform: translateX(-50%) translateY(4px);
-  width: max-content;
-  max-width: 240px;
-  padding: 0.625rem 0.75rem;
-  background: var(--color-bg-card);
-  color: var(--color-text);
-  border: 1px solid var(--color-border);
-  border-radius: 10px;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
-  font-size: 0.75rem;
-  font-weight: 500;
-  line-height: 1.4;
-  text-transform: none;
-  letter-spacing: normal;
-  white-space: pre-line;
-  z-index: 30;
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-  transition: opacity 0.15s ease, transform 0.15s ease, visibility 0.15s;
-}
-
-/* Seta do tooltip */
-.stat-tooltip::after {
-  content: '';
-  position: absolute;
-  top: 100%;
-  left: 50%;
-  transform: translateX(-50%);
-  border: 6px solid transparent;
-  border-top-color: var(--color-border);
-}
-
-.stat-info:hover .stat-tooltip,
-.stat-info:focus-visible .stat-tooltip {
-  opacity: 1;
-  visibility: visible;
-  transform: translateX(-50%) translateY(0);
-}
-
-.stat-value {
-  font-size: 1.25rem;
-  font-weight: 700;
-  color: var(--color-text);
-  margin: 0.25rem 0 0;
-  letter-spacing: -0.02em;
-}
-
-.stat-value--negative {
-  color: var(--color-expense);
-}
-
-/* ── Filtro de secções ── */
-.filter-chips {
-  display: flex;
-  gap: 0.5rem;
-  margin-bottom: 1.25rem;
-}
-
-.filter-chip {
-  padding: 0.4rem 0.875rem;
-  border-radius: 999px;
-  border: 1px solid var(--color-border);
-  background: var(--color-bg-card);
-  color: var(--color-text-muted);
-  font-size: 0.8125rem;
-  font-weight: 600;
-  cursor: pointer;
+.field-input {
+  width: 100%;
+  height: 40px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
   font-family: inherit;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
-}
-
-.filter-chip:hover {
+  font-size: var(--text-base);
+  background: var(--color-surface);
   color: var(--color-text);
-  border-color: var(--color-text-muted);
+  box-sizing: border-box;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+.field-input::placeholder { color: var(--color-text-subtle); }
+.field-input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: var(--focus-ring);
+}
+.field-input--suffixed { padding-right: 2.25rem; }
+.field-input[type='number'] { -moz-appearance: textfield; appearance: textfield; }
+.field-input[type='number']::-webkit-outer-spin-button,
+.field-input[type='number']::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.input-wrap { position: relative; display: block; }
+.input-suffix {
+  position: absolute;
+  right: var(--space-3);
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+  color: var(--color-text-muted);
+  pointer-events: none;
+}
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-5);
 }
 
-.filter-chip.active {
-  background: #166534;
-  border-color: #166534;
-  color: #ffffff;
+/* ── Secções ── */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-strong);
+}
+.section-count {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.empty-card {
+  background: var(--color-surface);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-lg);
 }
 
-html.dark .filter-chip.active {
-  background: #15803d;
-  border-color: #15803d;
-}
-
-/* ── Secções (Ativos / Concluídos) ── */
-.section-heading {
-  font-size: 0.9375rem;
-  font-weight: 700;
-  color: var(--color-text);
-  margin: 0 0 0.875rem;
-  letter-spacing: -0.01em;
-}
-
-.objectives-section--history {
-  margin-top: 2rem;
-  padding-top: 1.5rem;
-  border-top: 1px solid var(--color-border);
-}
-
-/* ── Goals grid ── */
+/* ── Cartões de objetivo ── */
 .goals-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 0.875rem;
+  gap: var(--space-4);
 }
-
 .goal-card {
-  background: var(--color-bg-card);
-  border: 1px solid var(--color-border);
-  border-radius: 14px;
-  padding: 1.25rem;
   display: flex;
   flex-direction: column;
-  gap: 1rem;
-  transition: box-shadow 0.2s, transform 0.2s;
-  box-shadow: var(--app-shadow-card, 0 1px 3px rgba(0, 0, 0, 0.06));
+  gap: var(--space-4);
+  min-width: 0;
+  padding: var(--space-5);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  transition: border-color var(--transition-base);
 }
-
 .goal-card:hover {
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
-  transform: translateY(-1px);
+  border-color: var(--color-border-strong);
 }
-
-.goal-card--completed {
-  opacity: 0.85;
-}
-
-/* ── Goal top row ── */
-.goal-top {
+.goal-head {
   display: flex;
-  gap: 0.875rem;
-  align-items: flex-start;
+  align-items: center;
+  gap: var(--space-3);
 }
-
-.goal-icon-wrap {
+.goal-icon {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
   flex-shrink: 0;
-  border-radius: 10px;
-  background: #ecfdf5;
-  color: #166534;
+  border-radius: var(--radius-md);
+  background: var(--color-primary-soft);
+  color: var(--color-primary-text);
 }
-
-html.dark .goal-icon-wrap {
-  background: rgba(22, 101, 52, 0.2);
-  color: #4ade80;
+.goal-icon--done {
+  background: var(--color-success-soft);
+  color: var(--color-success);
 }
-
-.goal-icon-wrap--completed {
-  background: #f0fdf4;
-  color: #059669;
-}
-
-html.dark .goal-icon-wrap--completed {
-  background: rgba(5, 150, 105, 0.15);
-  color: #34d399;
-}
-
-.goal-info {
+.goal-title {
   flex: 1;
   min-width: 0;
 }
-
-.goal-name-row {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-bottom: 0.125rem;
-}
-
 .goal-name {
-  font-size: 0.9375rem;
-  font-weight: 600;
-  color: var(--color-text);
   margin: 0;
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-strong);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-
-.goal-order {
-  font-size: 0.6875rem;
-  font-weight: 600;
+.goal-sub {
+  margin: 2px 0 0;
+  font-size: var(--text-xs);
   color: var(--color-text-muted);
-  flex-shrink: 0;
 }
-
 .goal-amounts {
-  font-size: 1.125rem;
-  font-weight: 700;
-  color: var(--color-text);
-  margin: 0;
-  letter-spacing: -0.01em;
-}
-
-.goal-amounts-separator {
-  color: var(--color-text-muted);
-  font-weight: 400;
-  margin: 0 0.125rem;
-}
-
-.goal-date {
-  font-size: 0.75rem;
-  color: var(--color-text-muted);
-  margin: 0.25rem 0 0;
-}
-
-.goal-meta {
   display: flex;
+  align-items: baseline;
   flex-wrap: wrap;
-  gap: 0.25rem 0.75rem;
-  margin-top: 0.25rem;
+  gap: 6px;
 }
-
-.goal-meta-item {
-  font-size: 0.75rem;
+.goal-amount-main {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-tight);
+}
+.goal-amount-target {
+  font-size: var(--text-sm);
   color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
 }
-
-/* ── Progress ── */
-.progress-section {
-  display: flex;
-  flex-direction: column;
-  gap: 0.375rem;
-}
-
-.progress-header {
+.goal-progress {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: var(--space-3);
 }
-
-.progress-pct {
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--color-text-muted);
-}
-
-.progress-track {
-  width: 100%;
-  height: 8px;
-  border-radius: 999px;
-  background: var(--color-table-row-hover);
-  overflow: hidden;
-}
-
-.progress-fill {
-  height: 100%;
-  border-radius: 999px;
-  background: linear-gradient(90deg, #166534 0%, #16a34a 100%);
-  transition: width 0.3s ease;
-}
-
-.progress-fill--complete {
-  background: linear-gradient(90deg, #059669 0%, #34d399 100%);
-}
-
-/* ── Badges ── */
-.badge {
-  font-size: 0.5625rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  padding: 0.15rem 0.4rem;
-  border-radius: 999px;
+.goal-pct {
   flex-shrink: 0;
+  min-width: 3.25rem;
+  text-align: right;
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
 }
-
-.badge--ready {
-  color: #fff;
-  background: #059669;
-}
-
-.badge--completed {
-  color: #fff;
-  background: #64748b;
-}
-
-.badge--liquidated {
-  color: #fff;
-  background: #166534;
-}
-
-/* ── Goal actions ── */
-.goal-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.375rem;
-}
-
-.action-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  padding: 0;
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  background: transparent;
-  color: var(--color-text-muted);
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.action-btn:hover:not(:disabled) {
-  background: var(--color-table-row-hover);
-  color: var(--color-text);
-  border-color: var(--color-text-muted);
-}
-
-.action-btn:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-}
-
-.action-btn--finalize:hover:not(:disabled) {
-  color: #059669;
-  border-color: #a7f3d0;
-  background: #ecfdf5;
-}
-
-html.dark .action-btn--finalize:hover:not(:disabled) {
-  color: #34d399;
-  border-color: rgba(52, 211, 153, 0.3);
-  background: rgba(52, 211, 153, 0.1);
-}
-
-.action-btn--danger:hover:not(:disabled) {
-  color: #dc2626;
-  border-color: #fecaca;
-  background: #fef2f2;
-}
-
-html.dark .action-btn--danger:hover:not(:disabled) {
-  color: #f87171;
-  border-color: rgba(248, 113, 113, 0.3);
-  background: rgba(248, 113, 113, 0.1);
-}
-
-/* ── Form card ── */
-.form-card {
-  background: var(--color-bg-card);
-  border: 1px solid var(--color-border);
-  border-radius: 14px;
-  padding: 1.25rem;
-  margin-bottom: 1rem;
-  box-shadow: var(--app-shadow-card, 0 1px 3px rgba(0, 0, 0, 0.06));
-}
-
-.form-title {
-  font-size: 1rem;
-  font-weight: 600;
-  color: var(--color-text);
-  margin: 0 0 1rem;
-}
-
-.form-grid {
+.goal-meta {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 0.875rem;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+  margin: 0;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border-subtle);
 }
-
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: 0.375rem;
-}
-
-.field-span-full {
-  grid-column: 1 / -1;
-}
-
-.field-label {
-  font-size: 0.75rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
+.goal-meta dt {
+  margin: 0 0 2px;
+  font-size: var(--text-xs);
   color: var(--color-text-muted);
 }
-
-.field-input {
-  padding: 0.625rem 0.875rem;
-  border: 1px solid var(--color-input-border);
-  border-radius: 10px;
-  font-size: 0.875rem;
-  background: var(--color-input-bg);
+.goal-meta dd {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
   color: var(--color-text);
-  transition: border-color 0.15s, box-shadow 0.15s;
+  font-variant-numeric: tabular-nums;
 }
 
-.field-input:focus {
-  outline: none;
-  border-color: #166534;
-  box-shadow: 0 0 0 3px rgba(22, 101, 52, 0.12);
-}
-
-.field-input--suffixed {
-  padding-right: 2.25rem;
-}
-
-.input-wrap {
-  position: relative;
-}
-
-.input-suffix {
-  position: absolute;
-  right: 0.875rem;
-  top: 50%;
-  transform: translateY(-50%);
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: var(--color-text-muted);
-  pointer-events: none;
-}
-
-.form-actions {
-  margin-top: 1rem;
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.5rem;
-}
-
-/* ── Buttons ── */
-.btn-confirm {
+.link-btn {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  padding: 0.5rem 1rem;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: #fff;
-  background: #166534;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  text-decoration: none;
-  transition: background 0.15s;
-}
-
-.btn-confirm:hover:not(:disabled) {
-  background: #15803d;
-}
-
-.btn-confirm:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.btn-cancel {
-  padding: 0.5rem 0.85rem;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: var(--color-text);
-  background: transparent;
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-
-.btn-cancel:hover {
-  background: var(--color-table-row-hover);
-}
-
-/* ── Empty state ── */
-.empty-card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 3rem 1.5rem;
-  background: var(--color-bg-card);
-  border: 1px dashed var(--color-border);
-  border-radius: 14px;
-  text-align: center;
-}
-
-.empty-icon {
-  color: var(--color-text-muted);
-  margin-bottom: 1rem;
-  opacity: 0.5;
-}
-
-.empty-text {
-  font-size: 1rem;
-  font-weight: 600;
-  color: var(--color-text);
-  margin: 0 0 0.25rem;
-}
-
-.empty-hint {
-  font-size: 0.8125rem;
-  color: var(--color-text-muted);
-  margin: 0 0 1.25rem;
-}
-
-/* ── Loading / Error ── */
-.loading-state,
-.empty-state {
-  text-align: center;
-  padding: 3rem;
-  color: var(--color-text-muted);
-}
-
-.spinner {
-  width: 36px;
-  height: 36px;
-  border: 3px solid var(--color-border);
-  border-top-color: #166534;
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-  margin: 0 auto 1rem;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-.global-error {
-  padding: 0.625rem 1rem;
-  background: #fef2f2;
-  color: #dc2626;
-  border-radius: 10px;
-  font-size: 0.8125rem;
-  margin-bottom: 1rem;
-  border: 1px solid #fecaca;
-}
-
-html.dark .global-error {
-  background: rgba(220, 38, 38, 0.1);
-  color: #f87171;
-  border-color: rgba(248, 113, 113, 0.3);
-}
-
-.link {
-  color: var(--color-link-hover);
+  height: var(--control-h);
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-sm);
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
   text-decoration: none;
 }
+.link-btn:hover { background: var(--color-primary-hover); }
 
-.link:hover {
-  text-decoration: underline;
+/* ── Responsivo ── */
+@media (max-width: 1024px) {
+  .kpi-row--4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
-
-/* ── Responsive ── */
-@media (max-width: 600px) {
-  .page-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0.75rem;
-  }
-
-  .stats-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .goals-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .stat-value {
-    font-size: 1.125rem;
-  }
+@media (max-width: 720px) {
+  .kpi-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .form-grid { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 480px) {
+  .kpi-row,
+  .kpi-row--4 { grid-template-columns: minmax(0, 1fr); gap: var(--space-3); }
+  .goals-grid { grid-template-columns: minmax(0, 1fr); }
+  .goal-card { padding: var(--space-4); }
+  .form-actions { flex-direction: column-reverse; }
 }
 </style>

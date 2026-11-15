@@ -6,7 +6,7 @@ defineProps<{
 </script>
 
 <template>
-  <div class="skeleton">
+  <div class="skeleton" role="status" aria-live="polite" aria-label="A carregar">
     <div class="skeleton-cards">
       <div
         v-for="i in (cards ?? 4)"
@@ -28,38 +28,43 @@ defineProps<{
 .skeleton {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: var(--space-6);
 }
 
 .skeleton-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 1rem;
+  grid-template-columns: repeat(auto-fill, minmax(min(200px, 100%), 1fr));
+  gap: var(--space-5);
 }
 
 .skeleton-card {
-  background: white;
-  border-radius: 12px;
-  padding: 1.25rem;
-  border: 1px solid #f1f5f9;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xs);
+  padding: var(--space-5);
+}
+
+.skeleton-line,
+.skeleton-chart {
+  background: linear-gradient(
+    90deg,
+    var(--color-surface-muted) 0%,
+    var(--color-surface-2) 50%,
+    var(--color-surface-muted) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
 }
 
 .skeleton-line {
   height: 12px;
-  background: linear-gradient(
-    90deg,
-    #f1f5f9 25%,
-    #e2e8f0 50%,
-    #f1f5f9 75%
-  );
-  background-size: 200% 100%;
-  animation: shimmer 1.5s infinite;
-  border-radius: 4px;
+  border-radius: var(--radius-full);
 }
 
 .skeleton-line.short {
   width: 60%;
-  margin-bottom: 0.5rem;
+  margin-bottom: var(--space-2);
 }
 
 .skeleton-line.long {
@@ -68,27 +73,25 @@ defineProps<{
 
 .skeleton-charts {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 1.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr));
+  gap: var(--space-5);
 }
 
 .skeleton-chart {
   height: 280px;
-  background: white;
-  border-radius: 12px;
-  border: 1px solid #f1f5f9;
-  background: linear-gradient(
-    90deg,
-    #f8fafc 25%,
-    #f1f5f9 50%,
-    #f8fafc 75%
-  );
-  background-size: 200% 100%;
-  animation: shimmer 1.5s infinite;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border);
 }
 
 @keyframes shimmer {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
+  0% { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-line,
+  .skeleton-chart {
+    animation: none;
+  }
 }
 </style>

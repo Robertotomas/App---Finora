@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import PageSkeleton from '@/components/PageSkeleton.vue'
+import { PT_GROUPING } from '@/utils/numberFormat'
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAssetsStore } from '@/stores/assets'
@@ -7,12 +9,19 @@ import { useSubscriptionStore } from '@/stores/subscription'
 import AssetFormModal from '@/components/AssetFormModal.vue'
 import PlanUpsellCard from '@/components/PlanUpsellCard.vue'
 import DateRangePicker from '@/components/DateRangePicker.vue'
-import AssetsChart from '@/components/charts/AssetsChart.vue'
+import ValueHeroCard from '@/components/charts/ValueHeroCard.vue'
+import HeroStat from '@/components/charts/HeroStat.vue'
 import type { AssetChartPoint } from '@/components/charts/AssetsChart.vue'
 import { ASSET_CATEGORY_LABELS } from '@/types/asset'
 import type { Asset, CreateAssetRequest } from '@/types/asset'
 import { assetCategoryIcon, assetCategoryColor } from '@/types/assetMeta'
+import PageHeader from '@/components/ui/PageHeader.vue'
+import UiButton from '@/components/ui/UiButton.vue'
+import UiCard from '@/components/ui/UiCard.vue'
+import EmptyState from '@/components/ui/EmptyState.vue'
+import { useToast } from '@/composables/useToast'
 
+const toast = useToast()
 const route = useRoute()
 const router = useRouter()
 const assetsStore = useAssetsStore()
@@ -27,10 +36,21 @@ const initialLoading = ref(true) // cobre desde o 1.º render até os dados cheg
 // Intervalo do gráfico (yyyy-MM-dd locais; vazios = sem limite → aquisição mais antiga / hoje).
 const rangeFrom = ref('')
 const rangeTo = ref('')
+const rangePreset = ref('year')
 function onRangeChange(r: { from: string; to: string; preset: string }) {
   rangeFrom.value = r.from
   rangeTo.value = r.to
+  rangePreset.value = r.preset
 }
+// Texto do período na linha da variação do hero (presets do DateRangePicker).
+const PRESET_TEXT: Record<string, string> = {
+  month: 'este mês',
+  '30d': 'em 30 dias',
+  '3m': 'em 3 meses',
+  year: 'este ano',
+  all: 'desde o início',
+}
+const periodLabel = computed(() => PRESET_TEXT[rangePreset.value] ?? 'no período')
 
 const canAccess = computed(() => subscriptionStore.canAccessAssets)
 
@@ -125,26 +145,6 @@ const chartYearTicks = computed(() => {
   return spanDays > 540
 })
 
-/* ── Hero (segue o hover do gráfico) ── */
-const hovered = ref<{ date: string; value: number; cost: number } | null>(null)
-function onChartHover(p: { date: string; value: number; cost: number } | null) {
-  hovered.value = p
-}
-
-const heroValue = computed(() => hovered.value?.value ?? totalValue.value)
-const heroCost = computed(() => hovered.value?.cost ?? totalCost.value)
-const heroReturn = computed(() => heroValue.value - heroCost.value)
-const heroReturnPct = computed(() => (heroCost.value !== 0 ? (heroReturn.value / Math.abs(heroCost.value)) * 100 : null))
-
-const heroDateLabel = computed(() => {
-  if (!hovered.value) return 'Hoje'
-  const today = new Date()
-  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
-  if (hovered.value.date === todayStr) return 'Hoje'
-  const d = new Date(hovered.value.date + 'T00:00:00')
-  return d.toLocaleDateString('pt-PT', { day: 'numeric', month: 'long', year: 'numeric' })
-})
-
 /* ── Tabela ── */
 const sortedAssets = computed(() => {
   const list = [...assetsStore.assets]
@@ -163,7 +163,7 @@ function assetReturn(asset: Asset) {
 }
 
 function formatCurrency(value: number): string {
-  return new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(value)
+  return new Intl.NumberFormat('pt-PT', { ...PT_GROUPING, style: 'currency', currency: 'EUR' }).format(value)
 }
 
 function formatSigned(value: number): string {
@@ -185,6 +185,7 @@ async function handleCreate(payload: CreateAssetRequest) {
   try {
     await assetsStore.createAsset(payload)
     createModalOpen.value = false
+    toast.success('Ativo adicionado')
   } catch {
     // erro na store
   } finally {
@@ -197,34 +198,24 @@ function openAsset(asset: Asset) {
 }
 </script>
 
+
 <template>
   <div class="assets-page">
-    <div v-if="!householdStore.household && householdStore.loading" class="loading-state">
-      <div class="spinner"></div>
-      <p>A carregar...</p>
-    </div>
+    <PageSkeleton v-if="!householdStore.household && householdStore.loading" variant="hero" />
 
     <template v-else>
-      <div class="page-header">
-        <div class="page-header-text">
-          <h1 class="page-title">Bens e valores</h1>
-          <p class="page-subtitle">Acompanhe o valor dos seus ativos ao longo do tempo</p>
-        </div>
-        <button
-          v-if="canAccess && assetsStore.assets.length > 0"
-          type="button"
-          class="btn-add"
-          @click="openCreateModal"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="5" y2="19"/><line x1="5" x2="19" y1="12" y2="12"/></svg>
-          Adicionar
-        </button>
-      </div>
+      <PageHeader title="Bens e valores">
+        <template v-if="canAccess && assetsStore.assets.length > 0" #actions>
+          <UiButton variant="primary" @click="openCreateModal">
+            <template #icon>
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="5" y2="19"/><line x1="5" x2="19" y1="12" y2="12"/></svg>
+            </template>
+            Adicionar
+          </UiButton>
+        </template>
+      </PageHeader>
 
-      <div v-if="initialLoading" class="loading-state">
-        <div class="spinner"></div>
-        <p>A carregar bens...</p>
-      </div>
+      <PageSkeleton v-if="initialLoading" variant="hero" />
 
       <!-- Gating -->
       <PlanUpsellCard
@@ -243,95 +234,110 @@ function openAsset(asset: Asset) {
       </PlanUpsellCard>
 
       <template v-else>
-        <div v-if="assetsStore.error" class="global-error">{{ assetsStore.error }}</div>
+        <div v-if="assetsStore.error" class="notice notice--danger">{{ assetsStore.error }}</div>
 
         <!-- Empty -->
-        <div v-if="assetsStore.assets.length === 0" class="empty-card">
-          <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" class="empty-icon"><path d="M6 3h12l4 6-10 13L2 9z"/><path d="M2 9h20"/><path d="m10 3 2 6"/><path d="m14 3-2 6"/></svg>
-          <p class="empty-text">Ainda não tem bens registados</p>
-          <p class="empty-hint">Adicione o seu primeiro ativo para começar a acompanhar o seu valor.</p>
-          <button type="button" class="btn-confirm" @click="openCreateModal">Adicionar ativo</button>
-        </div>
+        <UiCard v-if="assetsStore.assets.length === 0">
+          <EmptyState
+            title="Ainda não tem bens registados"
+            description="Adicione o seu primeiro ativo para começar a acompanhar o seu valor."
+          >
+            <template #icon>
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12l4 6-10 13L2 9z"/><path d="M2 9h20"/><path d="m10 3 2 6"/><path d="m14 3-2 6"/></svg>
+            </template>
+            <UiButton variant="secondary" @click="openCreateModal">Adicionar ativo</UiButton>
+          </EmptyState>
+        </UiCard>
 
         <template v-else>
           <!-- Hero + gráfico -->
-          <div class="hero-card">
-            <div class="hero-head">
-              <div class="hero-info">
-                <div class="hero-summary">
-                  <span class="hero-value">{{ formatCurrency(heroValue) }}</span>
-                  <span class="hero-return" :class="{ negative: heroReturn < 0 }">{{ formatSigned(heroReturn) }}</span>
-                  <span v-if="heroReturnPct !== null" class="hero-pct" :class="{ negative: heroReturn < 0 }">
-                    {{ formatPct(heroReturnPct) }}
-                  </span>
-                </div>
-                <p class="hero-sub">
-                  Custo de aquisição: {{ formatCurrency(heroCost) }}
-                  <span class="hero-date">{{ heroDateLabel }}</span>
-                </p>
-              </div>
+          <ValueHeroCard
+            :points="chartPoints"
+            :current-value="totalValue"
+            :current-cost="totalCost"
+            cost-label="Custo"
+            :period-label="periodLabel"
+            :year-ticks="chartYearTicks"
+          >
+            <template #actions>
               <DateRangePicker initial-preset="year" align="right" @change="onRangeChange" />
-            </div>
-
-            <div class="hero-chart">
-              <AssetsChart :points="chartPoints" currency="EUR" :year-ticks="chartYearTicks" cost-label="Custo" @hover="onChartHover" />
-            </div>
-          </div>
+            </template>
+            <template #footer>
+              <HeroStat label="Custo de aquisição" :value="formatCurrency(totalCost)" />
+            </template>
+          </ValueHeroCard>
 
           <!-- Tabela -->
-          <div class="table-card">
-            <table class="assets-table">
-              <thead>
-                <tr>
-                  <th>Ativo</th>
-                  <th class="num">Custo de aquisição</th>
-                  <th class="num sortable" @click="toggleSort">
-                    Valor atual
-                    <span class="sort-arrow">{{ sortDir === 'desc' ? '↓' : '↑' }}</span>
-                  </th>
-                  <th class="num">Retorno</th>
-                  <th class="num">% Retorno</th>
-                  <th class="chev"></th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="asset in sortedAssets" :key="asset.id" class="asset-row" @click="openAsset(asset)">
-                  <td>
-                    <div class="asset-cell">
-                      <span
-                        class="asset-icon"
-                        :style="{ background: assetCategoryColor(asset.category) + '1f', color: assetCategoryColor(asset.category) }"
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" v-html="assetCategoryIcon(asset.category)"></svg>
-                      </span>
-                      <div class="asset-text">
-                        <span class="asset-name">{{ asset.name }}</span>
-                        <span class="asset-cat">{{ ASSET_CATEGORY_LABELS[asset.category] }}</span>
+          <UiCard flush>
+            <template #header>
+              <div class="table-head">
+                <h2 class="table-title">Ativos</h2>
+                <span class="ui-badge">{{ assetsStore.assets.length }}</span>
+              </div>
+            </template>
+            <div class="ui-table-wrap">
+              <table class="ui-table assets-table">
+                <thead>
+                  <tr>
+                    <th>Ativo</th>
+                    <th class="col-cat">Categoria</th>
+                    <th class="num col-cost">Custo</th>
+                    <th class="num">
+                      <button type="button" class="sort-btn" @click="toggleSort">
+                        Valor atual
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"
+                          :class="{ 'sort-up': sortDir === 'asc' }"
+                        ><polyline points="6 9 12 15 18 9"/></svg>
+                      </button>
+                    </th>
+                    <th class="num">Variação</th>
+                    <th class="col-chev" aria-hidden="true"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="asset in sortedAssets" :key="asset.id" class="asset-row" @click="openAsset(asset)">
+                    <td>
+                      <div class="asset-cell">
+                        <span
+                          class="asset-icon"
+                          :style="{ background: assetCategoryColor(asset.category) + '1f', color: assetCategoryColor(asset.category) }"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" v-html="assetCategoryIcon(asset.category)"></svg>
+                        </span>
+                        <span class="asset-text">
+                          <span class="asset-name">{{ asset.name }}</span>
+                          <span class="asset-cat-inline">{{ ASSET_CATEGORY_LABELS[asset.category] }}</span>
+                        </span>
                       </div>
-                    </div>
-                  </td>
-                  <td class="num">{{ formatCurrency(asset.acquisitionCost) }}</td>
-                  <td class="num strong">{{ formatCurrency(asset.currentValue) }}</td>
-                  <td class="num" :class="assetReturn(asset).abs >= 0 ? 'pos' : 'neg'">
-                    {{ formatSigned(assetReturn(asset).abs) }}
-                  </td>
-                  <td class="num">
-                    <span
-                      v-if="assetReturn(asset).pct !== null"
-                      class="pct-badge"
-                      :class="{ negative: (assetReturn(asset).pct ?? 0) < 0 }"
-                    >
-                      {{ formatPct(assetReturn(asset).pct as number) }}
-                    </span>
-                    <span v-else class="muted">—</span>
-                  </td>
-                  <td class="chev">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+                    </td>
+                    <td class="col-cat">
+                      <span class="ui-badge">{{ ASSET_CATEGORY_LABELS[asset.category] }}</span>
+                    </td>
+                    <td class="num col-cost muted">{{ formatCurrency(asset.acquisitionCost) }}</td>
+                    <td class="num"><span class="ui-amount">{{ formatCurrency(asset.currentValue) }}</span></td>
+                    <td class="num">
+                      <div class="change-cell">
+                        <span class="change-abs" :class="assetReturn(asset).abs >= 0 ? 'ui-amount--pos' : 'ui-amount--neg'">
+                          {{ formatSigned(assetReturn(asset).abs) }}
+                        </span>
+                        <span
+                          v-if="assetReturn(asset).pct !== null"
+                          class="ui-badge"
+                          :class="(assetReturn(asset).pct ?? 0) < 0 ? 'ui-badge--danger' : 'ui-badge--success'"
+                        >
+                          {{ formatPct(assetReturn(asset).pct as number) }}
+                        </span>
+                      </div>
+                    </td>
+                    <td class="col-chev">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </UiCard>
         </template>
       </template>
     </template>
@@ -347,404 +353,142 @@ function openAsset(asset: Asset) {
 
 <style scoped>
 .assets-page {
-  max-width: min(1000px, 100%);
+  max-width: var(--page-max);
   margin: 0 auto;
-  padding: 0 0 3rem;
-}
-
-.page-header {
+  padding: 0 0 var(--space-12);
   display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 1.5rem;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+.assets-page > .page-head {
+  margin-bottom: 0;
 }
 
-.page-header-text {
-  min-width: 0;
+.notice {
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
 }
-
-.page-title {
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: var(--color-text);
-  margin: 0;
-  letter-spacing: -0.02em;
-}
-
-.page-subtitle {
-  font-size: 0.8125rem;
-  color: var(--color-text-muted);
-  margin: 0.25rem 0 0;
-}
-
-.btn-add {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
-  padding: 0.5rem 1rem;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: #fff;
-  background: #166534;
-  border: none;
-  border-radius: 10px;
-  cursor: pointer;
-  transition: background 0.15s, transform 0.15s;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
-.btn-add:hover {
-  background: #15803d;
-  transform: translateY(-1px);
-}
-
-.global-error {
-  margin-bottom: 1rem;
-  padding: 0.75rem 1rem;
-  border-radius: 10px;
-  background: #fef2f2;
-  border: 1px solid #fecaca;
-  color: #b91c1c;
-  font-size: 0.8125rem;
-}
-
-html.dark .global-error {
-  background: rgba(248, 113, 113, 0.1);
-  border-color: rgba(248, 113, 113, 0.3);
-  color: #f87171;
-}
-
-/* ── Hero ── */
-.hero-card {
-  background: var(--color-bg-card);
-  border: 1px solid var(--color-border);
-  border-radius: 16px;
-  padding: 1.5rem;
-  margin-bottom: 1rem;
-}
-
-.hero-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
-}
-
-.hero-info {
-  min-width: 0;
-}
-
-.hero-summary {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 0.625rem;
-}
-
-.hero-value {
-  font-size: 2rem;
-  font-weight: 800;
-  color: #166534;
-  letter-spacing: -0.03em;
-}
-
-html.dark .hero-value {
-  color: #4ade80;
-}
-
-.hero-return {
-  font-size: 0.9375rem;
-  font-weight: 600;
-  color: #166534;
-}
-
-html.dark .hero-return {
-  color: #4ade80;
-}
-
-.hero-return.negative,
-.hero-pct.negative {
-  color: #dc2626;
-}
-
-html.dark .hero-return.negative,
-html.dark .hero-pct.negative {
-  color: #f87171;
-}
-
-.hero-pct {
-  font-size: 0.8125rem;
-  font-weight: 700;
-  color: #166534;
-  background: rgba(22, 101, 52, 0.1);
-  padding: 0.15rem 0.5rem;
-  border-radius: 999px;
-}
-
-html.dark .hero-pct {
-  color: #4ade80;
-  background: rgba(74, 222, 128, 0.12);
-}
-
-.hero-pct.negative {
-  background: rgba(220, 38, 38, 0.1);
-}
-
-.hero-sub {
-  font-size: 0.8125rem;
-  color: var(--color-text-muted);
-  margin: 0.5rem 0 0;
-}
-
-.hero-date {
-  margin-left: 0.5rem;
-  color: var(--color-text-muted);
-}
-
-.hero-chart {
-  margin-top: 1rem;
+.notice--danger {
+  background: var(--color-danger-soft);
+  border: 1px solid var(--color-danger-border);
+  color: var(--color-danger);
 }
 
 /* ── Tabela ── */
-.table-card {
-  background: var(--color-bg-card);
-  border: 1px solid var(--color-border);
-  border-radius: 16px;
-  overflow: hidden;
+.table-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
 }
-
-.assets-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.875rem;
+.table-title {
+  margin: 0;
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-strong);
 }
-
-.assets-table th {
-  text-align: left;
-  font-size: 0.6875rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--color-text-muted);
-  padding: 0.875rem 1.25rem;
-  border-bottom: 1px solid var(--color-border);
-  white-space: nowrap;
-}
-
-.assets-table th.num {
-  text-align: right;
-}
-
-.assets-table th.sortable {
-  cursor: pointer;
-  user-select: none;
-}
-
-.assets-table th.sortable:hover {
-  color: var(--color-text);
-}
-
-.sort-arrow {
-  margin-left: 0.25rem;
-}
-
-.assets-table th.chev {
-  width: 36px;
-}
-
 .asset-row {
   cursor: pointer;
-  transition: background 0.12s;
 }
-
-.asset-row:hover {
-  background: var(--color-table-row-hover);
-}
-
-.assets-table td {
-  padding: 0.875rem 1.25rem;
-  border-bottom: 1px solid var(--color-border);
-  color: var(--color-text);
-  white-space: nowrap;
-}
-
-.assets-table tbody tr:last-child td {
-  border-bottom: none;
-}
-
-.assets-table .num {
-  text-align: right;
-}
-
-.assets-table .strong {
-  font-weight: 700;
-}
-
-.assets-table .pos {
-  color: #166534;
-  font-weight: 600;
-}
-
-html.dark .assets-table .pos {
-  color: #4ade80;
-}
-
-.assets-table .neg {
-  color: #dc2626;
-  font-weight: 600;
-}
-
-html.dark .assets-table .neg {
-  color: #f87171;
-}
-
-.assets-table .muted {
-  color: var(--color-text-muted);
-}
-
 .asset-cell {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: var(--space-3);
+  min-width: 0;
 }
-
 .asset-icon {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
-  flex-shrink: 0;
-  border-radius: 10px;
 }
-
 .asset-text {
   display: flex;
   flex-direction: column;
   min-width: 0;
 }
-
 .asset-name {
-  font-weight: 600;
-  color: var(--color-text);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-strong);
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 280px;
 }
-
-.asset-cat {
-  font-size: 0.75rem;
+.asset-cat-inline {
+  display: none;
+  font-size: var(--text-xs);
   color: var(--color-text-muted);
 }
-
-.pct-badge {
-  display: inline-block;
-  font-size: 0.75rem;
-  font-weight: 700;
-  color: #166534;
-  background: rgba(22, 101, 52, 0.1);
-  padding: 0.15rem 0.5rem;
-  border-radius: 999px;
-}
-
-html.dark .pct-badge {
-  color: #4ade80;
-  background: rgba(74, 222, 128, 0.12);
-}
-
-.pct-badge.negative {
-  color: #dc2626;
-  background: rgba(220, 38, 38, 0.1);
-}
-
-html.dark .pct-badge.negative {
-  color: #f87171;
-}
-
-.assets-table .chev {
+.muted {
   color: var(--color-text-muted);
-  text-align: right;
 }
-
-/* ── Estados ── */
-.empty-card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 3rem 1.5rem;
-  background: var(--color-bg-card);
-  border: 1px dashed var(--color-border);
-  border-radius: 14px;
-  text-align: center;
-}
-
-.empty-icon {
-  color: var(--color-text-muted);
-  margin-bottom: 0.5rem;
-}
-
-.empty-text {
-  font-size: 0.9375rem;
-  font-weight: 600;
-  color: var(--color-text);
-  margin: 0;
-}
-
-.empty-hint {
-  font-size: 0.8125rem;
-  color: var(--color-text-muted);
-  margin: 0 0 0.5rem;
-  max-width: 36ch;
-}
-
-.btn-confirm {
+.change-cell {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  padding: 0.5rem 1rem;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: #fff;
-  background: #166534;
+  gap: var(--space-2);
+  justify-content: flex-end;
+}
+.change-abs {
+  font-weight: var(--weight-medium);
+  white-space: nowrap;
+}
+.sort-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
   border: none;
-  border-radius: 8px;
+  background: none;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: inherit;
   cursor: pointer;
 }
-
-.btn-confirm:hover {
-  background: #15803d;
+.sort-btn:hover {
+  color: var(--color-text);
 }
-
-.loading-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 4rem 1rem;
+.sort-btn svg {
+  transition: transform var(--transition-fast);
+}
+.sort-btn .sort-up {
+  transform: rotate(180deg);
+}
+.col-chev {
+  width: 36px;
+  color: var(--color-text-subtle);
+  text-align: right;
+}
+.col-chev svg {
+  display: block;
+  margin-left: auto;
+}
+.asset-row:hover .col-chev {
   color: var(--color-text-muted);
 }
 
-.spinner {
-  width: 32px;
-  height: 32px;
-  border: 3px solid var(--color-border);
-  border-top-color: #166534;
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
+@media (max-width: 860px) {
+  .col-cat {
+    display: none;
+  }
+  .asset-cat-inline {
+    display: block;
   }
 }
-
-@media (max-width: 640px) {
-  .assets-table th.num:nth-child(2),
-  .assets-table td.num:nth-child(2) {
+@media (max-width: 600px) {
+  .col-cost,
+  .col-chev {
     display: none;
+  }
+  .change-abs {
+    display: none;
+  }
+  .asset-name {
+    max-width: 150px;
   }
 }
 </style>

@@ -196,59 +196,59 @@ onUnmounted(() => {
 .ia {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: var(--space-3);
 }
 
 .ia-input-wrap {
   display: flex;
   align-items: center;
-  gap: 0.625rem;
-  padding: 0.75rem 1rem;
-  background: var(--color-input-bg, #fff);
-  border: 1.5px solid var(--color-input-border, #e2e8f0);
-  border-radius: 12px;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  gap: 10px;
+  height: 40px;
+  box-sizing: border-box;
+  padding: 0 12px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
-
+.ia-input-wrap:hover:not(:focus-within) {
+  border-color: var(--color-text-subtle);
+}
 .ia-input-wrap:focus-within {
-  border-color: #166534;
-  box-shadow: 0 0 0 2px rgba(22, 101, 52, 0.18);
+  border-color: var(--color-primary);
+  box-shadow: var(--focus-ring);
 }
-
-html.dark .ia-input-wrap:focus-within {
-  border-color: #4ade80;
-  box-shadow: 0 0 0 2px rgba(74, 222, 128, 0.18);
-}
-
 .ia-input-wrap.is-error {
-  border-color: #dc2626;
+  border-color: var(--color-danger);
 }
 
 .ia-search-icon {
   flex-shrink: 0;
-  color: var(--color-text-muted, #94a3b8);
+  width: 16px;
+  height: 16px;
+  color: var(--color-text-subtle);
 }
 
 .ia-input {
   flex: 1;
   min-width: 0;
+  height: 100%;
+  padding: 0;
   border: none;
   outline: none;
   background: transparent;
   font-family: inherit;
-  font-size: 0.9375rem;
-  color: var(--color-text, #0f172a);
+  font-size: var(--text-base);
+  color: var(--color-text-strong);
 }
-
 .ia-input:focus,
 .ia-input:focus-visible {
   border: none;
   outline: none;
   box-shadow: none;
 }
-
 .ia-input::placeholder {
-  color: var(--color-text-muted, #94a3b8);
+  color: var(--color-text-subtle);
 }
 
 .ia-spinner {
@@ -256,11 +256,10 @@ html.dark .ia-input-wrap:focus-within {
   height: 16px;
   flex-shrink: 0;
   border: 2px solid var(--color-border);
-  border-top-color: #166534;
+  border-top-color: var(--color-primary-text);
   border-radius: 50%;
   animation: ia-spin 0.7s linear infinite;
 }
-
 @keyframes ia-spin {
   to {
     transform: rotate(360deg);
@@ -269,125 +268,110 @@ html.dark .ia-input-wrap:focus-within {
 
 .ia-chips {
   display: flex;
-  gap: 0.4rem;
+  gap: 6px;
   flex-wrap: wrap;
 }
-
 .ia-chip {
   display: inline-flex;
   align-items: center;
-  padding: 0.35rem 0.75rem;
-  font-size: 0.75rem;
-  font-weight: 600;
+  height: 28px;
+  padding: 0 12px;
   font-family: inherit;
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
   border: 1px solid var(--color-border);
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   background: transparent;
-  color: var(--color-text-muted);
+  color: var(--color-text-secondary);
   cursor: pointer;
-  transition: border-color 0.15s, color 0.15s, background 0.15s;
   white-space: nowrap;
+  transition: border-color var(--transition-fast), color var(--transition-fast), background var(--transition-fast);
 }
-
 .ia-chip:hover {
-  border-color: #166534;
-  color: #166534;
+  background: var(--color-surface-muted);
+  color: var(--color-text-strong);
 }
-
 .ia-chip.active {
-  border-color: #166534;
-  background: rgba(22, 101, 52, 0.1);
-  color: #166534;
-}
-
-html.dark .ia-chip.active {
-  border-color: #4ade80;
-  background: rgba(74, 222, 128, 0.12);
-  color: #4ade80;
-}
-
-html.dark .ia-chip:hover {
-  border-color: #4ade80;
-  color: #4ade80;
+  border-color: var(--color-border-strong);
+  background: var(--color-selected);
+  color: var(--color-selected-text);
 }
 
 .ia-results {
   display: flex;
   flex-direction: column;
-  gap: 0.15rem;
+  gap: 2px;
   max-height: 320px;
   overflow-y: auto;
+  padding: 4px;
   border: 1px solid var(--color-border);
-  border-radius: 12px;
-  padding: 0.375rem;
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
 }
 
 .ia-section {
-  font-size: 0.6875rem;
-  font-weight: 600;
+  margin: 8px 10px 4px;
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--tracking-caps);
   color: var(--color-text-muted);
-  margin: 0.375rem 0.5rem 0.25rem;
 }
 
 .ia-option {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: var(--space-3);
   width: 100%;
-  padding: 0.5rem 0.625rem;
+  padding: 6px 10px 6px 6px;
   border: none;
   background: transparent;
   font-family: inherit;
   color: var(--color-text);
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   text-align: left;
 }
-
 .ia-option.is-active {
-  background: var(--color-table-row-hover, #f1f5f9);
+  background: var(--color-surface-muted);
 }
 
 .ia-option-text {
   display: flex;
   flex-direction: column;
-  gap: 0.1rem;
+  gap: 2px;
   min-width: 0;
   flex: 1;
 }
-
 .ia-name {
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: var(--color-text);
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-strong);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
 .ia-sub {
-  font-size: 0.6875rem;
+  font-size: var(--text-xs);
   color: var(--color-text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
 .ia-ticker {
   flex-shrink: 0;
-  font-size: 0.75rem;
-  font-weight: 700;
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
   letter-spacing: 0.02em;
   color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
 }
 
 .ia-empty {
-  padding: 1rem 0.625rem;
-  font-size: 0.8125rem;
+  margin: 0;
+  padding: var(--space-4) 10px;
+  font-size: var(--text-sm);
   color: var(--color-text-muted);
   text-align: center;
-  margin: 0;
 }
 </style>

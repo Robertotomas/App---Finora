@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { nextTick, onMounted, ref } from 'vue'
+import UiButton from './ui/UiButton.vue'
 
 const emit = defineEmits<{
   close: []
@@ -43,7 +44,7 @@ onMounted(async () => {
       <div class="modal-header">
         <h2 id="privacy-title" class="modal-title">Política de Privacidade</h2>
         <button type="button" class="modal-close" aria-label="Fechar" @click="emit('close')">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" x2="6" y1="6" y2="18"/><line x1="6" x2="18" y1="6" y2="18"/></svg>
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" x2="6" y1="6" y2="18"/><line x1="6" x2="18" y1="6" y2="18"/></svg>
         </button>
       </div>
 
@@ -103,196 +104,194 @@ onMounted(async () => {
 
       <div class="modal-footer">
         <p v-if="!reachedEnd" class="terms-hint">Leia a política até ao fim para continuar.</p>
-        <button
-          type="button"
-          class="terms-accept-btn"
-          :disabled="!reachedEnd"
-          @click="emit('close')"
-        >
-          Li e compreendi
-        </button>
+        <UiButton block :disabled="!reachedEnd" @click="emit('close')">Li e compreendi</UiButton>
       </div>
     </div>
   </div>
 </template>
 
 <style scoped>
+/* Mesmo aspeto do BaseModal (que não é usado aqui porque o corpo precisa de um ref para o
+   gate de leitura até ao fim). */
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: var(--color-modal-overlay, rgba(15, 23, 42, 0.5));
+  z-index: var(--z-modal);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 60;
-  padding: 1rem;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  animation: overlay-in 0.2s ease;
-}
-
-@keyframes overlay-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  padding: var(--space-4);
+  background: var(--color-modal-overlay);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  animation: legal-fade 160ms ease-out;
 }
 
 .modal {
   position: relative;
-  background: var(--color-bg-card, #ffffff);
-  border: 1px solid var(--color-border, #e2e8f0);
-  border-radius: 14px;
-  padding: 1.5rem;
-  max-width: 620px;
-  width: 100%;
-  max-height: calc(100vh - 2rem);
   display: flex;
   flex-direction: column;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
-  animation: modal-in 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-@keyframes modal-in {
-  from { opacity: 0; transform: scale(0.96) translateY(8px); }
-  to { opacity: 1; transform: scale(1) translateY(0); }
+  width: 100%;
+  max-width: 640px;
+  max-height: calc(100vh - 2rem);
+  max-height: calc(100dvh - 2rem);
+  background: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  animation: legal-in 160ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .modal-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 1rem;
+  gap: var(--space-4);
+  padding: var(--space-5) var(--space-5) var(--space-4);
   flex-shrink: 0;
 }
-
 .modal-title {
-  font-size: 1.125rem;
-  font-weight: 700;
-  color: var(--color-text, #0f172a);
   margin: 0;
-  line-height: 1.3;
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+  line-height: 1.35;
+  color: var(--color-text-strong);
 }
-
 .modal-close {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 32px;
   height: 32px;
+  margin-right: -6px;
   padding: 0;
-  background: transparent;
-  border: 1px solid var(--color-border, #e2e8f0);
-  border-radius: 8px;
-  color: var(--color-text-muted, #64748b);
-  cursor: pointer;
   flex-shrink: 0;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
 }
-
 .modal-close:hover {
-  background: var(--color-table-row-hover, #f8fafc);
-  color: var(--color-text, #334155);
-  border-color: var(--color-text-muted, #94a3b8);
+  background: var(--color-surface-muted);
+  color: var(--color-text-strong);
+}
+.modal-close:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
 }
 
+/* Barra de progresso de leitura (encostada ao topo do corpo) */
 .read-progress {
   flex-shrink: 0;
-  height: 3px;
-  border-radius: 999px;
-  background: var(--color-border, #e2e8f0);
+  height: 2px;
+  background: var(--color-border-subtle);
   overflow: hidden;
-  margin-bottom: 0.875rem;
 }
 .read-progress-fill {
   height: 100%;
   width: 0;
-  border-radius: 999px;
-  background: #166534;
+  background: var(--color-primary-text);
   transition: width 0.12s linear;
-}
-:global(html.dark) .read-progress-fill {
-  background: #4ade80;
 }
 
 .modal-body {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  margin: 0 -0.5rem;
-  padding: 0 0.75rem 0 0.5rem;
+  padding: var(--space-4) var(--space-5) var(--space-5);
 }
 
 .terms-body {
-  color: var(--color-text, #334155);
-  font-size: 0.875rem;
-  line-height: 1.6;
+  font-size: var(--text-base);
+  line-height: 1.65;
+  color: var(--color-text-secondary);
 }
-
+.terms-body strong {
+  color: var(--color-text-strong);
+}
 .terms-updated {
-  font-size: 0.8125rem;
-  color: var(--color-text-muted, #94a3b8);
-  margin: 0 0 1rem;
+  margin: 0 0 var(--space-4);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
 }
-
 .terms-body h3 {
-  font-size: 0.9375rem;
-  font-weight: 700;
-  color: var(--color-text, #0f172a);
-  margin: 1.25rem 0 0.4rem;
+  margin: var(--space-5) 0 6px;
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-strong);
 }
-
 .terms-body p {
-  margin: 0 0 0.75rem;
+  margin: 0 0 var(--space-3);
 }
-
-.terms-end {
+.terms-body .terms-end {
+  margin: var(--space-6) 0 var(--space-2);
   text-align: center;
-  font-weight: 600;
-  color: var(--color-text-muted, #94a3b8);
-  margin: 1.5rem 0 0.5rem;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-subtle);
 }
 
 .modal-footer {
-  flex-shrink: 0;
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 0.6rem;
-  padding-top: 1rem;
-  margin-top: 0.5rem;
-  border-top: 1px solid var(--color-border, #e2e8f0);
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-5);
+  border-top: 1px solid var(--color-border-subtle);
+  flex-shrink: 0;
 }
-
 .terms-hint {
   margin: 0;
-  font-size: 0.8125rem;
-  color: var(--color-text-muted, #94a3b8);
+  font-size: var(--text-xs);
   text-align: center;
+  color: var(--color-text-muted);
 }
 
-.terms-accept-btn {
-  width: 100%;
-  padding: 0.75rem 1rem;
-  background: linear-gradient(135deg, #166534 0%, #15803d 100%);
-  color: #fff;
-  border: none;
-  border-radius: 10px;
-  font-size: 0.9375rem;
-  font-weight: 700;
-  cursor: pointer;
-  font-family: inherit;
-  transition: transform 0.1s, box-shadow 0.15s, opacity 0.15s;
-  box-shadow: 0 2px 8px rgba(22, 101, 52, 0.25);
+@keyframes legal-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes legal-in {
+  from { opacity: 0; transform: scale(0.98); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes legal-sheet-in {
+  from { opacity: 0.6; transform: translateY(24px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
-.terms-accept-btn:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 6px 20px rgba(22, 101, 52, 0.3);
+@media (max-width: 640px) {
+  .modal-overlay {
+    align-items: flex-end;
+    padding: 0;
+  }
+  .modal {
+    max-width: none;
+    max-height: 90vh;
+    max-height: 90dvh;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    border-bottom: none;
+    animation: legal-sheet-in 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .modal-header {
+    padding: var(--space-4) var(--space-4) var(--space-3);
+  }
+  .modal-body {
+    padding: var(--space-3) var(--space-4) var(--space-4);
+  }
+  .modal-footer {
+    padding: var(--space-3) var(--space-4) calc(var(--space-3) + env(safe-area-inset-bottom, 0px));
+  }
 }
 
-.terms-accept-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  box-shadow: none;
+@media (prefers-reduced-motion: reduce) {
+  .modal-overlay,
+  .modal {
+    animation: none;
+  }
 }
 </style>

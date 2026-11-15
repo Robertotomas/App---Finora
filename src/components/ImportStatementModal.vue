@@ -1,53 +1,62 @@
 <script setup lang="ts">
+import { PT_GROUPING } from '@/utils/numberFormat'
 import { ref, computed } from 'vue'
 import BaseModal from './BaseModal.vue'
+import BaseSelect from './BaseSelect.vue'
+import UiButton from './ui/UiButton.vue'
 import { investmentsApi } from '@/api/investments'
-import { parseXtbWorkbook } from '@/utils/xtbExcel'
+import { useInvestmentsStore } from '@/stores/investments'
+import { useToast } from '@/composables/useToast'
 import {
-  readTable, autoMap, buildTrades, detectSideMode, saveMapping, loadSavedMapping, profileKeyFor,
-  FIELD_DEFS,
+  parseStatement, importWithMapping, detectSideMode, saveMapping, isMappingValid, FIELD_DEFS,
 } from '@/utils/brokerImport'
-import type { ColumnMapping, FieldKey } from '@/utils/brokerImport'
-import type { InvestmentImportResult, BrokerTrade, BrokerDeposit } from '@/types/investment'
+import type { ColumnMapping, FieldKey, NormalizedImport, TableAdapter, TableData, FxFeeEstimate } from '@/utils/brokerImport'
+import type { InvestmentImportResult } from '@/types/investment'
 
 defineProps<{ open: boolean }>()
 const emit = defineEmits<{ close: []; done: [created: number] }>()
+
+const store = useInvestmentsStore()
+const toast = useToast()
 
 type Step = 'pick' | 'mapping' | 'preview'
 const step = ref<Step>('pick')
 
 const file = ref<File | null>(null)
-const items = ref<BrokerTrade[]>([])
-const deposits = ref<BrokerDeposit[]>([])
-const hasUnparsedRows = ref(false)
+const normalized = ref<NormalizedImport | null>(null)
 const previewing = ref(false)
 const importing = ref(false)
 const preview = ref<InvestmentImportResult | null>(null)
 const error = ref<string | null>(null)
 const fileInput = ref<HTMLInputElement | null>(null)
 
-// Estado do mapeador genérico
-const headers = ref<string[]>([])
-const rows = ref<string[][]>([])
+// Estado do mapeador (genérico, ou corretora detetada cujas colunas não foram todas reconhecidas)
+const table = ref<TableData | null>(null)
 const mapping = ref<ColumnMapping>({})
-const profileKey = ref('')
+const mappingAdapter = ref<TableAdapter | null>(null)
+const mappingLabel = ref('')
+
+// Taxa de conversão: definição atual do agregado + checkbox "Usar X%" (só aplicada ao importar).
+const currentFee = ref<number | null>(null)
+const applyFee = ref(false)
 
 const fields = FIELD_DEFS
+const headers = computed(() => table.value?.headers ?? [])
+const rows = computed(() => table.value?.rows ?? [])
 
 function reset() {
   step.value = 'pick'
   file.value = null
-  items.value = []
-  deposits.value = []
-  hasUnparsedRows.value = false
+  normalized.value = null
   preview.value = null
   error.value = null
   previewing.value = false
   importing.value = false
-  headers.value = []
-  rows.value = []
+  table.value = null
   mapping.value = {}
-  profileKey.value = ''
+  mappingAdapter.value = null
+  mappingLabel.value = ''
+  applyFee.value = false
 }
 
 function handleClose() {
@@ -77,31 +86,25 @@ async function loadFile(f: File) {
   error.value = null
   preview.value = null
   previewing.value = true
+  // Em paralelo: a taxa atual do agregado (para comparar com a detetada). Tolerante a falhas.
+  const feePromise = store.fetchSettings().then((v) => { currentFee.value = v }).catch(() => {})
   try {
-    // 1) XTB (Excel multi-folha) — deteção dedicada.
-    if (/\.(xlsx|xls)$/i.test(f.name)) {
-      const xtb = await parseXtbWorkbook(f)
-      if (xtb.items.length > 0) {
-        items.value = xtb.items
-        deposits.value = xtb.deposits
-        hasUnparsedRows.value = xtb.hasUnparsedRows
-        await runPreview()
-        return
-      }
+    const outcome = await parseStatement(f)
+    if (outcome.kind === 'error') {
+      error.value = outcome.message
+      return
     }
-
-    // 2) Genérico (CSV/Excel de tabela plana) — mapeamento de colunas.
-    const table = await readTable(f)
-    if (table.error) { error.value = table.error; return }
-    if (table.rows.length === 0) { error.value = 'O ficheiro não tem linhas de dados.'; return }
-
-    headers.value = table.headers
-    rows.value = table.rows
-    profileKey.value = profileKeyFor(table.headers)
-    mapping.value = loadSavedMapping(table.headers) ?? autoMap(table.headers)
-    // Se reconheceu as colunas todas, vai direto à pré-visualização (sem o ecrã de mapeamento).
-    if (mappingValid.value) await confirmMapping()
-    else step.value = 'mapping'
+    table.value = outcome.table
+    if (outcome.kind === 'mapping') {
+      mapping.value = outcome.mapping
+      mappingAdapter.value = outcome.adapter
+      mappingLabel.value = outcome.brokerLabel
+      step.value = 'mapping'
+      return
+    }
+    normalized.value = outcome.data
+    await feePromise
+    await runPreview()
   } catch {
     error.value = 'Não foi possível ler o ficheiro. Tente novamente.'
   } finally {
@@ -109,8 +112,21 @@ async function loadFile(f: File) {
   }
 }
 
+/** "Não é esta corretora?" → mapeamento manual (genérico, sem os extras do adaptador). */
+function mapManually() {
+  if (!table.value) return
+  mappingAdapter.value = null
+  mappingLabel.value = ''
+  preview.value = null
+  error.value = null
+  step.value = 'mapping'
+}
+
 /* ── Mapeamento ── */
-const columnOptions = computed(() => headers.value.map((h, i) => ({ value: i, label: h || `Coluna ${i + 1}` })))
+const columnOptions = computed(() => [
+  { value: -1, label: '—' },
+  ...headers.value.map((h, i) => ({ value: i, label: h || `Coluna ${i + 1}` })),
+])
 
 function colValue(key: FieldKey): number {
   const v = mapping.value[key]
@@ -130,29 +146,40 @@ function sampleFor(key: FieldKey): string {
 }
 
 const sideBySign = computed(() => rows.value.length > 0 && detectSideMode(rows.value, mapping.value).mode === 'sign')
-const mappingValid = computed(() => {
-  const m = mapping.value
-  return m.date != null && m.quantity != null && (m.price != null || m.amount != null) && (m.ticker != null || m.isin != null)
-})
+const mappingValid = computed(() => isMappingValid(mapping.value))
 
 async function confirmMapping() {
-  if (!mappingValid.value) return
-  const built = buildTrades(rows.value, mapping.value, profileKey.value)
-  if (built.items.length === 0) {
+  if (!mappingValid.value || !table.value) return
+  const data = importWithMapping(table.value, mapping.value, mappingAdapter.value)
+  if (data.trades.length === 0) {
     error.value = 'Não foi possível extrair compras/vendas com este mapeamento. Verifique as colunas.'
     return
   }
-  saveMapping(headers.value, mapping.value)
-  items.value = built.items
-  hasUnparsedRows.value = built.failed > 0
+  saveMapping(table.value.headers, mapping.value)
+  normalized.value = data
   await runPreview()
 }
 
+const hasNewData = computed(
+  () =>
+    !!preview.value &&
+    (preview.value.created > 0 ||
+      preview.value.depositsImported > 0 ||
+      (preview.value.dividendsImported ?? 0) > 0 ||
+      (preview.value.cashMovementsImported ?? 0) > 0),
+)
+
+function send(n: NormalizedImport, dryRun: boolean) {
+  return investmentsApi.import(n.trades, n.hasUnparsedRows, dryRun, n.deposits, n.dividends, n.fxSamples, n.cashMovements ?? [])
+}
+
 async function runPreview() {
+  const n = normalized.value
+  if (!n) return
   previewing.value = true
   error.value = null
   try {
-    const { data } = await investmentsApi.import(items.value, hasUnparsedRows.value, true, deposits.value)
+    const { data } = await send(n, true)
     preview.value = data
     step.value = 'preview'
     if (data.error) error.value = data.error
@@ -164,13 +191,26 @@ async function runPreview() {
 }
 
 async function confirmImport() {
-  // Permite importar se há transações novas OU depósitos novos.
-  if (!preview.value || (preview.value.created === 0 && preview.value.depositsImported === 0)) return
+  // Importa se há transações, depósitos ou dividendos novos; aplica a taxa só se a checkbox estiver marcada.
+  const n = normalized.value
+  const saveFee = applyFee.value && showFeeNotice.value && detectedFee.value
+  if (!n || !preview.value || (!hasNewData.value && !saveFee)) return
   importing.value = true
   error.value = null
   try {
-    const { data } = await investmentsApi.import(items.value, hasUnparsedRows.value, false, deposits.value)
-    emit('done', data.created)
+    let created = 0
+    if (hasNewData.value) created = (await send(n, false)).data.created
+    if (saveFee) {
+      try {
+        currentFee.value = await store.saveSettings(saveFee.percent)
+        toast.success(`Taxa de conversão definida para ${fmtPct(saveFee.percent)}`)
+      } catch {
+        toast.error(hasNewData.value
+          ? 'Os dados foram importados, mas não foi possível atualizar a taxa de conversão.'
+          : 'Não foi possível atualizar a taxa de conversão. Tente novamente.')
+      }
+    }
+    emit('done', created)
     reset()
   } catch {
     error.value = 'Falha ao importar. Tente novamente.'
@@ -179,15 +219,38 @@ async function confirmImport() {
   }
 }
 
+/* ── Corretora detetada ── */
+const brokerLabel = computed(() => normalized.value?.brokerLabel ?? '')
+const isDetected = computed(() => !!normalized.value && normalized.value.broker !== 'generic')
+const counts = computed(() => ({
+  trades: normalized.value?.trades.length ?? 0,
+  deposits: normalized.value?.deposits.length ?? 0,
+  dividends: normalized.value?.dividends.length ?? 0,
+}))
+const warnings = computed(() => normalized.value?.warnings ?? [])
+
+/* ── Taxa de conversão detetada (explícita no extrato, ou inferida no servidor) ── */
+const detectedFee = computed<FxFeeEstimate | null>(() => {
+  const explicit = normalized.value?.fxFee
+  if (explicit) return explicit
+  const inferred = preview.value?.fxFeeEstimate
+  return inferred ? { percent: Number(inferred.percent), source: inferred.source, sampleSize: inferred.sampleSize } : null
+})
+const showFeeNotice = computed(
+  () => !!detectedFee.value && currentFee.value != null && Math.abs(detectedFee.value.percent - currentFee.value) >= 0.01,
+)
+function fmtPct(v: number): string {
+  return new Intl.NumberFormat('pt-PT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v) + '%'
+}
 function fmtPrice(v: number, ccy: string): string {
   try {
-    return new Intl.NumberFormat('pt-PT', { style: 'currency', currency: ccy || 'EUR' }).format(v)
+    return new Intl.NumberFormat('pt-PT', { ...PT_GROUPING, style: 'currency', currency: ccy || 'EUR' }).format(v)
   } catch {
     return `${v} ${ccy}`
   }
 }
 function fmtQty(v: number): string {
-  return new Intl.NumberFormat('pt-PT', { maximumFractionDigits: 6 }).format(v)
+  return new Intl.NumberFormat('pt-PT', { ...PT_GROUPING, maximumFractionDigits: 6 }).format(v)
 }
 function fmtDate(iso: string): string {
   const d = new Date(iso + 'T00:00:00')
@@ -196,7 +259,11 @@ function fmtDate(iso: string): string {
 </script>
 
 <template>
-  <BaseModal v-if="open" title="Importar de corretora" @close="handleClose">
+  <BaseModal
+    v-if="open"
+    title="Importar de corretora"
+    @close="handleClose"
+  >
     <div class="imp">
       <!-- Passo 1: escolher ficheiro -->
       <template v-if="step === 'pick'">
@@ -219,14 +286,15 @@ function fmtDate(iso: string): string {
 
         <p v-if="error" class="imp-error">{{ error }}</p>
 
-        <div class="modal-actions">
-          <button type="button" class="btn-cancel" :disabled="previewing" @click="handleClose">Fechar</button>
-        </div>
       </template>
 
       <!-- Passo 2: mapeamento de colunas (genérico) -->
       <template v-else-if="step === 'mapping'">
-        <p class="imp-intro">Associe as colunas do seu ficheiro aos campos. Auto-preenchemos o que reconhecemos.</p>
+        <p v-if="mappingLabel && mappingAdapter" class="imp-intro">
+          Detetámos um extrato da <strong>{{ mappingLabel }}</strong>, mas não reconhecemos todas as colunas.
+          Associe-as aos campos — auto-preenchemos o que reconhecemos.
+        </p>
+        <p v-else class="imp-intro">Associe as colunas do seu ficheiro aos campos. Auto-preenchemos o que reconhecemos.</p>
 
         <div class="imp-map">
           <div v-for="f in fields" :key="f.key" class="imp-map-row">
@@ -234,10 +302,12 @@ function fmtDate(iso: string): string {
               {{ f.label }}<span v-if="f.required" class="imp-req">*</span>
             </label>
             <div class="imp-map-control">
-              <select class="imp-select" :value="colValue(f.key)" @change="setCol(f.key, Number(($event.target as HTMLSelectElement).value))">
-                <option :value="-1">—</option>
-                <option v-for="o in columnOptions" :key="o.value" :value="o.value">{{ o.label }}</option>
-              </select>
+              <BaseSelect
+                :model-value="colValue(f.key)"
+                :options="columnOptions"
+                placeholder="—"
+                @update:model-value="(v) => setCol(f.key, Number(v))"
+              />
               <span v-if="sampleFor(f.key)" class="imp-map-sample">ex.: {{ sampleFor(f.key) }}</span>
             </div>
           </div>
@@ -248,16 +318,23 @@ function fmtDate(iso: string): string {
         </p>
         <p v-if="error" class="imp-error">{{ error }}</p>
 
-        <div class="modal-actions">
-          <button type="button" class="btn-cancel" :disabled="previewing" @click="reset">Voltar</button>
-          <button type="button" class="btn-primary" :disabled="previewing || !mappingValid" @click="confirmMapping">
-            {{ previewing ? 'A processar…' : 'Continuar' }}
-          </button>
-        </div>
       </template>
 
       <!-- Passo 3: pré-visualização -->
       <template v-else-if="step === 'preview' && preview">
+        <div v-if="isDetected" class="imp-broker">
+          <p class="imp-broker-label">Detetámos: <strong>{{ brokerLabel }}</strong></p>
+          <button v-if="table && table.headers.length" type="button" class="imp-link" @click="mapManually">
+            Não é esta corretora? Mapear colunas manualmente
+          </button>
+        </div>
+
+        <p class="imp-counts">
+          No ficheiro: {{ counts.trades }} {{ counts.trades === 1 ? 'operação' : 'operações' }}
+          · {{ counts.deposits }} {{ counts.deposits === 1 ? 'depósito' : 'depósitos' }}
+          · {{ counts.dividends }} {{ counts.dividends === 1 ? 'dividendo' : 'dividendos' }}
+        </p>
+
         <div class="imp-summary">
           <div class="imp-stat">
             <span class="imp-stat-num">{{ preview.detected }}</span>
@@ -277,13 +354,51 @@ function fmtDate(iso: string): string {
           {{ preview.skipped }} {{ preview.skipped === 1 ? 'transação já existia' : 'transações já existiam' }}
           e {{ preview.skipped === 1 ? 'foi ignorada' : 'foram ignoradas' }}.
         </p>
-        <p v-if="preview.hasUnparsedRows" class="imp-warn">
+        <p v-if="preview.hasUnparsedRows" class="modal-note modal-note--warning">
           Algumas linhas não foram reconhecidas. Confirme os valores antes de importar.
         </p>
+        <p v-for="(w, i) in warnings" :key="'w' + i" class="imp-note">{{ w }}</p>
+
+        <div v-if="detectedFee && currentFee != null" class="imp-fee">
+          <p class="imp-fee-title">
+            Taxa de conversão {{ detectedFee.source === 'explicit' ? 'indicada no extrato' : 'estimada' }}:
+            <strong>{{ fmtPct(detectedFee.percent) }}</strong>
+          </p>
+          <p class="imp-fee-text">
+            <template v-if="detectedFee.source === 'explicit'">
+              Valor cobrado pela corretora nas conversões de moeda, lido diretamente do ficheiro.
+            </template>
+            <template v-else>
+              É uma estimativa: comparámos o câmbio aplicado em {{ detectedFee.sampleSize }}
+              {{ detectedFee.sampleSize === 1 ? 'operação' : 'operações' }} com o câmbio de referência do BCE.
+              Pode diferir ligeiramente da taxa oficial da corretora — confirme no site da corretora.
+            </template>
+          </p>
+          <p v-if="!showFeeNotice" class="imp-fee-text">
+            É igual à taxa que já está definida — não é preciso alterar nada.
+          </p>
+          <template v-else>
+          <label class="checkbox-row imp-fee-check">
+            <input v-model="applyFee" type="checkbox" />
+            Usar {{ fmtPct(detectedFee.percent) }} como taxa de conversão
+          </label>
+          <p class="imp-fee-text">
+            Se não marcar, mantém-se a taxa atual de <strong>{{ fmtPct(currentFee) }}</strong>{{ currentFee === 0 ? ' (sem taxa)' : '' }}.
+            Pode alterá-la a qualquer momento em Investimentos, no menu "⋯" → "Taxa de conversão da corretora".
+          </p>
+          </template>
+        </div>
         <p v-if="preview.depositsImported > 0" class="imp-note">
           + {{ preview.depositsImported }} {{ preview.depositsImported === 1 ? 'depósito' : 'depósitos' }} para a métrica de depósitos.
         </p>
-        <p v-if="preview.created === 0 && preview.depositsImported === 0" class="imp-note">Não há dados novos para importar.</p>
+        <p v-if="(preview.dividendsImported ?? 0) > 0" class="imp-note">
+          + {{ preview.dividendsImported }} {{ preview.dividendsImported === 1 ? 'dividendo' : 'dividendos' }}.
+        </p>
+        <p v-if="(preview.cashMovementsImported ?? 0) > 0" class="imp-note">
+          + {{ preview.cashMovementsImported }}
+          {{ preview.cashMovementsImported === 1 ? 'outro movimento' : 'outros movimentos' }} de caixa (juros, taxas) para os fundos livres.
+        </p>
+        <p v-if="!hasNewData" class="imp-note">Não há dados novos para importar.</p>
 
         <div class="imp-list">
           <div v-for="(it, i) in preview.items" :key="i" class="imp-row" :class="{ dup: it.status === 'duplicate' }">
@@ -298,14 +413,26 @@ function fmtDate(iso: string): string {
 
         <p v-if="error" class="imp-error">{{ error }}</p>
 
-        <div class="modal-actions">
-          <button type="button" class="btn-cancel" :disabled="importing" @click="reset">Escolher outro</button>
-          <button type="button" class="btn-primary" :disabled="importing || preview.created === 0" @click="confirmImport">
-            {{ importing ? 'A importar…' : `Importar ${preview.created} ${preview.created === 1 ? 'nova' : 'novas'}` }}
-          </button>
-        </div>
       </template>
     </div>
+
+    <template #footer>
+      <template v-if="step === 'pick'">
+        <UiButton variant="secondary" :disabled="previewing" @click="handleClose">Fechar</UiButton>
+      </template>
+      <template v-else-if="step === 'mapping'">
+        <UiButton variant="secondary" :disabled="previewing" @click="reset">Voltar</UiButton>
+        <UiButton :loading="previewing" :disabled="!mappingValid" @click="confirmMapping">Continuar</UiButton>
+      </template>
+      <template v-else-if="step === 'preview' && preview">
+        <UiButton variant="secondary" :disabled="importing" @click="reset">Escolher outro</UiButton>
+        <UiButton :loading="importing" :disabled="!hasNewData && !(applyFee && showFeeNotice)" @click="confirmImport">
+          <template v-if="!hasNewData">Guardar taxa</template>
+          <template v-else-if="preview.created > 0">Importar {{ preview.created }} {{ preview.created === 1 ? 'nova' : 'novas' }}</template>
+          <template v-else>Importar</template>
+        </UiButton>
+      </template>
+    </template>
   </BaseModal>
 </template>
 
@@ -313,328 +440,293 @@ function fmtDate(iso: string): string {
 .imp {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: var(--space-4);
 }
 
 .imp-intro {
-  font-size: 0.8125rem;
-  color: var(--color-text-muted);
-  line-height: 1.5;
   margin: 0;
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+}
+.imp-intro strong {
+  color: var(--color-text-strong);
 }
 
+/* Zona de largar ficheiro */
 .imp-drop {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 0.4rem;
-  padding: 2rem 1rem;
-  border: 1.5px dashed var(--color-border);
-  border-radius: 12px;
+  gap: 6px;
+  padding: var(--space-8) var(--space-4);
+  border: 1.5px dashed var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
   color: var(--color-text-muted);
   cursor: pointer;
   text-align: center;
-  transition: border-color 0.15s, background 0.15s;
+  transition: border-color var(--transition-fast), background var(--transition-fast), color var(--transition-fast);
 }
-
 .imp-drop:hover {
-  border-color: #166534;
-  background: rgba(22, 101, 52, 0.04);
+  border-color: var(--color-border-strong);
+  background: var(--color-selected);
+  color: var(--color-selected-text);
 }
-
-html.dark .imp-drop:hover {
-  border-color: #4ade80;
-  background: rgba(74, 222, 128, 0.06);
-}
-
 .imp-drop.busy {
   cursor: default;
 }
-
+.imp-drop p {
+  margin: 0;
+  font-size: var(--text-sm);
+}
 .imp-file {
   display: none;
 }
-
-.imp-drop-title {
-  font-size: 0.9375rem;
-  font-weight: 600;
-  color: var(--color-text);
-  margin: 0;
+.imp-drop .imp-drop-title {
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-strong);
 }
-
-.imp-drop-sub {
-  font-size: 0.75rem;
-  margin: 0;
+.imp-drop .imp-drop-sub {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
 }
 
 /* Mapeamento */
 .imp-map {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  max-height: 320px;
-  overflow-y: auto;
-  padding-right: 0.25rem;
+  gap: var(--space-3);
 }
-
 .imp-map-row {
   display: grid;
-  grid-template-columns: 130px 1fr;
+  grid-template-columns: 140px minmax(0, 1fr);
   align-items: center;
-  gap: 0.625rem;
+  gap: var(--space-3);
 }
-
+@media (max-width: 520px) {
+  .imp-map-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+  }
+}
 .imp-map-label {
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: var(--color-text);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-strong);
 }
-
 .imp-req {
-  color: #dc2626;
   margin-left: 2px;
+  color: var(--color-danger);
 }
-
 .imp-map-control {
   display: flex;
   flex-direction: column;
-  gap: 0.15rem;
+  gap: 4px;
   min-width: 0;
 }
-
-.imp-select {
-  width: 100%;
-  padding: 0.45rem 0.625rem;
-  font-size: 0.8125rem;
-  font-family: inherit;
-  color: var(--color-text);
-  background: var(--color-input-bg, #fff);
-  border: 1px solid var(--color-input-border, #e2e8f0);
-  border-radius: 8px;
-}
-
-.imp-select:focus {
-  outline: none;
-  border-color: #166534;
-}
-
 .imp-map-sample {
-  font-size: 0.6875rem;
+  font-size: var(--text-xs);
   color: var(--color-text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.imp-summary {
+/* Pré-visualização */
+.imp-broker {
   display: flex;
-  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-1) var(--space-3);
 }
-
-.imp-stat {
+.imp-broker-label {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+}
+.imp-broker-label strong {
+  color: var(--color-text-strong);
+}
+.imp-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  color: var(--color-primary-text);
+  cursor: pointer;
+}
+.imp-link:hover {
+  text-decoration: underline;
+}
+.imp-counts {
+  margin: calc(-1 * var(--space-2)) 0 0;
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-muted);
+}
+.imp-fee {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+.imp-fee-text {
   flex: 1;
+  margin: 0;
+  font-size: var(--text-xs);
+  line-height: 1.45;
+  color: var(--color-text-secondary);
+}
+.imp-fee-text strong {
+  color: var(--color-text-strong);
+}
+.imp-fee-title {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--color-text);
+}
+.imp-fee-title strong {
+  color: var(--color-text-strong);
+}
+.imp-fee-check {
+  margin: var(--space-1) 0;
+}
+.imp-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+.imp-stat {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.1rem;
-  padding: 0.75rem;
+  gap: 2px;
+  padding: var(--space-3);
   border: 1px solid var(--color-border);
-  border-radius: 12px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
 }
-
 .imp-stat-num {
-  font-size: 1.25rem;
-  font-weight: 800;
-  color: var(--color-text);
+  font-size: var(--text-xl);
+  font-weight: var(--weight-bold);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-strong);
 }
-
 .imp-stat-label {
-  font-size: 0.6875rem;
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: var(--tracking-caps);
   color: var(--color-text-muted);
 }
-
 .imp-stat--new .imp-stat-num {
-  color: #166534;
+  color: var(--color-primary-text);
 }
-
-html.dark .imp-stat--new .imp-stat-num {
-  color: #4ade80;
-}
-
 .imp-stat--dup .imp-stat-num {
   color: var(--color-text-muted);
 }
 
 .imp-note {
-  font-size: 0.75rem;
+  margin: 0;
+  font-size: var(--text-xs);
+  line-height: 1.45;
   color: var(--color-text-muted);
-  margin: 0;
-}
-
-.imp-warn {
-  font-size: 0.75rem;
-  color: #b45309;
-  background: rgba(245, 158, 11, 0.1);
-  border: 1px solid rgba(245, 158, 11, 0.3);
-  border-radius: 8px;
-  padding: 0.5rem 0.625rem;
-  margin: 0;
-}
-
-html.dark .imp-warn {
-  color: #fbbf24;
 }
 
 .imp-list {
   display: flex;
   flex-direction: column;
-  gap: 0.2rem;
+  gap: 2px;
   max-height: 260px;
   overflow-y: auto;
-  padding-right: 0.25rem;
+  padding: 4px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
 }
-
 .imp-row {
   display: flex;
   align-items: center;
-  gap: 0.625rem;
-  padding: 0.4rem 0.5rem;
-  border-radius: 8px;
+  gap: 10px;
+  padding: 6px var(--space-2);
+  border-radius: var(--radius-sm);
 }
-
 .imp-row:hover {
-  background: var(--color-table-row-hover);
+  background: var(--color-surface-hover);
 }
-
 .imp-row.dup {
   opacity: 0.55;
 }
-
 .imp-row-op {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   flex-shrink: 0;
   border-radius: 6px;
-  font-size: 0.6875rem;
-  font-weight: 800;
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-bold);
 }
-
 .imp-row-op.buy {
-  color: #059669;
-  background: rgba(5, 150, 105, 0.12);
+  color: var(--color-success);
+  background: var(--color-success-soft);
 }
-
-html.dark .imp-row-op.buy {
-  color: #34d399;
-}
-
 .imp-row-op.sell {
-  color: #dc2626;
-  background: rgba(220, 38, 38, 0.12);
+  color: var(--color-danger);
+  background: var(--color-danger-soft);
 }
-
-html.dark .imp-row-op.sell {
-  color: #f87171;
-}
-
 .imp-row-main {
   display: flex;
   flex-direction: column;
-  gap: 0.05rem;
+  gap: 1px;
   min-width: 0;
   flex: 1;
 }
-
 .imp-row-sym {
-  font-size: 0.8125rem;
-  font-weight: 700;
-  color: var(--color-text);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-strong);
 }
-
 .imp-row-meta {
-  font-size: 0.6875rem;
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
   color: var(--color-text-muted);
 }
-
 .imp-row-badge {
   flex-shrink: 0;
-  font-size: 0.625rem;
-  font-weight: 600;
-  color: var(--color-text-muted);
-  background: var(--color-table-row-hover);
-  padding: 0.1rem 0.4rem;
-  border-radius: 999px;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-secondary);
+  background: var(--color-surface-muted);
 }
 
 .imp-error {
-  font-size: 0.8125rem;
-  color: #dc2626;
   margin: 0;
-}
-
-html.dark .imp-error {
-  color: #f87171;
-}
-
-.modal-actions {
-  display: flex;
-  gap: 0.75rem;
-  justify-content: flex-end;
-  margin-top: 0.25rem;
-}
-
-.btn-cancel {
-  padding: 0.5rem 1rem;
-  background: var(--color-bg, #f1f5f9);
-  color: var(--color-text-muted, #475569);
-  border: 1px solid var(--color-border, #e2e8f0);
-  border-radius: 8px;
-  font-size: 0.875rem;
-  cursor: pointer;
-  font-family: inherit;
-}
-
-.btn-cancel:hover:not(:disabled) {
-  background: var(--color-table-row-hover, #e2e8f0);
-}
-
-.btn-cancel:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.btn-primary {
-  padding: 0.5rem 1rem;
-  background: linear-gradient(135deg, #166534 0%, #15803d 100%);
-  color: white;
-  border: none;
-  border-radius: 8px;
-  font-size: 0.875rem;
-  font-weight: 600;
-  cursor: pointer;
-  font-family: inherit;
-}
-
-.btn-primary:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--color-danger);
 }
 
 .spinner {
   width: 28px;
   height: 28px;
   border: 3px solid var(--color-border);
-  border-top-color: #166534;
+  border-top-color: var(--color-primary-text);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
-
 @keyframes spin {
   to {
     transform: rotate(360deg);

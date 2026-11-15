@@ -24,6 +24,8 @@ export interface SavingsObjectiveHistory {
 export interface SavingsObjectivesOverview {
   totalSavings: number
   reservedByCompletedObjectives: number
+  /** Depósitos na corretora que debitaram uma conta — poupança já investida, sai do disponível. */
+  investedFromSavings: number
   availableForActiveObjectives: number
   activeObjectives: SavingsObjectiveActive[]
   historyObjectives: SavingsObjectiveHistory[]

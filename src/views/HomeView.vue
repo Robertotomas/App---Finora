@@ -7,8 +7,8 @@ const authStore = useAuthStore()
 
 <template>
   <div class="home">
-    <h1>Bem-vindo ao FinoraFlow</h1>
-    <p>Gerir as suas finanças de forma simples e eficaz.</p>
+    <h1 class="home-title">Bem-vindo ao FinoraFlow</h1>
+    <p class="home-sub">Gerir as suas finanças de forma simples e eficaz.</p>
     <div class="actions">
       <RouterLink v-if="!authStore.isAuthenticated" to="/login" class="btn btn-secondary">Entrar</RouterLink>
       <RouterLink v-if="!authStore.isAuthenticated" to="/register" class="btn btn-primary">Registar</RouterLink>
@@ -20,41 +20,65 @@ const authStore = useAuthStore()
 <style scoped>
 .home {
   text-align: center;
-  padding: 3rem 1rem;
+  padding: var(--space-12) var(--space-4);
 }
-.home h1 {
-  font-size: 2rem;
-  margin-bottom: 0.5rem;
+
+.home-title {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-2xl);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-tight);
+  color: var(--color-text-strong);
 }
-.home p {
-  color: #64748b;
-  margin-bottom: 2rem;
+
+.home-sub {
+  margin: 0 0 var(--space-8);
+  font-size: var(--text-md);
+  color: var(--color-text-muted);
 }
+
 .actions {
   display: flex;
-  gap: 1rem;
+  gap: var(--space-3);
   justify-content: center;
   flex-wrap: wrap;
 }
+
+/* Links com o aspeto do UiButton */
 .btn {
-  padding: 0.5rem 1.5rem;
-  border-radius: 0.375rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--control-h);
+  padding: 0 var(--space-5);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
   text-decoration: none;
-  font-weight: 500;
-  transition: all 0.2s;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
 }
+
+.btn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
 .btn-primary {
-  background: #2563eb;
-  color: white;
+  background: var(--color-primary);
+  color: var(--color-on-primary);
 }
+
 .btn-primary:hover {
-  background: #1d4ed8;
+  background: var(--color-primary-hover);
 }
+
 .btn-secondary {
-  background: #e2e8f0;
-  color: #334155;
+  background: var(--color-surface);
+  color: var(--color-text-strong);
+  border: 1px solid var(--color-border);
 }
+
 .btn-secondary:hover {
-  background: #cbd5e1;
+  background: var(--color-surface-muted);
 }
 </style>

@@ -170,7 +170,7 @@ onUnmounted(() => document.removeEventListener('click', onOutside, true))
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
               </button>
               <span class="dr-cal-title">{{ MONTH_NAMES[leftMonth] }} {{ leftYear }}</span>
-              <span style="width:28px"></span>
+              <span class="dr-cal-spacer"></span>
             </div>
             <div class="dr-cal-weekdays">
               <span v-for="wd in WEEKDAYS" :key="wd">{{ wd }}</span>
@@ -196,7 +196,7 @@ onUnmounted(() => document.removeEventListener('click', onOutside, true))
           </div>
           <div class="dr-calendar">
             <div class="dr-cal-header">
-              <span style="width:28px"></span>
+              <span class="dr-cal-spacer"></span>
               <span class="dr-cal-title">{{ MONTH_NAMES[rightMonth] }} {{ rightYear }}</span>
               <button type="button" class="dr-cal-nav" @click="nextMonth">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
@@ -235,55 +235,58 @@ onUnmounted(() => document.removeEventListener('click', onOutside, true))
   position: relative;
 }
 
+/* Botão de toolbar (mesma altura dos controlos de filtro) */
 .date-range-btn {
   display: flex;
   align-items: center;
-  gap: 0.375rem;
-  background: var(--color-bg-card);
-  border: 1px solid var(--color-border);
-  border-radius: 10px;
-  padding: 0.5rem 0.875rem;
+  gap: 6px;
+  height: var(--control-h);
+  padding: 0 12px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-xs);
   font-family: inherit;
-  font-size: 0.8125rem;
-  font-weight: 500;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
   color: var(--color-text);
   cursor: pointer;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
   white-space: nowrap;
+  transition: background var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
-
 .date-range-btn:hover {
-  border-color: #166534;
-  box-shadow: 0 2px 8px rgba(22, 101, 52, 0.08);
+  background: var(--color-surface-muted);
 }
-
+.date-range-btn:focus-visible {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: var(--focus-ring);
+}
 .date-range-btn svg:first-child {
   color: var(--color-text-muted);
   flex-shrink: 0;
 }
-
 .date-range-chevron {
   color: var(--color-text-muted);
-  transition: transform 0.2s ease;
   flex-shrink: 0;
+  transition: transform var(--transition-fast);
 }
-
 .date-range-chevron.open {
   transform: rotate(180deg);
 }
 
+/* Painel */
 .date-range-panel {
   position: absolute;
-  top: calc(100% + 0.5rem);
+  top: calc(100% + 6px);
   left: 0;
   z-index: 60;
-  background: var(--color-bg-card);
+  padding: var(--space-4);
+  background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: 14px;
-  box-shadow: 0 12px 40px -8px rgba(15, 23, 42, 0.18);
-  padding: 1.125rem;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
 }
-
 .date-range-panel.align-right {
   left: auto;
   right: 0;
@@ -291,53 +294,40 @@ onUnmounted(() => document.removeEventListener('click', onOutside, true))
 
 .dr-presets {
   display: flex;
-  gap: 0.375rem;
-  margin-bottom: 0.75rem;
-  padding-bottom: 0.75rem;
-  border-bottom: 1px solid var(--color-border);
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: var(--space-3);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--color-border-subtle);
 }
-
 .dr-preset-btn {
-  padding: 0.35rem 0.75rem;
-  font-size: 0.75rem;
-  font-weight: 600;
+  height: 28px;
+  padding: 0 10px;
   font-family: inherit;
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
   border: 1px solid var(--color-border);
-  border-radius: 8px;
+  border-radius: var(--radius-full);
   background: transparent;
-  color: var(--color-text-muted);
+  color: var(--color-text-secondary);
   cursor: pointer;
-  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
   white-space: nowrap;
+  transition: border-color var(--transition-fast), color var(--transition-fast), background var(--transition-fast);
 }
-
 .dr-preset-btn:hover {
-  border-color: #166534;
-  color: #166534;
+  background: var(--color-surface-muted);
+  color: var(--color-text-strong);
 }
-
 .dr-preset-btn.active {
-  border-color: #166534;
-  background: rgba(22, 101, 52, 0.1);
-  color: #166534;
-}
-
-html.dark .dr-preset-btn.active {
-  border-color: #4ade80;
-  background: rgba(74, 222, 128, 0.12);
-  color: #4ade80;
-}
-
-html.dark .dr-preset-btn:hover {
-  border-color: #4ade80;
-  color: #4ade80;
+  border-color: var(--color-border-strong);
+  background: var(--color-selected);
+  color: var(--color-selected-text);
 }
 
 .date-range-calendars {
   display: flex;
-  gap: 1.25rem;
+  gap: var(--space-5);
 }
-
 .dr-calendar {
   width: 240px;
 }
@@ -346,61 +336,55 @@ html.dark .dr-preset-btn:hover {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 0.75rem;
+  margin-bottom: var(--space-2);
 }
-
+.dr-cal-spacer {
+  width: 32px;
+}
 .dr-cal-title {
-  font-size: 0.8125rem;
-  font-weight: 700;
-  color: var(--color-text);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-strong);
   text-align: center;
 }
-
 .dr-cal-nav {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   border: none;
   background: transparent;
   color: var(--color-text-muted);
   cursor: pointer;
-  border-radius: 6px;
-  transition: background 0.15s ease, color 0.15s ease;
+  border-radius: var(--radius-sm);
+  transition: background var(--transition-fast), color var(--transition-fast);
 }
-
 .dr-cal-nav:hover {
-  background: rgba(0, 0, 0, 0.06);
-  color: var(--color-text);
-}
-
-html.dark .dr-cal-nav:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--color-surface-muted);
+  color: var(--color-text-strong);
 }
 
 .dr-cal-weekdays {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  margin-bottom: 0.25rem;
+  margin-bottom: 4px;
 }
-
 .dr-cal-weekdays span {
+  padding: 4px 0;
   text-align: center;
-  font-size: 0.625rem;
-  font-weight: 600;
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--color-text-muted);
-  padding: 0.25rem 0;
 }
 
 .dr-cal-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  gap: 1px;
+  row-gap: 2px;
 }
-
 .dr-day {
   display: flex;
   align-items: center;
@@ -409,48 +393,49 @@ html.dark .dr-cal-nav:hover {
   border: none;
   background: transparent;
   font-family: inherit;
-  font-size: 0.75rem;
-  font-weight: 500;
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  font-variant-numeric: tabular-nums;
   color: var(--color-text);
   cursor: pointer;
   border-radius: 0;
-  transition: background 0.1s ease;
+  transition: background var(--transition-fast);
 }
-
-.dr-day.empty { cursor: default; }
-.dr-day:not(.empty):hover { background: rgba(22, 101, 52, 0.08); }
-.dr-day.in-range { background: rgba(22, 101, 52, 0.08); }
-
+.dr-day.empty {
+  cursor: default;
+}
+.dr-day:not(.empty):not(.is-start):not(.is-end):hover {
+  background: var(--color-surface-muted);
+  border-radius: 6px;
+}
+.dr-day.in-range {
+  background: var(--color-selected);
+  color: var(--color-selected-text);
+}
 .dr-day.is-start,
 .dr-day.is-end {
-  background: #166534;
-  color: #fff;
-  font-weight: 700;
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  font-weight: var(--weight-bold);
 }
-
 .dr-day.is-start { border-radius: 6px 0 0 6px; }
 .dr-day.is-end { border-radius: 0 6px 6px 0; }
 .dr-day.is-start.is-end { border-radius: 6px; }
 
-html.dark .dr-day.in-range { background: rgba(74, 222, 128, 0.1); }
-html.dark .dr-day.is-start,
-html.dark .dr-day.is-end { background: #4ade80; color: #0a0a0a; }
-
 .panel-enter-active,
 .panel-leave-active {
-  transition: opacity 0.15s ease, transform 0.15s ease;
+  transition: opacity 0.12s ease, transform 0.12s ease;
 }
-
 .panel-enter-from,
 .panel-leave-to {
   opacity: 0;
-  transform: translateY(-6px);
+  transform: translateY(-4px);
 }
 
 @media (max-width: 640px) {
   .date-range-calendars {
     flex-direction: column;
-    gap: 0.75rem;
+    gap: var(--space-3);
   }
   .dr-calendar {
     width: 220px;

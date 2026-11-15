@@ -1,9 +1,11 @@
 <script setup lang="ts">
+import { PT_GROUPING } from '@/utils/numberFormat'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { searchApi, type GlobalSearchResult } from '@/api/search'
 import { TRANSACTION_CATEGORY_LABELS, type TransactionCategory } from '@/types/transaction'
 import { RECURRING_FREQUENCY_LABELS, RecurringFrequency } from '@/types/recurringTransaction'
+import ShellIcon, { type ShellIconName } from '@/components/shell/ShellIcon.vue'
 
 const router = useRouter()
 
@@ -12,6 +14,8 @@ const categoryLabel = (c: number): string => TRANSACTION_CATEGORY_LABELS[c as Tr
 
 const query = ref('')
 const open = ref(false)
+/** Mobile: a pesquisa é um ícone que abre um campo sobreposto ao header. */
+const expanded = ref(false)
 const loading = ref(false)
 const activeIndex = ref(0)
 const result = ref<GlobalSearchResult>(emptyResult())
@@ -27,7 +31,7 @@ interface PaletteItem {
   label: string
   sublabel?: string
   meta?: string
-  icon: string
+  icon: ShellIconName
   run: () => void
 }
 interface PaletteGroup {
@@ -36,11 +40,11 @@ interface PaletteGroup {
 }
 
 // ── Navegação e ações (cliente, sempre disponíveis) ──
-const NAV_ITEMS = [
+const NAV_ITEMS: { label: string; to: string; icon: ShellIconName; keywords: string }[] = [
   { label: 'Início', to: '/overview', icon: 'home', keywords: 'inicio dashboard painel patrimonio overview' },
   { label: 'Movimentos', to: '/transactions?tab=movements', icon: 'swap', keywords: 'movimentos transacoes gastos' },
   { label: 'Recorrentes', to: '/transactions?tab=recurring', icon: 'clock', keywords: 'recorrentes subscricoes mensais' },
-  { label: 'Dashboard de movimentos', to: '/transactions?tab=dashboard', icon: 'grid', keywords: 'dashboard graficos movimentos' },
+  { label: 'Resumo de movimentos', to: '/transactions?tab=dashboard', icon: 'grid', keywords: 'resumo dashboard graficos movimentos' },
   { label: 'Contas', to: '/accounts', icon: 'wallet', keywords: 'contas patrimonio saldos' },
   { label: 'Objetivos', to: '/goals', icon: 'target', keywords: 'objetivos poupanca metas' },
   { label: 'Plano Mensal', to: '/monthly-plan', icon: 'calendar', keywords: 'plano mensal orcamento' },
@@ -68,7 +72,7 @@ function go(to: string) {
 
 function fmtAmount(t: { amount: number; type: number }): string {
   const sign = t.type === 1 ? '−' : t.type === 0 ? '+' : ''
-  return sign + t.amount.toLocaleString('pt-PT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €'
+  return sign + t.amount.toLocaleString('pt-PT', { ...PT_GROUPING, minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €'
 }
 
 function fmtDate(iso: string): string {
@@ -88,7 +92,7 @@ const groups = computed<PaletteGroup[]>(() => {
     label: t.description || t.entityName || categoryLabel(t.category),
     sublabel: t.entityName && t.description ? t.entityName : undefined,
     meta: `${fmtAmount(t)} · ${fmtDate(t.date)}`,
-    icon: 'tx',
+    icon: 'swap',
     run: () => go('/transactions?tab=movements'),
   }))
   if (tx.length) out.push({ title: 'Movimentos', items: tx })
@@ -106,7 +110,7 @@ const groups = computed<PaletteGroup[]>(() => {
   const accs = result.value.accounts.map<PaletteItem>((a) => ({
     id: 'acc-' + a.id,
     label: a.name,
-    meta: a.balance.toLocaleString('pt-PT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €',
+    meta: a.balance.toLocaleString('pt-PT', { ...PT_GROUPING, minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €',
     icon: 'wallet',
     run: () => go('/accounts'),
   }))
@@ -134,7 +138,7 @@ const groups = computed<PaletteGroup[]>(() => {
   const actions = ACTION_ITEMS.filter((i) => norm(i.label + ' ' + i.keywords).includes(nq)).map<PaletteItem>((i) => ({
     id: 'act-' + i.to,
     label: i.label,
-    icon: 'plus',
+    icon: 'plus-circle',
     run: () => go(i.to),
   }))
   if (actions.length) out.push({ title: 'Ações', items: actions })
@@ -198,7 +202,14 @@ function onEnter() {
 
 function close() {
   open.value = false
+  expanded.value = false
   if (debounceTimer) clearTimeout(debounceTimer)
+}
+
+function expand() {
+  expanded.value = true
+  if (query.value.trim()) open.value = true
+  nextTick(() => inputEl.value?.focus())
 }
 
 function onClickOutside(e: MouseEvent) {
@@ -218,65 +229,61 @@ function onGlobalKey(e: KeyboardEvent) {
   const typing = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)
   if (typing) return
   e.preventDefault()
-  nextTick(() => inputEl.value?.focus())
+  expand()
 }
 onMounted(() => document.addEventListener('keydown', onGlobalKey))
 onUnmounted(() => document.removeEventListener('keydown', onGlobalKey))
 </script>
 
 <template>
-  <div ref="rootEl" class="global-search">
-    <span class="gs-icon" aria-hidden="true">
-      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-    </span>
-    <input
-      ref="inputEl"
-      v-model="query"
-      type="text"
-      class="gs-input"
-      placeholder="Pesquisar..."
-      role="combobox"
-      :aria-expanded="open"
-      aria-controls="gs-results"
-      autocomplete="off"
-      @focus="onFocus"
-      @keydown.down.prevent="moveActive(1)"
-      @keydown.up.prevent="moveActive(-1)"
-      @keydown.enter.prevent="onEnter"
-      @keydown.esc.prevent="close"
-    />
+  <div ref="rootEl" class="global-search" :class="{ 'is-expanded': expanded }">
+    <!-- Mobile: ícone que abre a pesquisa -->
+    <button type="button" class="shell-icon-btn gs-trigger" aria-label="Pesquisar" @click.stop="expand">
+      <ShellIcon name="search" :size="18" />
+    </button>
 
-    <div v-if="open" id="gs-results" class="gs-panel" role="listbox">
+    <div class="gs-field">
+      <span class="gs-icon" aria-hidden="true"><ShellIcon name="search" :size="16" /></span>
+      <input
+        ref="inputEl"
+        v-model="query"
+        type="text"
+        class="gs-input"
+        placeholder="Pesquisar..."
+        aria-label="Pesquisar"
+        role="combobox"
+        :aria-expanded="open"
+        aria-controls="gs-results"
+        autocomplete="off"
+        @focus="onFocus"
+        @keydown.down.prevent="moveActive(1)"
+        @keydown.up.prevent="moveActive(-1)"
+        @keydown.enter.prevent="onEnter"
+        @keydown.esc.prevent="close"
+      />
+      <kbd class="gs-kbd" aria-hidden="true">/</kbd>
+      <button type="button" class="gs-cancel" @click="close">Cancelar</button>
+    </div>
+
+    <div v-if="open" id="gs-results" class="shell-menu gs-panel" role="listbox">
       <div v-if="loading && !hasResults" class="gs-empty">A pesquisar…</div>
       <div v-else-if="!hasResults" class="gs-empty">Sem resultados para “{{ query.trim() }}”.</div>
 
       <template v-else>
         <div v-for="group in groups" :key="group.title" class="gs-group">
-          <p class="gs-group-title">{{ group.title }}</p>
+          <span class="shell-menu-label">{{ group.title }}</span>
           <button
             v-for="item in group.items"
             :key="item.id"
             type="button"
-            class="gs-item"
-            :class="{ active: flatIndexOf(item) === activeIndex }"
+            role="option"
+            class="shell-menu-item gs-item"
+            :class="{ 'is-highlighted': flatIndexOf(item) === activeIndex }"
+            :aria-selected="flatIndexOf(item) === activeIndex"
             @mouseenter="activeIndex = flatIndexOf(item)"
             @click="item.run()"
           >
-            <span class="gs-item-icon" :class="'gs-item-icon--' + item.icon">
-              <svg v-if="item.icon === 'tx'" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="7" x2="7" y1="18" y2="6"/><polyline points="3 10 7 6 11 10"/><line x1="17" x2="17" y1="6" y2="18"/><polyline points="13 14 17 18 21 14"/></svg>
-              <svg v-else-if="item.icon === 'wallet'" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 10h20"/><circle cx="17" cy="15" r="1.5"/></svg>
-              <svg v-else-if="item.icon === 'target'" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
-              <svg v-else-if="item.icon === 'plus'" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="16"/><line x1="8" x2="16" y1="12" y2="12"/></svg>
-              <svg v-else-if="item.icon === 'home'" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-              <svg v-else-if="item.icon === 'swap'" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="7" x2="7" y1="18" y2="6"/><polyline points="3 10 7 6 11 10"/><line x1="17" x2="17" y1="6" y2="18"/><polyline points="13 14 17 18 21 14"/></svg>
-              <svg v-else-if="item.icon === 'clock'" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-              <svg v-else-if="item.icon === 'grid'" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
-              <svg v-else-if="item.icon === 'calendar'" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
-              <svg v-else-if="item.icon === 'report'" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" x2="16" y1="13" y2="13"/><line x1="8" x2="16" y1="17" y2="17"/></svg>
-              <svg v-else-if="item.icon === 'user'" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-              <svg v-else-if="item.icon === 'users'" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-              <svg v-else viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
-            </span>
+            <span class="gs-item-icon"><ShellIcon :name="item.icon" :size="16" /></span>
             <span class="gs-item-text">
               <span class="gs-item-label">{{ item.label }}</span>
               <span v-if="item.sublabel" class="gs-item-sub">{{ item.sublabel }}</span>
@@ -292,13 +299,24 @@ onUnmounted(() => document.removeEventListener('keydown', onGlobalKey))
 <style scoped>
 .global-search {
   position: relative;
-  width: min(240px, 30vw);
+  width: min(260px, 28vw);
   flex-shrink: 1;
+  min-width: 0;
+}
+
+.gs-trigger {
+  display: none;
+}
+
+.gs-field {
+  position: relative;
+  display: flex;
+  align-items: center;
 }
 
 .gs-icon {
   position: absolute;
-  left: 0.625rem;
+  left: 10px;
   top: 50%;
   transform: translateY(-50%);
   display: inline-flex;
@@ -308,83 +326,87 @@ onUnmounted(() => document.removeEventListener('keydown', onGlobalKey))
 
 .gs-input {
   width: 100%;
-  padding: 0.45rem 0.75rem 0.45rem 2rem;
-  font-size: 0.8125rem;
-  background: var(--color-bg);
+  height: var(--control-h);
+  padding: 0 32px 0 34px;
   border: 1px solid var(--color-border);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
   color: var(--color-text);
+  font-family: inherit;
+  font-size: var(--text-sm);
   outline: none;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background var(--transition-fast);
 }
 
 .gs-input::placeholder {
-  color: var(--color-text-muted);
+  color: var(--color-text-subtle);
+}
+
+.gs-input:hover {
+  border-color: var(--color-border-strong);
 }
 
 .gs-input:focus {
-  border-color: #166534;
-  box-shadow: 0 0 0 3px rgba(22, 101, 52, 0.08);
+  background: var(--color-surface);
+  border-color: var(--color-primary-text);
+  box-shadow: var(--focus-ring);
+}
+
+.gs-kbd {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border: 1px solid var(--color-border);
+  border-radius: 5px;
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  font-family: inherit;
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
+  pointer-events: none;
+}
+
+.gs-input:focus ~ .gs-kbd {
+  display: none;
+}
+
+.gs-cancel {
+  display: none;
 }
 
 .gs-panel {
-  position: absolute;
-  top: calc(100% + 8px);
   left: 0;
-  width: min(360px, 90vw);
+  right: auto;
+  width: min(380px, 90vw);
   max-height: 70vh;
   overflow-y: auto;
-  background: var(--color-bg-card);
-  border: 1px solid var(--color-border);
-  border-radius: 12px;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
-  padding: 0.375rem;
-  z-index: 200;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
 }
 
 .gs-empty {
-  padding: 0.875rem 0.75rem;
-  font-size: 0.8125rem;
+  padding: var(--space-4) var(--space-3);
+  font-size: var(--text-sm);
   color: var(--color-text-muted);
   text-align: center;
 }
 
 .gs-group + .gs-group {
-  margin-top: 0.25rem;
-  padding-top: 0.25rem;
-  border-top: 1px solid var(--color-border);
-}
-
-.gs-group-title {
-  font-size: 0.625rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--color-text-muted);
-  margin: 0.375rem 0.5rem 0.25rem;
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--color-border-subtle);
 }
 
 .gs-item {
-  display: flex;
-  align-items: center;
-  gap: 0.625rem;
-  width: 100%;
-  padding: 0.5rem 0.5rem;
-  border: none;
-  background: transparent;
-  border-radius: 8px;
-  cursor: pointer;
-  text-align: left;
-  color: var(--color-text);
-  font-family: inherit;
-}
-
-.gs-item.active {
-  background: rgba(22, 101, 52, 0.1);
-}
-
-html.dark .gs-item.active {
-  background: rgba(74, 222, 128, 0.12);
+  padding-top: 6px;
+  padding-bottom: 6px;
 }
 
 .gs-item-icon {
@@ -393,30 +415,35 @@ html.dark .gs-item.active {
   justify-content: center;
   width: 28px;
   height: 28px;
-  border-radius: 7px;
   flex-shrink: 0;
-  background: var(--color-bg);
+  border-radius: 6px;
+  background: var(--color-surface-muted);
   color: var(--color-text-muted);
 }
 
+.gs-item.is-highlighted .gs-item-icon {
+  background: var(--color-selected);
+  color: var(--color-primary-text);
+}
 
 .gs-item-text {
   display: flex;
   flex-direction: column;
-  min-width: 0;
   flex: 1;
+  min-width: 0;
 }
 
 .gs-item-label {
-  font-size: 0.8125rem;
-  font-weight: 500;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--color-text-strong);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .gs-item-sub {
-  font-size: 0.6875rem;
+  font-size: var(--text-xs);
   color: var(--color-text-muted);
   white-space: nowrap;
   overflow: hidden;
@@ -424,17 +451,83 @@ html.dark .gs-item.active {
 }
 
 .gs-item-meta {
-  font-size: 0.6875rem;
+  margin-left: auto;
+  flex-shrink: 0;
+  font-size: var(--text-xs);
+  font-weight: var(--weight-regular);
   color: var(--color-text-muted);
   white-space: nowrap;
-  flex-shrink: 0;
-  margin-left: auto;
+  font-variant-numeric: tabular-nums;
 }
 
+/* ─── Mobile: ícone → campo sobreposto ao header ─── */
 @media (max-width: 768px) {
   .global-search {
-    width: 100%;
-    max-width: none;
+    width: auto;
+  }
+
+  .gs-trigger {
+    display: inline-flex;
+  }
+
+  .gs-field,
+  .gs-kbd {
+    display: none;
+  }
+
+  .global-search.is-expanded .gs-field {
+    display: flex;
+    gap: var(--space-2);
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 300;
+    height: 56px;
+    padding: 0 var(--space-2) 0 var(--space-3);
+    background: var(--color-header-bg);
+    border-bottom: 1px solid var(--color-header-border);
+  }
+
+  .global-search.is-expanded .gs-icon {
+    left: calc(var(--space-3) + 10px);
+  }
+
+  .global-search.is-expanded .gs-input {
+    flex: 1;
+    min-width: 0;
+    padding-right: 12px;
+    font-size: var(--text-md); /* ≥16px evita o zoom automático do iOS */
+  }
+
+  .gs-cancel {
+    display: inline-flex;
+    align-items: center;
+    height: var(--control-h);
+    padding: 0 var(--space-2);
+    border: none;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--color-primary-text);
+    font-family: inherit;
+    font-size: var(--text-base);
+    font-weight: var(--weight-semibold);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  .gs-panel {
+    position: fixed;
+    top: 60px;
+    left: var(--space-2);
+    right: var(--space-2);
+    width: auto;
+    z-index: 300;
+    max-height: calc(100dvh - 72px);
+  }
+
+  .global-search:not(.is-expanded) .gs-panel {
+    display: none;
   }
 }
 </style>

@@ -18,6 +18,11 @@ export interface Brand {
   country?: string
   /** Banco destacado no seletor de contas ("Mais populares"). */
   popular?: boolean
+  /**
+   * Só reconhecida quando o texto é EXATAMENTE o nome/alias (sem "começa por"/"palavra inteira").
+   * Para marcas com nome de palavra comum (ex.: loja "Normal" vs. "Gasolina normal"). Continua nas sugestões.
+   */
+  strict?: boolean
 }
 
 export const BRANDS: Brand[] = [
@@ -35,8 +40,12 @@ export const BRANDS: Brand[] = [
   { name: 'EuroBic', domain: 'eurobic.pt', type: 'bank', country: 'pt', aliases: ['bic'] },
   { name: 'Banco BIG', domain: 'big.pt', type: 'bank', country: 'pt' },
   { name: 'Banco Best', domain: 'bancobest.pt', type: 'bank', country: 'pt', aliases: ['best'] },
-  { name: 'Banco Atlântico Europa', domain: 'bancoatlantico.pt', type: 'bank', country: 'pt', aliases: ['atlantico'] },
+  { name: 'Banco Atlântico Europa', domain: 'atlantico.eu', type: 'bank', country: 'pt', aliases: ['atlantico'] },
   { name: 'Abanca', domain: 'abanca.pt', type: 'bank', country: 'pt' },
+  // Cartões de subsídio de alimentação (refeição) — aparecem no seletor de contas como instituições PT.
+  { name: 'Coverflex', domain: 'coverflex.com', type: 'bank', country: 'pt', aliases: ['cartao refeicao coverflex', 'subsidio alimentacao'] },
+  { name: 'Edenred', domain: 'edenred.pt', type: 'bank', country: 'pt', aliases: ['ticket restaurant', 'cartao refeicao edenred', 'euroticket'] },
+  { name: 'Pluxee', domain: 'pluxee.pt', type: 'bank', country: 'pt', aliases: ['sodexo', 'cartao refeicao pluxee', 'cartao refeicao sodexo'] },
 
   // Espanha
   { name: 'BBVA', domain: 'bbva.com', type: 'bank', country: 'es', popular: true },
@@ -52,7 +61,7 @@ export const BRANDS: Brand[] = [
   // França
   { name: 'BNP Paribas', domain: 'bnpparibas.fr', type: 'bank', country: 'fr', popular: true, aliases: ['bnp'] },
   { name: 'Crédit Agricole', domain: 'credit-agricole.fr', type: 'bank', country: 'fr', popular: true },
-  { name: 'Société Générale', domain: 'societegenerale.fr', type: 'bank', country: 'fr', popular: true },
+  { name: 'Société Générale', domain: 'societegenerale.com', type: 'bank', country: 'fr', popular: true },
   { name: 'Boursorama', domain: 'boursorama.com', type: 'bank', country: 'fr', popular: true },
   { name: 'Banque Populaire', domain: 'banquepopulaire.fr', type: 'bank', country: 'fr' },
   { name: 'Crédit Mutuel', domain: 'creditmutuel.fr', type: 'bank', country: 'fr' },
@@ -108,7 +117,7 @@ export const BRANDS: Brand[] = [
   // Tecnologia / eletrónica
   { name: 'PC Diga', domain: 'pcdiga.com', type: 'store', aliases: ['pcdiga', 'pc diga'] },
   { name: 'Rádio Popular', domain: 'radiopopular.pt', type: 'store', aliases: ['radio popular'] },
-  { name: 'MediaMarkt', domain: 'mediamarkt.pt', type: 'store', aliases: ['media markt'] },
+  { name: 'MediaMarkt', domain: 'mediamarkt.com', type: 'store', aliases: ['media markt'] },
   { name: 'Globaldata', domain: 'globaldata.pt', type: 'store' },
   // Moda / desporto
   { name: 'H&M', domain: 'hm.com', type: 'store', aliases: ['hm', 'h e m'] },
@@ -140,11 +149,11 @@ export const BRANDS: Brand[] = [
   { name: 'Disney+', domain: 'disneyplus.com', type: 'other', aliases: ['disney plus', 'disney'] },
   { name: 'HBO Max', domain: 'hbomax.com', type: 'other', aliases: ['hbo', 'max'] },
   { name: 'YouTube', domain: 'youtube.com', type: 'other', aliases: ['youtube premium'] },
-  { name: 'Apple', domain: 'apple.com', type: 'other', aliases: ['itunes', 'icloud', 'app store'] },
+  { name: 'Apple', domain: 'apple.com', type: 'other', aliases: ['itunes', 'icloud', 'app store', 'apple music', 'apple tv', 'iphone', 'ipad', 'macbook', 'imac', 'mac mini', 'airpods'] },
   { name: 'Google', domain: 'google.com', type: 'other', aliases: ['google one'] },
-  { name: 'Microsoft', domain: 'microsoft.com', type: 'other', aliases: ['office', 'xbox'] },
+  { name: 'Microsoft', domain: 'microsoft.com', type: 'other', aliases: ['office', 'xbox', 'microsoft 365', 'office 365', 'game pass'] },
   { name: 'Uber', domain: 'uber.com', type: 'other', aliases: ['uber eats'] },
-  { name: 'Bolt', domain: 'bolt.eu', type: 'other' },
+  { name: 'Bolt', domain: 'bolt.eu', type: 'other', aliases: ['bolt food'] },
   { name: 'Glovo', domain: 'glovoapp.com', type: 'other' },
 
   // ───────── Combustível / bombas ─────────
@@ -157,7 +166,7 @@ export const BRANDS: Brand[] = [
   { name: 'Endesa', domain: 'endesa.pt', type: 'other' },
   { name: 'Iberdrola', domain: 'iberdrola.pt', type: 'other' },
   { name: 'Goldenergy', domain: 'goldenergy.pt', type: 'other' },
-  { name: 'Águas de Portugal', domain: 'adp.pt', type: 'other', aliases: ['aguas', 'agua'] },
+  { name: 'Águas de Portugal', domain: 'adp.pt', type: 'other', aliases: ['adp'] }, // sem 'agua'/'aguas': quem fatura a água é a entidade do município
 
   // ───────── Telecom (extra) ─────────
   { name: 'NOWO', domain: 'nowo.pt', type: 'other' },
@@ -209,7 +218,7 @@ export const BRANDS: Brand[] = [
   { name: 'Airbnb', domain: 'airbnb.com', type: 'other' },
 
   // ───────── Serviços digitais / subscrições ─────────
-  { name: 'Amazon Prime', domain: 'primevideo.com', type: 'other', aliases: ['prime video', 'amazon prime'] },
+  { name: 'Amazon Prime', domain: 'primevideo.com', type: 'other', aliases: ['prime video', 'amazon prime', 'amazon music'] },
   { name: 'Twitch', domain: 'twitch.tv', type: 'other' },
   { name: 'LinkedIn', domain: 'linkedin.com', type: 'other' },
   { name: 'Dropbox', domain: 'dropbox.com', type: 'other' },
@@ -270,11 +279,11 @@ export const BRANDS: Brand[] = [
   { name: 'Phive', domain: 'phive.pt', type: 'other' },
 
   // ───────── Carros (extra) ─────────
-  { name: 'Škoda', domain: 'skoda.com', type: 'other', aliases: ['skoda'] },
+  { name: 'Škoda', domain: 'skoda-auto.com', type: 'other', aliases: ['skoda'] },
   { name: 'Honda', domain: 'honda.pt', type: 'other' },
   { name: 'Suzuki', domain: 'suzuki.pt', type: 'other' },
-  { name: 'Mitsubishi', domain: 'mitsubishi.pt', type: 'other' },
-  { name: 'Land Rover', domain: 'landrover.com', type: 'other', aliases: ['land rover'] },
+  { name: 'Mitsubishi', domain: 'mitsubishi-motors.com', type: 'other' }, // mitsubishi.pt não tem logo no Logo.dev
+  { name: 'Land Rover', domain: 'landrover.co.uk', type: 'other', aliases: ['land rover'] },
   { name: 'Jaguar', domain: 'jaguar.com', type: 'other' },
   { name: 'Porsche', domain: 'porsche.com', type: 'other' },
   { name: 'Lexus', domain: 'lexus.com', type: 'other' },
@@ -357,11 +366,11 @@ export const BRANDS: Brand[] = [
   { name: 'MetLife', domain: 'metlife.pt', type: 'other' },
   { name: 'Liberty Seguros', domain: 'libertyseguros.pt', type: 'other', aliases: ['liberty'] },
   { name: 'Lusitania Seguros', domain: 'lusitania.pt', type: 'other', aliases: ['lusitania'] },
-  { name: 'Una Seguros', domain: 'una-seguros.pt', type: 'other', aliases: ['una'] },
+  { name: 'Una Seguros', domain: 'unaseguros.pt', type: 'other', aliases: ['una'] },
   { name: 'Real Vida Seguros', domain: 'realvidaseguros.pt', type: 'other', aliases: ['real vida'] },
-  { name: 'OK! teleseguros', domain: 'ok-seguros.pt', type: 'other', aliases: ['ok seguros'] },
+  { name: 'OK! teleseguros', domain: 'okteleseguros.pt', type: 'other', aliases: ['ok seguros'] },
   { name: 'Mapfre', domain: 'mapfre.pt', type: 'other' },
-  { name: 'AXA', domain: 'axa.pt', type: 'other' },
+  { name: 'AXA', domain: 'axa.com', type: 'other' },
   { name: 'Caravela Seguros', domain: 'caravelaseguros.pt', type: 'other', aliases: ['caravela'] },
 
   // ───────── Hospitais / saúde privada ─────────
@@ -370,7 +379,7 @@ export const BRANDS: Brand[] = [
   { name: 'Hospital da Luz', domain: 'hospitaldaluz.pt', type: 'other', aliases: ['hospital da luz', 'luz saude'] },
   { name: 'Trofa Saúde', domain: 'trofasaude.pt', type: 'other', aliases: ['trofa saude'] },
   { name: 'HPA Saúde', domain: 'grupohpa.com', type: 'other', aliases: ['hpa'] },
-  { name: 'Joaquim Chaves Saúde', domain: 'joaquimchavesaude.pt', type: 'other', aliases: ['joaquim chaves'] },
+  { name: 'Joaquim Chaves Saúde', domain: 'jcs.pt', type: 'other', aliases: ['joaquim chaves'] },
 
   // ───────── Clubes de futebol (cotas / sócio) ─────────
   { name: 'SL Benfica', domain: 'slbenfica.pt', type: 'other', aliases: ['benfica', 'slb'] },
@@ -395,7 +404,7 @@ export const BRANDS: Brand[] = [
 
   // ───────── Correios / lotaria / livrarias ─────────
   { name: 'CTT', domain: 'ctt.pt', type: 'other', aliases: ['correios'] },
-  { name: 'Jogos Santa Casa', domain: 'jogossantacasa.pt', type: 'other', aliases: ['santa casa', 'euromilhoes'] },
+  { name: 'Jogos Santa Casa', domain: 'scml.pt', type: 'other', aliases: ['santa casa', 'euromilhoes'] },
   { name: 'Bertrand', domain: 'bertrand.pt', type: 'store' },
   { name: 'Wook', domain: 'wook.pt', type: 'store' },
   { name: 'Almedina', domain: 'almedina.net', type: 'store' },
@@ -404,7 +413,7 @@ export const BRANDS: Brand[] = [
   { name: 'Pestana', domain: 'pestana.com', type: 'other' },
   { name: 'Vila Galé', domain: 'vilagale.com', type: 'other', aliases: ['vila gale'] },
   { name: 'Marriott', domain: 'marriott.com', type: 'other' },
-  { name: 'NH Hotels', domain: 'nh-hotels.com', type: 'other', aliases: ['nh'] },
+  { name: 'NH Hotels', domain: 'nh-hotels.es', type: 'other', aliases: ['nh'] },
   { name: 'Kiwoko', domain: 'kiwoko.pt', type: 'store' },
   { name: 'Imaginarium', domain: 'imaginarium.pt', type: 'store' },
 
@@ -432,11 +441,11 @@ export const BRANDS: Brand[] = [
   { name: 'Farmácias Holon', domain: 'holon.pt', type: 'other', aliases: ['holon', 'farmacia holon'] },
 
   // ───────── Educação ─────────
-  { name: 'Universidade do Porto', domain: 'up.pt', type: 'other', aliases: ['u porto', 'universidade porto'] },
-  { name: 'Universidade de Lisboa', domain: 'ulisboa.pt', type: 'other', aliases: ['u lisboa'] },
-  { name: 'Universidade de Coimbra', domain: 'uc.pt', type: 'other', aliases: ['u coimbra'] },
-  { name: 'Universidade NOVA de Lisboa', domain: 'unl.pt', type: 'other', aliases: ['nova', 'nova lisboa'] },
-  { name: 'Universidade Católica', domain: 'ucp.pt', type: 'other', aliases: ['catolica'] },
+  { name: 'Universidade do Porto', domain: 'up.pt', type: 'other', aliases: ['u porto', 'uporto', 'universidade porto'] },
+  { name: 'Universidade de Lisboa', domain: 'ulisboa.pt', type: 'other', aliases: ['u lisboa', 'ulisboa'] },
+  { name: 'Universidade de Coimbra', domain: 'uc.pt', type: 'other', aliases: ['u coimbra', 'ucoimbra'] },
+  { name: 'Universidade NOVA de Lisboa', domain: 'unl.pt', type: 'other', aliases: ['nova lisboa', 'unl', 'universidade nova'] },
+  { name: 'Universidade Católica', domain: 'ucp.pt', type: 'other', aliases: ['catolica', 'ucp', 'universidade catolica portuguesa'] },
   { name: 'ISCTE', domain: 'iscte-iul.pt', type: 'other' },
 
   // ───────── Subscrições / serviços digitais ─────────
@@ -463,20 +472,19 @@ export const BRANDS: Brand[] = [
   // ───────── Viagens (extra) ─────────
   { name: 'Trivago', domain: 'trivago.com', type: 'other' },
   { name: 'Kayak', domain: 'kayak.com', type: 'other' },
-  { name: 'Hotels.com', domain: 'hotels.com', type: 'other' },
   { name: 'Skyscanner', domain: 'skyscanner.net', type: 'other' },
 
   // ───────── Retalho / casa (extra) ─────────
   { name: 'Bricomarché', domain: 'bricomarche.pt', type: 'store', aliases: ['bricomarche'] },
   { name: 'JYSK', domain: 'jysk.pt', type: 'store' },
   { name: 'Zara Home', domain: 'zarahome.com', type: 'store', aliases: ['zara home'] },
-  { name: 'Note!', domain: 'note.pt', type: 'store', aliases: ['note'] },
+  { name: 'Note!', domain: 'noteonline.pt', type: 'store', aliases: ['note'] },
   { name: 'Zippy', domain: 'zippyonline.com', type: 'store' },
   { name: 'Toys R Us', domain: 'toysrus.pt', type: 'store', aliases: ['toys r us'] },
 
   // ───────── Canais de clubes / TV ─────────
-  { name: 'Benfica TV', domain: 'benfica.tv', type: 'other', aliases: ['btv', 'benfica tv'] },
-  { name: 'Porto Canal', domain: 'portocanal.pt', type: 'other', aliases: ['porto canal'] },
+  { name: 'Benfica TV', domain: 'slbenfica.pt', type: 'other', aliases: ['btv', 'benfica tv'] },
+  { name: 'Porto Canal', domain: 'fcporto.pt', type: 'other', aliases: ['porto canal'] },
   { name: 'Sporting TV', domain: 'sporting.pt', type: 'other', aliases: ['sporting tv'] },
 
   // ───────── Suplementos (extra) ─────────
@@ -486,13 +494,13 @@ export const BRANDS: Brand[] = [
 
   // ───────── Universidades / politécnicos ─────────
   { name: 'UTAD', domain: 'utad.pt', type: 'other', aliases: ['tras os montes'] },
-  { name: 'Universidade do Minho', domain: 'uminho.pt', type: 'other', aliases: ['u minho', 'minho'] },
-  { name: 'Universidade de Aveiro', domain: 'ua.pt', type: 'other', aliases: ['u aveiro', 'aveiro'] },
+  { name: 'Universidade do Minho', domain: 'uminho.pt', type: 'other', aliases: ['u minho', 'uminho'] },
+  { name: 'Universidade de Aveiro', domain: 'ua.pt', type: 'other', aliases: ['u aveiro', 'uaveiro'] },
   { name: 'Universidade da Beira Interior', domain: 'ubi.pt', type: 'other', aliases: ['ubi', 'beira interior'] },
-  { name: 'Universidade de Évora', domain: 'uevora.pt', type: 'other', aliases: ['u evora', 'evora'] },
-  { name: 'Universidade do Algarve', domain: 'ualg.pt', type: 'other', aliases: ['u algarve', 'algarve'] },
-  { name: 'Universidade da Madeira', domain: 'uma.pt', type: 'other', aliases: ['u madeira'] },
-  { name: 'Universidade dos Açores', domain: 'uac.pt', type: 'other', aliases: ['u acores', 'acores'] },
+  { name: 'Universidade de Évora', domain: 'uevora.pt', type: 'other', aliases: ['u evora', 'uevora'] },
+  { name: 'Universidade do Algarve', domain: 'ualg.pt', type: 'other', aliases: ['u algarve', 'ualg'] },
+  { name: 'Universidade da Madeira', domain: 'uma.pt', type: 'other', aliases: ['u madeira', 'umadeira'] },
+  { name: 'Universidade dos Açores', domain: 'uac.pt', type: 'other', aliases: ['u acores', 'uac'] },
   { name: 'Universidade Lusófona', domain: 'ulusofona.pt', type: 'other', aliases: ['lusofona'] },
   { name: 'ISEG', domain: 'iseg.ulisboa.pt', type: 'other' },
   { name: 'Politécnico de Lisboa', domain: 'ipl.pt', type: 'other', aliases: ['ipl'] },
@@ -507,14 +515,14 @@ export const BRANDS: Brand[] = [
   { name: 'Skillshare', domain: 'skillshare.com', type: 'other' },
 
   // ───────── Cosmética / perfumaria (extra) ─────────
-  { name: 'Pluricosmética', domain: 'pluricosmetica.pt', type: 'store', aliases: ['pluricosmetica', 'pluri'] },
+  { name: 'Pluricosmética', domain: 'pluricosmetica.com', type: 'store', aliases: ['pluricosmetica', 'pluri'] },
   { name: 'Notino', domain: 'notino.pt', type: 'store' },
   { name: 'Perfumes & Companhia', domain: 'perfumesecompanhia.pt', type: 'store', aliases: ['perfumes e companhia', 'perfumes companhia'] },
   { name: 'The Body Shop', domain: 'thebodyshop.com', type: 'store', aliases: ['body shop'] },
 
   // ───────── Moda / calçado (extra) ─────────
-  { name: 'Throttleman', domain: 'throttleman.pt', type: 'store' },
-  { name: 'Sacoor Brothers', domain: 'sacoorbrothers.com', type: 'store', aliases: ['sacoor'] },
+  { name: 'Throttleman', domain: 'throttleman.com', type: 'store' },
+  { name: 'Sacoor Brothers', domain: 'sacoor.com', type: 'store', aliases: ['sacoor'] },
   { name: 'Lanidor', domain: 'lanidor.com', type: 'store' },
   { name: 'MO', domain: 'mo-online.com', type: 'store' },
   { name: 'Seaside', domain: 'seaside.pt', type: 'store' },
@@ -540,12 +548,286 @@ export const BRANDS: Brand[] = [
   { name: 'Fitness UP', domain: 'fitnessup.pt', type: 'other', aliases: ['fitness up'] },
   { name: 'GoFit', domain: 'go-fit.pt', type: 'other', aliases: ['go fit', 'go gym'] },
   { name: 'Vivafit', domain: 'vivafit.pt', type: 'other' },
-  { name: 'Virgin Active', domain: 'virginactive.pt', type: 'other', aliases: ['virgin active'] },
-  { name: 'Kalorias', domain: 'kalorias.pt', type: 'other' },
-  { name: 'Anytime Fitness', domain: 'anytimefitness.pt', type: 'other', aliases: ['anytime fitness'] },
+  { name: 'Virgin Active', domain: 'virginactive.co.uk', type: 'other', aliases: ['virgin active'] },
+  { name: 'Kalorias', domain: 'kalorias.com', type: 'other' },
+  { name: 'Anytime Fitness', domain: 'anytimefitness.com', type: 'other', aliases: ['anytime fitness'] },
   { name: 'Basic-Fit', domain: 'basic-fit.com', type: 'other', aliases: ['basic fit'] },
   { name: 'Body Concept', domain: 'bodyconcept.pt', type: 'other', aliases: ['body concept'] },
   { name: 'Wellhub', domain: 'wellhub.com', type: 'other', aliases: ['gympass'] },
+
+  // Pagamentos
+  { name: 'Klarna', domain: 'klarna.com', type: 'other' },
+  // Estacionamento
+  { name: 'EMEL', domain: 'emel.pt', type: 'other', aliases: ['emel estacionamento'] },
+  { name: 'Telpark', domain: 'telpark.com', type: 'other', aliases: ['empark'] },
+  { name: 'Saba', domain: 'saba.pt', type: 'other', aliases: ['saba parques'] },
+  // Transportes
+  { name: 'Fertagus', domain: 'fertagus.pt', type: 'other' },
+  { name: 'STCP', domain: 'stcp.pt', type: 'other' },
+  { name: 'Transtejo', domain: 'ttsl.pt', type: 'other', aliases: ['soflusa', 'ttsl'] },
+  { name: 'Rede Expressos', domain: 'rede-expressos.pt', type: 'other', aliases: ['expressos'] },
+  // Restauração
+  { name: 'Pans & Company', domain: 'pans.pt', type: 'store', aliases: ['pans', 'pans and company'] },
+  { name: 'Vitaminas', domain: 'vitaminas.pt', type: 'store' },
+  { name: 'Five Guys', domain: 'fiveguys.com', type: 'store' },
+  { name: "Nando's", domain: 'nandos.com', type: 'store', aliases: ['nandos'] },
+  // Óticas e farmácias
+  { name: 'MultiOpticas', domain: 'multiopticas.pt', type: 'store', aliases: ['multi opticas', 'multiópticas'] },
+  { name: 'Specsavers', domain: 'specsavers.co.uk', type: 'store' },
+  { name: 'Alain Afflelou', domain: 'alainafflelou.pt', type: 'store', aliases: ['afflelou'] },
+  { name: 'Farmácias Portuguesas', domain: 'farmaciasportuguesas.pt', type: 'store', aliases: ['farmacias portuguesas', 'sauda'] },
+  // Água e energia
+  { name: 'EPAL', domain: 'epal.pt', type: 'other' },
+  { name: 'SU Eletricidade', domain: 'sueletricidade.pt', type: 'other', aliases: ['su eletricidade', 'servico universal'] },
+  // Cinema e bilhetes
+  { name: 'UCI Cinemas', domain: 'ucicinemas.pt', type: 'other', aliases: ['uci'] },
+  { name: 'Cinema City', domain: 'cinemacity.pt', type: 'other' },
+  // Animais
+  { name: 'Zooplus', domain: 'zooplus.pt', type: 'store' },
+  { name: 'Tiendanimal', domain: 'tiendanimal.pt', type: 'store' },
+  // Telemóvel
+  { name: 'WOO', domain: 'woo.pt', type: 'other' },
+  { name: 'Uzo', domain: 'uzo.pt', type: 'other' },
+  // Outros
+  { name: 'Too Good To Go', domain: 'toogoodtogo.com', type: 'other', aliases: ['toogoodtogo'] },
+  { name: 'Meu Super', domain: 'meusuper.pt', type: 'store' },
+  { name: 'Amanhecer', domain: 'amanhecer.pt', type: 'store' },
+
+  // Corretoras e apostas
+  { name: 'Interactive Brokers', domain: 'interactivebrokers.com', type: 'other', aliases: ['ibkr', 'interactive brokers'] },
+  { name: 'Betclic', domain: 'betclic.pt', type: 'other' },
+  { name: 'Betano', domain: 'betano.pt', type: 'other' },
+  { name: 'Bwin', domain: 'bwin.pt', type: 'other' },
+  { name: 'Solverde', domain: 'solverde.pt', type: 'other', aliases: ['solverde casino'] },
+  // Restauração e cinema
+  { name: 'Taco Bell', domain: 'tacobell.com', type: 'store' },
+  { name: 'Cinemas NOS', domain: 'cinemas.nos.pt', type: 'other', aliases: ['nos cinemas', 'cinema nos'] },
+  // Casa
+  { name: 'Hôma', domain: 'homa.pt', type: 'store', aliases: ['homa'] },
+  { name: 'Gato Preto', domain: 'gatopreto.com', type: 'store' },
+  // Relógios, joias e acessórios
+  { name: 'Casio', domain: 'casio.com', type: 'store' },
+  { name: 'Rolex', domain: 'rolex.com', type: 'store' },
+  { name: 'Swatch', domain: 'swatch.com', type: 'store' },
+  { name: 'Pandora', domain: 'pandora.net', type: 'store' },
+  { name: 'Swarovski', domain: 'swarovski.com', type: 'store' },
+  { name: 'Tous', domain: 'tous.com', type: 'store' },
+  { name: 'Ray-Ban', domain: 'ray-ban.com', type: 'store', aliases: ['rayban', 'ray ban'] },
+  // Luxo
+  { name: 'Versace', domain: 'versace.com', type: 'store' },
+  { name: 'Gucci', domain: 'gucci.com', type: 'store' },
+  { name: 'Hermès', domain: 'hermes.com', type: 'store', aliases: ['hermes'] },
+  { name: 'Prada', domain: 'prada.com', type: 'store' },
+  { name: 'Louis Vuitton', domain: 'louisvuitton.com', type: 'store' },
+  { name: 'Chanel', domain: 'chanel.com', type: 'store' },
+  { name: 'Dior', domain: 'dior.com', type: 'store' },
+  { name: 'Burberry', domain: 'burberry.com', type: 'store' },
+  { name: 'Armani', domain: 'armani.com', type: 'store', aliases: ['emporio armani', 'giorgio armani', 'armani exchange'] },
+  { name: 'Michael Kors', domain: 'michaelkors.com', type: 'store' },
+  { name: 'Farfetch', domain: 'farfetch.com', type: 'store' },
+  // Carros desportivos
+  { name: 'Ferrari', domain: 'ferrari.com', type: 'other' },
+  { name: 'Lamborghini', domain: 'lamborghini.com', type: 'other' },
+  { name: 'Maserati', domain: 'maserati.com', type: 'other' },
+  // Moda
+  { name: 'Lion of Porches', domain: 'lionofporches.com', type: 'store' },
+  { name: 'Ralph Lauren', domain: 'ralphlauren.com', type: 'store', aliases: ['polo ralph lauren'] },
+  { name: 'Lacoste', domain: 'lacoste.com', type: 'store' },
+  { name: 'Tommy Hilfiger', domain: 'tommy.com', type: 'store' },
+  { name: 'Calvin Klein', domain: 'calvinklein.com', type: 'store' },
+  { name: 'Hugo Boss', domain: 'hugoboss.com', type: 'store' },
+  { name: 'Guess', domain: 'guess.com', type: 'store' },
+  { name: "Levi's", domain: 'levi.com', type: 'store', aliases: ['levis'] },
+  { name: 'Gant', domain: 'gant.com', type: 'store' },
+  { name: 'Dielmar', domain: 'dielmar.pt', type: 'store' },
+  { name: 'Uniqlo', domain: 'uniqlo.com', type: 'store' },
+  { name: 'Desigual', domain: 'desigual.com', type: 'store' },
+  { name: 'Benetton', domain: 'benetton.com', type: 'store', aliases: ['united colors of benetton'] },
+  { name: 'Pepe Jeans', domain: 'pepejeans.com', type: 'store' },
+  { name: 'Cortefiel', domain: 'cortefiel.com', type: 'store' },
+  { name: 'Sfera', domain: 'sfera.com', type: 'store' },
+  { name: 'Kiabi', domain: 'kiabi.pt', type: 'store' },
+  { name: 'Tezenis', domain: 'tezenis.com', type: 'store' },
+  { name: "Women'secret", domain: 'womensecret.com', type: 'store', aliases: ['womensecret', 'women secret'] },
+  { name: 'Zalando', domain: 'zalando.pt', type: 'store' },
+  { name: 'ASOS', domain: 'asos.com', type: 'store' },
+  // Desporto e calçado
+  { name: 'Puma', domain: 'puma.com', type: 'store' },
+  { name: 'New Balance', domain: 'newbalance.com', type: 'store' },
+  { name: 'Vans', domain: 'vans.com', type: 'store' },
+  { name: 'Converse', domain: 'converse.com', type: 'store' },
+  { name: 'Skechers', domain: 'skechers.com', type: 'store' },
+  { name: 'Timberland', domain: 'timberland.com', type: 'store' },
+  { name: 'The North Face', domain: 'thenorthface.com', type: 'store', aliases: ['north face'] },
+  { name: 'Foot Locker', domain: 'footlocker.eu', type: 'store', aliases: ['footlocker'] },
+
+  // Carros (elétricos e outras marcas)
+  { name: 'BYD', domain: 'byd.com', type: 'other' },
+  { name: 'Polestar', domain: 'polestar.com', type: 'other' },
+  { name: 'MG', domain: 'mgmotor.eu', type: 'other', aliases: ['mg motor'] },
+  { name: 'Smart', domain: 'smart.com', type: 'other' },
+  { name: 'DS Automobiles', domain: 'dsautomobiles.com', type: 'other', aliases: ['ds'] },
+  { name: 'Lancia', domain: 'lancia.com', type: 'other' },
+  { name: 'Subaru', domain: 'subaru.com', type: 'other' },
+  { name: 'Lynk & Co', domain: 'lynkco.com', type: 'other', aliases: ['lynk and co', 'lynk'] },
+  { name: 'Leapmotor', domain: 'leapmotor-international.com', type: 'other' },
+  { name: 'XPeng', domain: 'xpeng.com', type: 'other' },
+  { name: 'Zeekr', domain: 'zeekr.eu', type: 'other' },
+  { name: 'Chevrolet', domain: 'chevrolet.com', type: 'other' },
+  { name: 'Abarth', domain: 'abarth.com', type: 'other' },
+  { name: 'Alpine', domain: 'alpinecars.com', type: 'other' },
+  { name: 'Lotus', domain: 'lotuscars.com', type: 'other' },
+  { name: 'INEOS', domain: 'ineosgrenadier.com', type: 'other', aliases: ['ineos grenadier'] },
+  { name: 'Bentley', domain: 'bentleymotors.com', type: 'other' },
+  { name: 'Rolls-Royce', domain: 'rolls-roycemotorcars.com', type: 'other', aliases: ['rolls royce'] },
+  { name: 'Aston Martin', domain: 'astonmartin.com', type: 'other' },
+  { name: 'McLaren', domain: 'mclaren.com', type: 'other' },
+  // Motas
+  { name: 'Yamaha', domain: 'yamaha-motor.eu', type: 'other' },
+  { name: 'Kawasaki', domain: 'kawasaki.eu', type: 'other' },
+  { name: 'Ducati', domain: 'ducati.com', type: 'other' },
+  { name: 'Harley-Davidson', domain: 'harley-davidson.com', type: 'other', aliases: ['harley davidson', 'harley'] },
+  { name: 'KTM', domain: 'ktm.com', type: 'other' },
+  { name: 'Vespa', domain: 'vespa.com', type: 'other' },
+  { name: 'Piaggio', domain: 'piaggio.com', type: 'other' },
+  { name: 'Triumph', domain: 'triumphmotorcycles.com', type: 'other' },
+
+  // Saúde (Estado)
+  { name: 'ADSE', domain: 'adse.pt', type: 'other' },
+  // Encomendas
+  { name: 'DHL', domain: 'dhl.com', type: 'other' },
+  { name: 'UPS', domain: 'ups.com', type: 'other' },
+  { name: 'FedEx', domain: 'fedex.com', type: 'other' },
+  { name: 'DPD', domain: 'dpd.com', type: 'other' },
+  { name: 'GLS', domain: 'gls-group.com', type: 'other' },
+  // Aluguer de carros
+  { name: 'Sixt', domain: 'sixt.com', type: 'other' },
+  { name: 'Avis', domain: 'avis.com', type: 'other' },
+  { name: 'Goldcar', domain: 'goldcar.es', type: 'other' },
+  { name: 'Centauro', domain: 'centauro.net', type: 'other', aliases: ['centauro rent a car'] },
+  // Companhias aéreas
+  { name: 'Emirates', domain: 'emirates.com', type: 'other' },
+  { name: 'Air France', domain: 'airfrance.com', type: 'other' },
+  { name: 'KLM', domain: 'klm.com', type: 'other' },
+  { name: 'British Airways', domain: 'britishairways.com', type: 'other' },
+  { name: 'Transavia', domain: 'transavia.com', type: 'other' },
+  // Restauração
+  { name: 'Costa Coffee', domain: 'costa.co.uk', type: 'store' },
+  { name: 'Tim Hortons', domain: 'timhortons.com', type: 'store' },
+  { name: "Papa John's", domain: 'papajohns.com', type: 'store', aliases: ['papa johns'] },
+  { name: 'Popeyes', domain: 'popeyes.com', type: 'store' },
+  { name: 'Wok to Walk', domain: 'woktowalk.com', type: 'store' },
+  { name: 'Honest Greens', domain: 'honestgreens.com', type: 'store' },
+  // Casa
+  { name: 'Maisons du Monde', domain: 'maisonsdumonde.com', type: 'store' },
+  { name: 'Kave Home', domain: 'kavehome.com', type: 'store' },
+  { name: 'Natura', domain: 'natura.pt', type: 'store' },
+  { name: 'Flying Tiger', domain: 'flyingtiger.com', type: 'store', aliases: ['flying tiger copenhagen', 'tiger'] },
+  // Beleza
+  { name: 'Yves Rocher', domain: 'yves-rocher.pt', type: 'store' },
+  { name: "L'Occitane", domain: 'loccitane.com', type: 'store', aliases: ['loccitane', 'l occitane'] },
+  { name: 'Lush', domain: 'lush.com', type: 'store' },
+  { name: 'MAC Cosmetics', domain: 'maccosmetics.com', type: 'store' },
+  // Online
+  { name: 'Etsy', domain: 'etsy.com', type: 'store' },
+  { name: 'Wallapop', domain: 'wallapop.com', type: 'store' },
+  // Subscrições e apps
+  { name: 'Epic Games', domain: 'epicgames.com', type: 'other', aliases: ['fortnite'] },
+  { name: 'EA', domain: 'ea.com', type: 'other', aliases: ['electronic arts', 'ea sports'] },
+  { name: 'Roblox', domain: 'roblox.com', type: 'other' },
+  { name: 'Strava', domain: 'strava.com', type: 'other' },
+  { name: 'Tinder', domain: 'tinder.com', type: 'other' },
+  { name: 'Headspace', domain: 'headspace.com', type: 'other' },
+  // Outros
+  { name: 'Lime', domain: 'li.me', type: 'other', aliases: ['lime trotinete'] },
+  { name: 'Ascendi', domain: 'ascendi.pt', type: 'other' },
+  { name: 'Águas do Porto', domain: 'aguasdoporto.pt', type: 'other', aliases: ['aguas do porto'] },
+  { name: 'UNICEF', domain: 'unicef.pt', type: 'other' },
+  { name: 'Cruz Vermelha', domain: 'cruzvermelha.pt', type: 'other', aliases: ['cruz vermelha portuguesa'] },
+
+  // Universidades, faculdades e politécnicos (complemento)
+  { name: 'Instituto Superior Técnico', domain: 'tecnico.ulisboa.pt', type: 'other', aliases: ['ist', 'tecnico lisboa'] },
+  { name: 'FEUP', domain: 'fe.up.pt', type: 'other', aliases: ['faculdade de engenharia do porto'] },
+  { name: 'Nova SBE', domain: 'novasbe.unl.pt', type: 'other', aliases: ['nova school of business'] },
+  { name: 'NOVA FCT', domain: 'fct.unl.pt', type: 'other', aliases: ['fct nova'] },
+  { name: 'ISEP', domain: 'isep.ipp.pt', type: 'other' },
+  { name: 'ISCAP', domain: 'iscap.ipp.pt', type: 'other' },
+  { name: 'ISCAL', domain: 'iscal.ipl.pt', type: 'other' },
+  { name: 'ISCSP', domain: 'iscsp.ulisboa.pt', type: 'other' },
+  { name: 'Universidade Aberta', domain: 'uab.pt', type: 'other', aliases: ['uab'] },
+  { name: 'Universidade Autónoma de Lisboa', domain: 'autonoma.pt', type: 'other', aliases: ['universidade autonoma', 'ual'] },
+  { name: 'Universidade Fernando Pessoa', domain: 'ufp.pt', type: 'other', aliases: ['ufp'] },
+  { name: 'Universidade Portucalense', domain: 'upt.pt', type: 'other', aliases: ['upt'] },
+  { name: 'Universidade Europeia', domain: 'europeia.pt', type: 'other', aliases: ['iade'] },
+  { name: 'Universidade Lusíada', domain: 'ulusiada.pt', type: 'other', aliases: ['lusiada'] },
+  { name: 'ISPA', domain: 'ispa.pt', type: 'other' },
+  { name: 'Egas Moniz', domain: 'egasmoniz.com.pt', type: 'other', aliases: ['egas moniz school of health'] },
+  { name: 'Politécnico de Setúbal', domain: 'ips.pt', type: 'other', aliases: ['ips setubal'] },
+  { name: 'Politécnico de Bragança', domain: 'ipb.pt', type: 'other', aliases: ['ipb'] },
+  { name: 'Politécnico de Viseu', domain: 'ipv.pt', type: 'other', aliases: ['ipv'] },
+  { name: 'Politécnico do Cávado e do Ave', domain: 'ipca.pt', type: 'other', aliases: ['ipca'] },
+  { name: 'Politécnico de Santarém', domain: 'ipsantarem.pt', type: 'other' },
+  { name: 'Politécnico de Tomar', domain: 'ipt.pt', type: 'other', aliases: ['ipt'] },
+  { name: 'Politécnico de Portalegre', domain: 'ipportalegre.pt', type: 'other' },
+  { name: 'Politécnico de Castelo Branco', domain: 'ipcb.pt', type: 'other', aliases: ['ipcb'] },
+  { name: 'Politécnico da Guarda', domain: 'ipg.pt', type: 'other', aliases: ['ipg'] },
+  { name: 'Politécnico de Viana do Castelo', domain: 'ipvc.pt', type: 'other', aliases: ['ipvc'] },
+  { name: 'Politécnico de Beja', domain: 'ipbeja.pt', type: 'other' },
+
+  // Lojas de decoração/bazar
+  { name: 'Normal', domain: 'normal.dk', type: 'store', strict: true },
+  { name: 'Søstrene Grene', domain: 'sostrenegrene.com', type: 'store', aliases: ['sostrene grene'] },
+  { name: 'Pepco', domain: 'pepco.pt', type: 'store' },
+  { name: 'TEDi', domain: 'tedi.com', type: 'store' },
+  { name: 'Ale-Hop', domain: 'ale-hop.org', type: 'store', aliases: ['ale hop', 'alehop'] },
+  { name: 'Miniso', domain: 'miniso.com', type: 'store' },
+  { name: 'HEMA', domain: 'hema.com', type: 'store' },
+  { name: "Claire's", domain: 'claires.com', type: 'store', aliases: ['claires'] },
+
+  // Eletricidade e gás (mercado livre)
+  { name: 'Yes Energy', domain: 'yesenergy.pt', type: 'other', aliases: ['ylce', 'yes low cost energy', 'yes energia'] },
+  { name: 'Luzboa', domain: 'luzboa.pt', type: 'other' },
+  { name: 'Coopérnico', domain: 'coopernico.org', type: 'other', aliases: ['coopernico'] },
+  { name: 'EZU Energia', domain: 'ezuenergia.pt', type: 'other', aliases: ['ezu'] },
+  { name: 'Energia Simples', domain: 'energiasimples.pt', type: 'other' },
+  { name: 'G9 Energy', domain: 'g9energy.pt', type: 'other', aliases: ['g9 energia'] },
+  { name: 'Elusa', domain: 'elusa.pt', type: 'other' },
+  { name: 'Luzigás', domain: 'luzigas.pt', type: 'other', aliases: ['luzigas'] },
+  { name: 'Floene', domain: 'floene.pt', type: 'other', aliases: ['lisboagas', 'lisboagás'] },
+  // Gás natural: distribuidoras regionais (hoje do grupo Floene → mesmo logo) e outras
+  { name: 'Lusitaniagás', domain: 'floene.pt', type: 'other', aliases: ['lusitaniagas'] },
+  { name: 'Setgás', domain: 'floene.pt', type: 'other', aliases: ['setgas'] },
+  { name: 'Tagusgás', domain: 'floene.pt', type: 'other', aliases: ['tagusgas'] },
+  { name: 'Beiragás', domain: 'floene.pt', type: 'other', aliases: ['beiragas'] },
+  { name: 'Duriensegás', domain: 'floene.pt', type: 'other', aliases: ['duriensegas'] },
+  { name: 'Dianagás', domain: 'floene.pt', type: 'other', aliases: ['dianagas'] },
+  { name: 'Paxgás', domain: 'floene.pt', type: 'other', aliases: ['paxgas'] },
+  { name: 'Medigás', domain: 'floene.pt', type: 'other', aliases: ['medigas'] },
+  { name: 'Portgás', domain: 'portgas.pt', type: 'other', aliases: ['portgas', 'ren portgas'] },
+  { name: 'Sonorgás', domain: 'sonorgas.pt', type: 'other', aliases: ['sonorgas'] },
+  { name: 'Naturgy', domain: 'naturgy.pt', type: 'other' },
+  // Gás de botija / propano (GPL)
+  { name: 'Rubis Energia', domain: 'rubisenergia.pt', type: 'other', aliases: ['rubis', 'rubis gas'] },
+  { name: 'OZ Energia', domain: 'ozenergia.pt', type: 'other', aliases: ['oz gas', 'oz energia gas'] },
+  // Água (entidades municipais/intermunicipais)
+  { name: 'AGERE', domain: 'agere.pt', type: 'other', aliases: ['agere braga'] },
+  { name: 'Águas de Gaia', domain: 'aguasgaia.pt', type: 'other', aliases: ['aguas de gaia', 'aguas gaia'] },
+  { name: 'Indaqua', domain: 'indaqua.pt', type: 'other' },
+  { name: 'Águas de Cascais', domain: 'aguasdecascais.pt', type: 'other', aliases: ['aguas de cascais'] },
+  { name: 'Vimágua', domain: 'vimagua.pt', type: 'other', aliases: ['vimagua'] },
+  { name: 'SMAS Sintra', domain: 'smas-sintra.pt', type: 'other' },
+  { name: 'SMAS Almada', domain: 'smasalmada.pt', type: 'other' },
+  { name: 'SIMAR Loures e Odivelas', domain: 'simar-louresodivelas.pt', type: 'other', aliases: ['simar'] },
+  { name: 'Águas de Coimbra', domain: 'aguasdecoimbra.pt', type: 'other', aliases: ['aguas de coimbra'] },
+  { name: 'Águas do Sado', domain: 'aguasdosado.pt', type: 'other', aliases: ['aguas do sado'] },
+  { name: 'AdRA', domain: 'adra.pt', type: 'other', aliases: ['aguas da regiao de aveiro'] },
+  { name: 'Águas de Barcelos', domain: 'aguasdebarcelos.pt', type: 'other', aliases: ['aguas de barcelos'] },
+  { name: 'Águas do Ribatejo', domain: 'aguasdoribatejo.com', type: 'other', aliases: ['aguas do ribatejo'] },
+  { name: 'Águas de Gondomar', domain: 'aguasdegondomar.pt', type: 'other', aliases: ['aguas de gondomar'] },
+  { name: 'Águas da Figueira', domain: 'aguasdafigueira.com', type: 'other', aliases: ['aguas da figueira'] },
+  { name: 'SMAS Leiria', domain: 'smas-leiria.pt', type: 'other' },
+  { name: 'Águas de Santarém', domain: 'aguasdesantarem.pt', type: 'other', aliases: ['aguas de santarem'] },
+  { name: 'Águas de Viseu', domain: 'aguasdeviseu.pt', type: 'other', aliases: ['aguas de viseu'] },
 ]
 
 export interface Country {
@@ -601,9 +883,11 @@ export function findBrand(name?: string | null): Brand | null {
     if (brandTerms(b).some((t) => t === n)) return b
   }
   for (const b of BRANDS) {
+    if (b.strict) continue
     if (brandTerms(b).some((t) => t.length >= 3 && (n.startsWith(t + ' ') || n === t))) return b
   }
   for (const b of BRANDS) {
+    if (b.strict) continue
     if (brandTerms(b).some((t) => t.length >= 3 && new RegExp(`(^|\\s)${escapeRegExp(t)}(\\s|$)`).test(n))) return b
   }
   return null

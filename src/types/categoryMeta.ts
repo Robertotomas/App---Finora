@@ -144,7 +144,7 @@ export const EXPENSE_CATEGORIES: TransactionCategory[] = CATEGORY_GROUPS.filter(
 
 /** Cor de cada grupo (chave do grupo → cor). Todas as categorias de um grupo partilham esta cor. */
 export const CATEGORY_GROUP_COLORS: Record<string, string> = {
-  income: '#16a34a', // Rendimentos — verde
+  income: '#15803d', // Rendimentos — verde
   food: '#f59e0b', // Alimentação — âmbar
   housing: '#3b82f6', // Habitação — azul
   transport: '#6366f1', // Transportes — índigo

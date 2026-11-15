@@ -37,18 +37,13 @@ const expensesAtBudget = computed(() =>
       <div class="progress-header">
         <span class="progress-label">Receitas</span>
         <span class="progress-values">
-          {{ formatCurrency(realIncome) }} / {{ formatCurrency(expectedIncome) }}
-          <span v-if="expectedIncome > 0" class="progress-pct">
-            ({{ incomeProgress }}%)
-            <span v-if="incomeReached" class="badge-ok">✓ Atingido</span>
-          </span>
+          <span class="progress-amounts">{{ formatCurrency(realIncome) }} <span class="progress-of">/ {{ formatCurrency(expectedIncome) }}</span></span>
+          <span class="progress-pct">{{ incomeProgress }}%</span>
+          <span v-if="incomeReached" class="ui-badge ui-badge--success"><svg class="badge-check" xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>Atingido</span>
         </span>
       </div>
-      <div class="progress-track progress-track-income">
-        <div
-          class="progress-fill progress-fill-income"
-          :style="{ width: `${Math.min(100, incomeProgress)}%` }"
-        />
+      <div class="progress-track">
+        <div class="progress-fill progress-fill-income" :style="{ width: `${Math.min(100, incomeProgress)}%` }" />
       </div>
     </div>
 
@@ -56,19 +51,17 @@ const expensesAtBudget = computed(() =>
       <div class="progress-header">
         <span class="progress-label">Despesas</span>
         <span class="progress-values">
-          {{ formatCurrency(realExpenses) }} / {{ formatCurrency(expectedExpenses) }}
-          <span v-if="expectedExpenses > 0" class="progress-pct">
-            ({{ expensesProgress }}%)
-            <span v-if="expensesOverBudget" class="badge-over">Acima do orçamento</span>
-            <span v-else-if="expensesAtBudget" class="badge-ok">✓ No orçamento</span>
-            <span v-else class="badge-ok">Abaixo do orçamento</span>
-          </span>
+          <span class="progress-amounts">{{ formatCurrency(realExpenses) }} <span class="progress-of">/ {{ formatCurrency(expectedExpenses) }}</span></span>
+          <span class="progress-pct">{{ expensesProgress }}%</span>
+          <span v-if="expensesOverBudget" class="ui-badge ui-badge--danger">Acima do orçamento</span>
+          <span v-else-if="expensesAtBudget" class="ui-badge ui-badge--success"><svg class="badge-check" xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>No orçamento</span>
+          <span v-else class="ui-badge ui-badge--success">Abaixo do orçamento</span>
         </span>
       </div>
-      <div class="progress-track progress-track-expenses">
+      <div class="progress-track">
         <div
           class="progress-fill progress-fill-expenses"
-          :class="{ 'over-budget': expensesOverBudget }"
+          :class="{ 'over-budget': expensesOverBudget, 'near-budget': expensesAtBudget && !expensesOverBudget }"
           :style="{ width: `${Math.min(100, expensesProgress)}%` }"
         />
       </div>
@@ -83,100 +76,91 @@ const expensesAtBudget = computed(() =>
 .progress-chart {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: var(--space-5);
 }
 
 .progress-section {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: var(--space-2);
 }
 
 .progress-header {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: center;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: var(--space-2);
 }
 
 .progress-label {
-  font-size: 0.9375rem;
-  font-weight: 600;
-  color: var(--color-text);
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-strong);
 }
 
 .progress-values {
-  font-size: 0.875rem;
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
   color: var(--color-text-muted);
-  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.progress-amounts {
+  color: var(--color-text-strong);
+  font-weight: var(--weight-semibold);
+}
+
+.progress-of {
+  color: var(--color-text-muted);
+  font-weight: var(--weight-regular);
 }
 
 .progress-pct {
-  display: inline-block;
-  margin-left: 0.25rem;
-  font-weight: 500;
+  font-weight: var(--weight-medium);
 }
 
-.badge-ok {
-  display: inline-block;
-  margin-left: 0.5rem;
-  padding: 0.125rem 0.5rem;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: #059669;
-  background: rgba(5, 150, 105, 0.15);
-  border-radius: 6px;
-}
-
-.badge-over {
-  display: inline-block;
-  margin-left: 0.5rem;
-  padding: 0.125rem 0.5rem;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: #dc2626;
-  background: rgba(220, 38, 38, 0.15);
-  border-radius: 6px;
+.badge-check {
+  flex-shrink: 0;
 }
 
 .progress-track {
-  height: 12px;
-  background: var(--color-border);
-  border-radius: 6px;
+  height: 8px;
+  background: var(--color-surface-muted);
+  border-radius: var(--radius-full);
   overflow: hidden;
   position: relative;
 }
 
-.progress-track-income {
-  background: rgba(5, 150, 105, 0.2);
-}
-
-.progress-track-expenses {
-  background: rgba(234, 179, 8, 0.2);
-}
-
 .progress-fill {
   height: 100%;
-  border-radius: 6px;
-  transition: width 0.4s ease-out;
+  border-radius: var(--radius-full);
+  transition: width var(--transition-slow);
 }
 
 .progress-fill-income {
-  background: linear-gradient(90deg, #059669, #10b981);
+  background: var(--color-income);
 }
 
 .progress-fill-expenses {
-  background: linear-gradient(90deg, #65a30d, #84cc16);
+  background: var(--color-primary-text);
+}
+
+.progress-fill-expenses.near-budget {
+  background: var(--color-warning);
 }
 
 .progress-fill-expenses.over-budget {
-  background: linear-gradient(90deg, #d97706, #ea580c);
+  background: var(--color-expense);
 }
 
 .progress-over-indicator {
-  font-size: 0.8125rem;
-  color: #dc2626;
-  font-weight: 500;
+  font-size: var(--text-xs);
+  color: var(--color-danger);
+  font-weight: var(--weight-medium);
 }
 </style>

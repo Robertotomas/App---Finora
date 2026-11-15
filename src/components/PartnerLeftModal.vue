@@ -2,6 +2,7 @@
 import { ref, computed, watch, nextTick } from 'vue'
 import { useHouseholdStore } from '@/stores/household'
 import { clearAllBudgetsForHousehold } from '@/composables/useMonthlyBudget'
+import UiButton from '@/components/ui/UiButton.vue'
 
 type Phase = 'main' | 'continueAck' | 'reset1' | 'reset2'
 
@@ -128,7 +129,9 @@ async function confirmReset() {
       <div class="partner-dialog" ref="dialogRef">
         <!-- Escolha inicial -->
         <template v-if="phase === 'main'">
-          <div class="partner-icon" aria-hidden="true">👋</div>
+          <div class="partner-icon" aria-hidden="true">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="22" x2="16" y1="11" y2="11"/></svg>
+          </div>
           <h2 id="partner-left-title" class="partner-title">A outra pessoa saiu do agregado</h2>
           <p class="partner-lead">
             O plano casal terminou para este agregado. Todo o histórico (contas, movimentos, objetivos,
@@ -136,12 +139,12 @@ async function confirmReset() {
           </p>
           <p class="partner-hint">Escolha como quer prosseguir:</p>
           <div class="partner-actions-stack">
-            <button type="button" class="btn-primary" @click="startContinue">
+            <UiButton block @click="startContinue">
               Continuar com os dados existentes
-            </button>
-            <button type="button" class="btn-danger-outline" @click="startReset">
+            </UiButton>
+            <UiButton block variant="danger-ghost" @click="startReset">
               Apagar tudo e começar do zero…
-            </button>
+            </UiButton>
           </div>
         </template>
 
@@ -160,42 +163,43 @@ async function confirmReset() {
             />
             <span>Confirmo que quero manter os dados deste agregado.</span>
           </label>
-          <p v-if="errorMsg" class="partner-error">{{ errorMsg }}</p>
+          <p v-if="errorMsg" class="partner-error" role="alert">{{ errorMsg }}</p>
           <div class="partner-actions-row">
-            <button type="button" class="btn-secondary" :disabled="actionLoading" @click="goMain">
+            <UiButton variant="secondary" :disabled="actionLoading" @click="goMain">
               Voltar
-            </button>
-            <button
-              type="button"
-              class="btn-primary"
-              :disabled="actionLoading || !continueAck"
+            </UiButton>
+            <UiButton
+              :disabled="!continueAck"
+              :loading="actionLoading"
               @click="confirmContinue"
             >
               {{ actionLoading ? 'A guardar…' : 'Confirmar e continuar' }}
-            </button>
+            </UiButton>
           </div>
         </template>
 
         <!-- Reset passo 1 -->
         <template v-else-if="phase === 'reset1'">
+          <div class="partner-icon partner-icon--danger" aria-hidden="true">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" x2="12" y1="9" y2="13"/><line x1="12" x2="12.01" y1="17" y2="17"/></svg>
+          </div>
           <h2 class="partner-title">Apagar todos os dados?</h2>
           <p class="partner-lead reset-strong">
             Isto remove <strong>todas</strong> as contas, movimentos, recorrentes, objetivos de poupança
             e relatórios mensais deste agregado. <strong>Não pode ser anulado.</strong>
           </p>
-          <p v-if="errorMsg" class="partner-error">{{ errorMsg }}</p>
+          <p v-if="errorMsg" class="partner-error" role="alert">{{ errorMsg }}</p>
           <div class="partner-actions-row">
-            <button type="button" class="btn-secondary" :disabled="actionLoading" @click="goMain">
+            <UiButton variant="secondary" :disabled="actionLoading" @click="goMain">
               Voltar
-            </button>
-            <button
-              type="button"
-              class="btn-danger"
+            </UiButton>
+            <UiButton
+              variant="danger"
               :disabled="actionLoading"
               @click="phase = 'reset2'"
             >
               Continuar para confirmação final
-            </button>
+            </UiButton>
           </div>
         </template>
 
@@ -214,24 +218,23 @@ async function confirmReset() {
             placeholder="RECOMECAR"
             aria-label="Escreva RECOMECAR para confirmar"
           />
-          <p v-if="errorMsg" class="partner-error">{{ errorMsg }}</p>
+          <p v-if="errorMsg" class="partner-error" role="alert">{{ errorMsg }}</p>
           <div class="partner-actions-row">
-            <button
-              type="button"
-              class="btn-secondary"
+            <UiButton
+              variant="secondary"
               :disabled="actionLoading"
               @click="phase = 'reset1'"
             >
               Voltar
-            </button>
-            <button
-              type="button"
-              class="btn-danger"
-              :disabled="actionLoading || resetPhrase.trim() !== 'RECOMECAR'"
+            </UiButton>
+            <UiButton
+              variant="danger"
+              :disabled="resetPhrase.trim() !== 'RECOMECAR'"
+              :loading="actionLoading"
               @click="confirmReset"
             >
               {{ actionLoading ? 'A apagar…' : 'Apagar definitivamente' }}
-            </button>
+            </UiButton>
           </div>
         </template>
       </div>
@@ -243,186 +246,131 @@ async function confirmReset() {
 .partner-overlay {
   position: fixed;
   inset: 0;
-  z-index: 200;
+  z-index: var(--z-modal);
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 1rem;
-  background: rgba(15, 23, 42, 0.55);
-  backdrop-filter: blur(2px);
+  padding: var(--space-4);
+  background: var(--color-modal-overlay);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
 }
 
 .partner-dialog {
   width: 100%;
-  max-width: min(480px, 100%);
+  max-width: min(460px, 100%);
   max-height: min(90vh, 640px);
   overflow-y: auto;
-  padding: 1.75rem;
-  border-radius: 14px;
-  background: var(--color-bg-card, #fff);
-  border: 1px solid var(--color-border, #e2e8f0);
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  padding: var(--space-8) var(--space-6) var(--space-6);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-lg);
 }
 
 .partner-icon {
-  font-size: 2rem;
-  text-align: center;
-  margin-bottom: 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  margin: 0 auto var(--space-4);
+  border-radius: 50%;
+  background: var(--color-primary-soft);
+  color: var(--color-primary-text);
+}
+
+.partner-icon--danger {
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
 }
 
 .partner-title {
-  font-size: 1.2rem;
-  font-weight: 700;
-  color: var(--color-text, #0f172a);
-  margin: 0 0 0.75rem 0;
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-strong);
   text-align: center;
 }
 
 .partner-lead {
-  font-size: 0.9rem;
+  margin: 0 0 var(--space-4);
+  font-size: var(--text-base);
   line-height: 1.55;
-  color: var(--color-text-muted, #64748b);
-  margin: 0 0 1rem 0;
+  color: var(--color-text-muted);
+}
+
+.partner-lead strong {
+  color: var(--color-text-strong);
 }
 
 .reset-strong {
-  color: var(--color-text, #334155);
+  color: var(--color-text);
 }
 
 .partner-hint {
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: var(--color-text, #475569);
-  margin: 0 0 0.75rem 0;
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-strong);
 }
 
 .partner-actions-stack {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: var(--space-2);
 }
 
 .partner-actions-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.75rem;
+  gap: var(--space-2);
   justify-content: flex-end;
-  margin-top: 0.5rem;
-}
-
-.btn-primary {
-  padding: 0.65rem 1.1rem;
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: #fff;
-  background: #166534;
-  border: none;
-  border-radius: 10px;
-  cursor: pointer;
-  font-family: inherit;
-}
-
-.btn-primary:hover:not(:disabled) {
-  background: #14532d;
-}
-
-.btn-primary:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-
-.btn-danger {
-  padding: 0.65rem 1.1rem;
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: #fff;
-  background: #dc2626;
-  border: none;
-  border-radius: 10px;
-  cursor: pointer;
-  font-family: inherit;
-}
-
-.btn-danger:hover:not(:disabled) {
-  background: #b91c1c;
-}
-
-.btn-danger:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-
-.btn-danger-outline {
-  padding: 0.65rem 1.1rem;
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: #dc2626;
-  background: transparent;
-  border: 1px solid #fecaca;
-  border-radius: 10px;
-  cursor: pointer;
-  font-family: inherit;
-}
-
-.btn-danger-outline:hover {
-  background: rgba(220, 38, 38, 0.06);
-}
-
-.btn-secondary {
-  padding: 0.65rem 1.1rem;
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: var(--color-text, #475569);
-  background: var(--color-btn-secondary-hover, #f1f5f9);
-  border: none;
-  border-radius: 10px;
-  cursor: pointer;
-  font-family: inherit;
-}
-
-.btn-secondary:hover:not(:disabled) {
-  filter: brightness(0.97);
+  margin-top: var(--space-2);
 }
 
 .partner-check {
   display: flex;
   align-items: flex-start;
-  gap: 0.5rem;
-  font-size: 0.875rem;
-  color: var(--color-text, #0f172a);
-  margin-bottom: 1rem;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+  font-size: var(--text-base);
   line-height: 1.45;
+  color: var(--color-text);
   cursor: pointer;
 }
 
 .partner-check input {
-  margin-top: 0.2rem;
+  margin-top: 3px;
   flex-shrink: 0;
+  accent-color: var(--color-primary);
 }
 
 .partner-input {
   width: 100%;
   box-sizing: border-box;
-  padding: 0.65rem 0.85rem;
-  font-size: 0.9rem;
+  height: 40px;
+  margin-bottom: var(--space-3);
+  padding: 0 var(--space-3);
+  font-size: var(--text-base);
   font-family: ui-monospace, monospace;
   letter-spacing: 0.03em;
-  border: 1px solid var(--color-border, #e2e8f0);
-  border-radius: 8px;
-  background: var(--color-input-bg, #fff);
-  color: var(--color-text, #0f172a);
-  margin-bottom: 0.75rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text-strong);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
 .partner-input:focus {
   outline: none;
-  border-color: #2563eb;
-  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+  border-color: var(--color-primary);
+  box-shadow: var(--focus-ring);
 }
 
 .partner-error {
-  font-size: 0.8125rem;
-  color: #dc2626;
-  margin: 0 0 0.75rem 0;
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--color-danger);
 }
 </style>

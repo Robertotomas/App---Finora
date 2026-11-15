@@ -4,6 +4,8 @@ import BaseModal from './BaseModal.vue'
 import BaseSelect from './BaseSelect.vue'
 import CategorySelect from './CategorySelect.vue'
 import BrandAutocomplete from './BrandAutocomplete.vue'
+import DatePicker from './DatePicker.vue'
+import UiButton from './ui/UiButton.vue'
 import type { Transaction, CreateTransactionRequest } from '@/types/transaction'
 import {
   TransactionType,
@@ -123,7 +125,7 @@ watch(type, () => {
 function validate(): boolean {
   const e: Record<string, string> = {}
   if (!accountId.value) e.accountId = 'Selecione uma conta'
-  if (!amount.value || amount.value === 0) e.amount = 'Indica o montante'
+  if (!amount.value || amount.value === 0) e.amount = 'Indique o montante'
   if (!date.value) e.date = 'Data é obrigatória'
   if (props.isTransfer || type.value === TransactionType.Transfer) {
     if (!destinationAccountId.value) e.destinationAccountId = 'Selecione a conta de destino'
@@ -177,7 +179,7 @@ const modalTitle = computed(() => {
     :title="modalTitle"
     @close="handleClose"
   >
-    <form @submit.prevent="handleSubmit" class="transaction-form">
+    <form id="transaction-form" class="modal-form" @submit.prevent="handleSubmit">
       <!-- Transfer mode: source & destination accounts -->
       <template v-if="isTransferMode">
         <div class="form-group">
@@ -223,13 +225,7 @@ const modalTitle = computed(() => {
           </div>
           <div class="form-group">
             <label for="tx-date-t">Data</label>
-            <input
-              id="tx-date-t"
-              v-model="date"
-              type="date"
-              class="input"
-              :class="{ 'input-error': errors.date }"
-            />
+            <DatePicker id="tx-date-t" v-model="date" editable :error="!!errors.date" />
             <span v-if="errors.date" class="error-text">{{ errors.date }}</span>
           </div>
         </div>
@@ -314,13 +310,7 @@ const modalTitle = computed(() => {
           </div>
           <div class="form-group">
             <label for="tx-date">Data</label>
-            <input
-              id="tx-date"
-              v-model="date"
-              type="date"
-              class="input"
-              :class="{ 'input-error': errors.date }"
-            />
+            <DatePicker id="tx-date" v-model="date" editable :error="!!errors.date" />
             <span v-if="errors.date" class="error-text">{{ errors.date }}</span>
           </div>
         </div>
@@ -380,187 +370,25 @@ const modalTitle = computed(() => {
         <span v-if="errors.responsible" class="error-text">{{ errors.responsible }}</span>
       </div>
 
-      <div class="modal-actions">
-        <button type="button" class="btn-cancel" @click="handleClose">
-          Cancelar
-        </button>
-        <button type="submit" class="btn-primary" :disabled="loading">
-          {{ loading ? 'A guardar...' : (isEdit ? 'Guardar' : 'Criar') }}
-        </button>
-      </div>
     </form>
+
+    <template #footer>
+      <UiButton variant="secondary" :disabled="loading" @click="handleClose">Cancelar</UiButton>
+      <UiButton type="submit" form="transaction-form" :loading="loading">
+        {{ isEdit ? 'Guardar' : 'Criar' }}
+      </UiButton>
+    </template>
   </BaseModal>
 </template>
 
 <style scoped>
-.transaction-form {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.form-group {
-  display: flex;
-  flex-direction: column;
-  gap: 0.375rem;
-}
-
-.form-group label {
-  font-size: 0.8125rem;
-  font-weight: 500;
-  color: var(--color-text-muted, #475569);
-}
-
-.type-toggle {
-  display: flex;
-  gap: 4px;
-  padding: 4px;
-  border: 1.5px solid var(--color-border, #e2e8f0);
-  border-radius: 10px;
-  background: var(--color-bg, #f8fafc);
-}
-
-.type-toggle-btn {
-  flex: 1;
-  padding: 0.625rem 0.5rem;
-  border: none;
-  background: transparent;
-  font-size: 0.9375rem;
-  font-weight: 600;
-  color: var(--color-text-muted, #64748b);
-  cursor: pointer;
-  border-radius: 7px;
-  transition: background 0.15s, color 0.15s;
-  font-family: inherit;
-}
-
-.type-toggle-btn:hover {
-  color: var(--color-text, #1e293b);
-}
-
-.type-toggle-btn.active-expense {
-  background: #dc2626;
-  color: #fff;
-}
-
-.type-toggle-btn.active-income {
-  background: #059669;
-  color: #fff;
-}
-
-html.dark .type-toggle-btn.active-income {
-  background: #047857;
-}
-
-.form-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1rem;
-}
-
 /* Tipo de entidade (curto) + nome (mais largo) */
-.form-row--entity {
+.bm-body .form-row--entity {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr);
 }
-
-.form-row .input {
-  min-width: 0;
-}
-
-.amount-wrap {
-  position: relative;
-}
-
-.amount-input {
-  width: 100%;
-  padding-right: 2rem;
-  /* Esconde as setas do input numérico para o € ficar limpo */
-  -moz-appearance: textfield;
-  appearance: textfield;
-}
-
-.amount-input::-webkit-outer-spin-button,
-.amount-input::-webkit-inner-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
-
-.amount-suffix {
-  position: absolute;
-  right: 0.875rem;
-  top: 50%;
-  transform: translateY(-50%);
-  font-size: 0.9375rem;
-  font-weight: 600;
-  color: var(--color-text-muted, #64748b);
-  pointer-events: none;
-}
-
-.input {
-  padding: 0.625rem 0.875rem;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  font-size: 0.9375rem;
-}
-
-.input:focus {
-  outline: none;
-  border-color: #166534;
-  box-shadow: 0 0 0 2px rgba(22, 101, 52, 0.2);
-}
-
-html.dark .input:focus {
-  border-color: #4ade80;
-  box-shadow: 0 0 0 2px rgba(74, 222, 128, 0.2);
-}
-
-.input-error {
-  border-color: #dc2626;
-}
-
-.error-text {
-  font-size: 0.75rem;
-  color: #dc2626;
-}
-
-.modal-actions {
-  display: flex;
-  gap: 0.75rem;
-  justify-content: flex-end;
-  margin-top: 0.5rem;
-}
-
-.btn-cancel {
-  padding: 0.5rem 1rem;
-  background: #f1f5f9;
-  color: #475569;
-  border: none;
-  border-radius: 8px;
-  font-size: 0.875rem;
-  cursor: pointer;
-}
-
-.btn-cancel:hover {
-  background: #e2e8f0;
-}
-
-.btn-primary {
-  padding: 0.5rem 1rem;
-  background: linear-gradient(135deg, #166534 0%, #15803d 100%);
-  color: white;
-  border: none;
-  border-radius: 8px;
-  font-size: 0.875rem;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.btn-primary:hover:not(:disabled) {
-  opacity: 0.95;
-}
-
-.btn-primary:disabled {
-  opacity: 0.7;
-  cursor: not-allowed;
+@media (max-width: 520px) {
+  .bm-body .form-row--entity {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 </style>

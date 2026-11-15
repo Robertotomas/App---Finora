@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter, RouterLink } from 'vue-router'
-import iconFinoraFlow from '@/assets/images/finoraflow-icon.png'
+import AppLogo from '@/components/AppLogo.vue'
 import AuthShowcase from '@/components/AuthShowcase.vue'
 import { authApi } from '@/api/auth'
 
@@ -44,38 +44,39 @@ function goToLogin() {
   <div class="auth-page">
     <div class="auth-left">
       <div class="auth-brand">
-        <img :src="iconFinoraFlow" alt="FinoraFlow" class="auth-brand-img" />
+        <AppLogo :size="36" class="auth-brand-img" />
       </div>
       <div class="auth-left-inner">
         <div class="auth-intro">
-          <p class="auth-intro-title">Confirmar email</p>
+          <h1 class="auth-intro-title">Confirmar email</h1>
         </div>
 
         <!-- A confirmar -->
-        <div v-if="state === 'loading'" class="confirm-state">
-          <p class="confirm-state-text">A confirmar o seu email…</p>
+        <div v-if="state === 'loading'" class="auth-state confirm-loading" role="status">
+          <span class="confirm-spinner" aria-hidden="true"></span>
+          <p class="auth-state-text">A confirmar o seu email…</p>
         </div>
 
         <!-- Sucesso -->
         <template v-else-if="state === 'success'">
-          <div class="confirm-state">
-            <div class="confirm-state-icon confirm-state-icon--ok">
+          <div class="auth-state">
+            <div class="auth-state-icon" aria-hidden="true">
               <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
             </div>
-            <p class="confirm-state-title">Email confirmado</p>
-            <p class="confirm-state-text">A sua conta está ativa. Já pode iniciar sessão.</p>
+            <p class="auth-state-title">Email confirmado</p>
+            <p class="auth-state-text">A sua conta está ativa. Já pode iniciar sessão.</p>
           </div>
           <button type="button" class="auth-btn" @click="goToLogin">Iniciar sessão</button>
         </template>
 
         <!-- Erro -->
         <template v-else>
-          <div class="confirm-state">
-            <div class="confirm-state-icon confirm-state-icon--err">
+          <div class="auth-state">
+            <div class="auth-state-icon auth-state-icon--err" aria-hidden="true">
               <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg>
             </div>
-            <p class="confirm-state-title">Não foi possível confirmar</p>
-            <p class="confirm-state-text">{{ errorMessage }}</p>
+            <p class="auth-state-title">Não foi possível confirmar</p>
+            <p class="auth-state-text">{{ errorMessage }}</p>
           </div>
           <button type="button" class="auth-btn" @click="goToLogin">Ir para o início de sessão</button>
         </template>
@@ -90,54 +91,21 @@ function goToLogin() {
 </template>
 
 <style scoped>
-.confirm-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  margin-bottom: 1.25rem;
+.confirm-loading {
+  margin-top: var(--space-6);
 }
-.confirm-state-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 56px;
-  height: 56px;
+
+.confirm-spinner {
+  width: 32px;
+  height: 32px;
+  margin-bottom: var(--space-4);
+  border: 3px solid var(--color-border);
+  border-top-color: var(--color-primary);
   border-radius: 50%;
-  margin-bottom: 1rem;
+  animation: confirm-spin 0.8s linear infinite;
 }
-.confirm-state-icon--ok {
-  background: #ecfdf5;
-  color: #166534;
-}
-.confirm-state-icon--err {
-  background: #fef2f2;
-  color: #b91c1c;
-}
-:global(html.dark) .confirm-state-icon--ok {
-  background: rgba(22, 101, 52, 0.2);
-  color: #4ade80;
-}
-:global(html.dark) .confirm-state-icon--err {
-  background: rgba(127, 29, 29, 0.25);
-  color: #fca5a5;
-}
-.confirm-state-title {
-  font-size: 1.05rem;
-  font-weight: 700;
-  color: #0f172a;
-  margin: 0 0 0.4rem;
-}
-:global(html.dark) .confirm-state-title {
-  color: #ffffff;
-}
-.confirm-state-text {
-  font-size: 0.875rem;
-  color: #64748b;
-  margin: 0;
-  line-height: 1.5;
-}
-:global(html.dark) .confirm-state-text {
-  color: #a3a3a3;
+
+@keyframes confirm-spin {
+  to { transform: rotate(360deg); }
 }
 </style>

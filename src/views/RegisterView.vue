@@ -1,9 +1,10 @@
 <script setup lang="ts">
+import PasswordInput from '@/components/PasswordInput.vue'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { RouterLink } from 'vue-router'
-import iconFinoraFlow from '@/assets/images/finoraflow-icon.png'
+import AppLogo from '@/components/AppLogo.vue'
 import AuthShowcase from '@/components/AuthShowcase.vue'
 import TermsModal from '@/components/TermsModal.vue'
 import PrivacyModal from '@/components/PrivacyModal.vue'
@@ -113,13 +114,13 @@ async function handleSubmit() {
   } catch (e: unknown) {
     const err = e as { rateLimited?: boolean; rateLimitMessage?: string; response?: { data?: { message?: string; errors?: Record<string, string[]> } } }
     if (err.rateLimited) {
-      error.value = err.rateLimitMessage || 'Demasiados pedidos. Tenta novamente dentro de 1 minuto.'
+      error.value = err.rateLimitMessage || 'Demasiados pedidos. Tente novamente dentro de 1 minuto.'
     } else {
       const data = err.response?.data
       if (data?.errors) {
         error.value = Object.values(data.errors).flat().join(' ')
       } else {
-        error.value = data?.message || 'Erro ao registar. Tenta novamente.'
+        error.value = data?.message || 'Erro ao registar. Tente novamente.'
       }
     }
   } finally {
@@ -137,8 +138,8 @@ async function resendConfirmation() {
   } catch (e: unknown) {
     const err = e as { rateLimited?: boolean; rateLimitMessage?: string }
     resendNotice.value = err.rateLimited
-      ? (err.rateLimitMessage || 'Demasiados pedidos. Tenta novamente dentro de 1 minuto.')
-      : 'Não foi possível reenviar agora. Tenta novamente daqui a pouco.'
+      ? (err.rateLimitMessage || 'Demasiados pedidos. Tente novamente dentro de 1 minuto.')
+      : 'Não foi possível reenviar agora. Tente novamente daqui a pouco.'
   } finally {
     resending.value = false
   }
@@ -149,16 +150,16 @@ async function resendConfirmation() {
   <div class="auth-page">
     <div class="auth-left">
       <div class="auth-brand">
-        <img :src="iconFinoraFlow" alt="FinoraFlow" class="auth-brand-img" />
+        <AppLogo :size="36" class="auth-brand-img" />
       </div>
       <!-- Conta criada: falta confirmar o email -->
       <div v-if="pendingEmail" class="auth-left-inner">
-        <div class="confirm-pending">
-          <div class="confirm-pending-icon">
+        <div class="auth-state">
+          <div class="auth-state-icon" aria-hidden="true">
             <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
           </div>
-          <p class="confirm-pending-title">Confirme o seu email</p>
-          <p class="confirm-pending-text">
+          <h1 class="auth-state-title">Confirme o seu email</h1>
+          <p class="auth-state-text">
             Enviámos um link de confirmação para <strong>{{ pendingEmail }}</strong>.
             Abra-o para ativar a conta e poder iniciar sessão.
           </p>
@@ -166,41 +167,41 @@ async function resendConfirmation() {
         <button type="button" class="auth-btn" :disabled="resending" @click="resendConfirmation">
           {{ resending ? 'A reenviar...' : 'Reenviar email de confirmação' }}
         </button>
-        <p v-if="resendNotice" class="confirm-resend-notice">{{ resendNotice }}</p>
+        <p v-if="resendNotice" class="auth-notice confirm-resend-notice" role="status">{{ resendNotice }}</p>
         <p class="auth-footer">
-          Já confirmaste? <RouterLink to="/login">Iniciar sessão</RouterLink>
+          Já confirmou? <RouterLink to="/login">Iniciar sessão</RouterLink>
         </p>
       </div>
 
       <div v-else class="auth-left-inner">
         <div class="auth-intro">
-          <p class="auth-intro-title">Criar conta</p>
-          <p class="auth-intro-welcome">Bem-vindo! Vamos começar!</p>
+          <h1 class="auth-intro-title">Criar conta</h1>
+          <p class="auth-intro-welcome">Comece a organizar as suas finanças em poucos minutos.</p>
           <p v-if="inviteValidating" class="auth-intro-welcome">A validar convite…</p>
           <p v-else-if="inviteInfo" class="auth-invite-banner">
             Convite de <strong>{{ inviteInfo.inviterName || 'alguém' }}</strong>
             <span v-if="inviteInfo.householdName"> · {{ inviteInfo.householdName }}</span>
             <br />
-            <span class="auth-invite-email-hint">Usa o email convidado: {{ inviteInfo.inviteeEmailMasked }}</span>
+            <span class="auth-invite-email-hint">Use o email convidado: {{ inviteInfo.inviteeEmailMasked }}</span>
           </p>
         </div>
         <form @submit.prevent="handleSubmit">
-          <div v-if="error" class="auth-error">{{ error }}</div>
+          <div v-if="error" class="auth-error" role="alert">{{ error }}</div>
           <div class="auth-field">
             <label for="firstName">Nome</label>
-            <input id="firstName" v-model="firstName" type="text" required placeholder="Introduza o nome" />
+            <input id="firstName" v-model="firstName" type="text" required autocomplete="given-name" placeholder="Introduza o nome" />
           </div>
           <div class="auth-field">
             <label for="lastName">Apelido</label>
-            <input id="lastName" v-model="lastName" type="text" required placeholder="Introduza o apelido" />
+            <input id="lastName" v-model="lastName" type="text" required autocomplete="family-name" placeholder="Introduza o apelido" />
           </div>
           <div class="auth-field">
             <label for="email">Email</label>
-            <input id="email" v-model="email" type="email" required placeholder="Introduza o e-mail" />
+            <input id="email" v-model="email" type="email" required autocomplete="email" placeholder="Introduza o e-mail" />
           </div>
           <div class="auth-field">
-            <label for="password">Password</label>
-            <input id="password" v-model="password" type="password" required placeholder="Introduza a palavra-passe" />
+            <label for="password">Palavra-passe</label>
+            <PasswordInput id="password" v-model="password" autocomplete="new-password" placeholder="Introduza a palavra-passe" />
             <ul v-if="password.length > 0" class="pw-rules">
               <li :class="{ ok: passwordRules.minLength }">Mínimo 8 caracteres</li>
               <li :class="{ ok: passwordRules.hasUpper }">Uma letra maiúscula</li>
@@ -222,9 +223,9 @@ async function resendConfirmation() {
             </button>
             <span class="terms-text">
               Li e aceito os
-              <button type="button" class="terms-link" @click="termsModalOpen = true">Termos e Condições</button>
+              <button type="button" class="auth-link-btn terms-link" @click="termsModalOpen = true">Termos e Condições</button>
               e a
-              <button type="button" class="terms-link" @click="privacyModalOpen = true">Política de Privacidade</button>
+              <button type="button" class="auth-link-btn terms-link" @click="privacyModalOpen = true">Política de Privacidade</button>
             </span>
           </div>
           <p v-if="!bothRead" class="terms-help">Abra e leia os dois documentos até ao fim para poder aceitar.</p>
@@ -259,31 +260,13 @@ async function resendConfirmation() {
   margin: clamp(3.5rem, 12vh, 7rem) 0 auto;
 }
 
-.pw-rules {
-  list-style: none;
-  padding: 0;
-  margin: 0.5rem 0 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.25rem 0.75rem;
-  font-size: 0.75rem;
-  color: #ef4444;
-}
-.pw-rules li.ok {
-  color: #22c55e;
-}
-.pw-rules li::before {
-  content: '✕ ';
-}
-.pw-rules li.ok::before {
-  content: '✓ ';
-}
 .terms-row {
   display: flex;
   align-items: center;
-  gap: 0.6rem;
-  margin: 0 0 1.25rem;
+  gap: 10px;
+  margin: 0 0 var(--space-5);
 }
+
 .terms-check {
   flex-shrink: 0;
   display: flex;
@@ -292,125 +275,68 @@ async function resendConfirmation() {
   width: 20px;
   height: 20px;
   padding: 0;
-  border: 1.5px solid #cbd5e1;
+  border: 1.5px solid var(--color-border-strong);
   border-radius: 6px;
-  background: #ffffff;
-  color: #ffffff;
+  background: var(--color-surface);
+  color: var(--color-on-primary);
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
 }
-.terms-check.checked {
-  background: #166534;
-  border-color: #166534;
-}
+
 .terms-check:hover {
-  border-color: #166534;
+  border-color: var(--color-primary);
 }
+
+.terms-check:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.terms-check.checked {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
 .terms-text {
-  font-size: 0.8125rem;
-  color: #334155;
+  font-size: var(--text-sm);
   line-height: 1.4;
+  color: var(--color-text);
 }
+
 .terms-link {
-  background: none;
-  border: none;
-  padding: 0;
-  font-family: inherit;
-  font-size: 0.8125rem;
-  font-weight: 700;
-  color: #166534;
-  cursor: pointer;
   text-decoration: underline;
+  text-underline-offset: 2px;
 }
-.terms-link:hover {
-  color: #14532d;
-}
+
 .terms-help {
-  margin: -0.75rem 0 1.25rem;
-  font-size: 0.75rem;
-  color: #94a3b8;
+  margin: calc(-1 * var(--space-3)) 0 var(--space-5);
+  font-size: var(--text-xs);
   line-height: 1.4;
-}
-:global(html.dark) .terms-help {
-  color: #737373;
-}
-:global(html.dark) .terms-check {
-  background: #1f1f1f;
-  border-color: #3a3a3a;
-}
-:global(html.dark) .terms-check.checked {
-  background: #166534;
-  border-color: #166534;
-}
-:global(html.dark) .terms-text {
-  color: #d4d4d4;
-}
-:global(html.dark) .terms-link {
-  color: #4ade80;
-}
-:global(html.dark) .terms-link:hover {
-  color: #86efac;
+  color: var(--color-text-muted);
 }
 
 .auth-invite-banner {
-  margin-top: 0.75rem;
-  font-size: 0.9rem;
-  color: #cbd5e1;
-  line-height: 1.45;
-}
-.auth-invite-email-hint {
-  font-size: 0.85rem;
-  color: #94a3b8;
+  margin: calc(-1 * var(--space-6)) 0 var(--space-6);
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--color-text);
+  background: var(--color-primary-soft);
+  border: 1px solid var(--color-primary-soft-border);
+  border-radius: var(--radius-sm);
 }
 
-/* Ecrã "confirme o seu email" */
-.confirm-pending {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  margin-bottom: 1.25rem;
+.auth-invite-banner strong {
+  color: var(--color-text-strong);
 }
-.confirm-pending-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  background: #ecfdf5;
-  color: #166534;
-  margin-bottom: 1rem;
+
+.auth-invite-email-hint {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
 }
-:global(html.dark) .confirm-pending-icon {
-  background: rgba(22, 101, 52, 0.2);
-  color: #4ade80;
-}
-.confirm-pending-title {
-  font-size: 1.05rem;
-  font-weight: 700;
-  color: #0f172a;
-  margin: 0 0 0.4rem;
-}
-:global(html.dark) .confirm-pending-title {
-  color: #ffffff;
-}
-.confirm-pending-text {
-  font-size: 0.875rem;
-  color: #64748b;
-  margin: 0;
-  line-height: 1.5;
-}
-:global(html.dark) .confirm-pending-text {
-  color: #a3a3a3;
-}
+
 .confirm-resend-notice {
-  margin: 0.75rem 0 0;
-  font-size: 0.8125rem;
-  color: #166534;
+  margin: var(--space-3) 0 0;
   text-align: center;
-}
-:global(html.dark) .confirm-resend-notice {
-  color: #4ade80;
 }
 </style>

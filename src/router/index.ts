@@ -163,10 +163,10 @@ const ROUTE_TITLES: Record<string, string> = {
 
 router.afterEach((to) => {
   let title = typeof to.name === 'string' ? ROUTE_TITLES[to.name] : undefined
-  // Movimentos: distingue a tab (Dashboard / Movimentos / Recorrentes) pelo ?tab=
+  // Movimentos: distingue a tab (Resumo / Movimentos / Recorrentes) pelo ?tab=
   if (to.name === 'movimentos') {
     const tab = to.query.tab
-    title = tab === 'recurring' ? 'Recorrentes' : tab === 'movements' ? 'Movimentos' : 'Dashboard'
+    title = tab === 'recurring' ? 'Recorrentes' : tab === 'movements' ? 'Movimentos' : 'Resumo'
   }
   document.title = title ? `${title} | FinoraFlow` : 'FinoraFlow'
 })

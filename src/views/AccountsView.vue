@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import PageSkeleton from '@/components/PageSkeleton.vue'
+import { PT_GROUPING } from '@/utils/numberFormat'
 import { ref, onMounted, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAccountsStore } from '@/stores/accounts'
@@ -12,9 +14,17 @@ import DeleteAccountWithTransferModal from '@/components/DeleteAccountWithTransf
 import ArchiveAccountModal from '@/components/ArchiveAccountModal.vue'
 import PlanUpsellModal from '@/components/PlanUpsellModal.vue'
 import BrandLogo from '@/components/BrandLogo.vue'
+import PageHeader from '@/components/ui/PageHeader.vue'
+import UiButton from '@/components/ui/UiButton.vue'
+import FilterChips from '@/components/ui/FilterChips.vue'
+import EmptyState from '@/components/ui/EmptyState.vue'
+import ActionMenu from '@/components/ui/ActionMenu.vue'
+import type { ActionMenuItem } from '@/components/ui/ActionMenu.vue'
+import { useToast } from '@/composables/useToast'
 import type { Account, CreateAccountRequest } from '@/types/account'
 import { ACCOUNT_TYPE_LABELS, AccountType } from '@/types/account'
 
+const toast = useToast()
 const route = useRoute()
 const router = useRouter()
 const accountsStore = useAccountsStore()
@@ -55,6 +65,40 @@ const sectionFilter = computed<SectionFilter>({
     router.replace({ query: { ...route.query, tab } })
   },
 })
+
+const filterOptions = computed(() => [
+  {
+    value: 'all' as SectionFilter,
+    label: 'Todas',
+    count: accountsStore.activeAccounts.length + accountsStore.archivedAccounts.length,
+  },
+  { value: 'active' as SectionFilter, label: 'Ativas', count: accountsStore.activeAccounts.length },
+  { value: 'archived' as SectionFilter, label: 'Arquivadas', count: accountsStore.archivedAccounts.length },
+])
+
+/** Saldo total das contas ativas (moeda fixa EUR). */
+const totalActiveBalance = computed(() =>
+  accountsStore.activeAccounts.reduce((sum, a) => sum + (Number(a.balance) || 0), 0)
+)
+
+function activeAccountActions(account: Account): ActionMenuItem[] {
+  return [
+    {
+      label: 'Editar',
+      disabled: needsPrimarySelection.value || account.isActiveForPlan === false,
+      onSelect: () => openEditModal(account),
+    },
+    { label: 'Arquivar', onSelect: () => openArchiveModal(account) },
+    { label: 'Eliminar', danger: true, onSelect: () => openDeleteModal(account) },
+  ]
+}
+
+function archivedAccountActions(account: Account): ActionMenuItem[] {
+  return [
+    { label: 'Reativar', onSelect: () => handleReactivate(account) },
+    { label: 'Eliminar', danger: true, onSelect: () => openDeleteArchivedModal(account) },
+  ]
+}
 
 const showActiveSection = computed(
   () => sectionFilter.value === 'all' || sectionFilter.value === 'active'
@@ -180,6 +224,7 @@ async function handleCreate(payload: CreateAccountRequest) {
     await accountsStore.createAccount(payload)
     await subscriptionStore.fetchSubscription()
     closeCreateModal()
+    toast.success('Conta adicionada')
   } catch (e: unknown) {
     const err = e as { response?: { status: number; data?: { code?: string; message?: string } } }
     const code = err.response?.data?.code
@@ -197,6 +242,7 @@ async function handleEdit(payload: CreateAccountRequest) {
   try {
     await accountsStore.updateAccount(accountToEdit.value.id, payload)
     closeEditModal()
+    toast.success('Conta atualizada')
   } catch {
     // Error shown in store
   } finally {
@@ -211,6 +257,7 @@ async function handleDelete() {
     await accountsStore.deleteAccount(accountToDelete.value.id)
     await subscriptionStore.fetchSubscription()
     closeDeleteModal()
+    toast.success('Conta eliminada')
   } catch (e: unknown) {
     const err = e as { response?: { status: number; data?: { code?: string; message?: string } } }
     if (err.response?.status === 400 && err.response?.data?.code === 'ACCOUNT_HAS_MOVEMENTS') {
@@ -264,6 +311,7 @@ async function handleDeleteWithTransfer(targetAccountId: string) {
     await accountsStore.deleteAccountWithTransfer(deleteWithTransferAccount.value.id, targetAccountId)
     await Promise.all([subscriptionStore.fetchSubscription(), accountsStore.fetchAccounts()])
     closeDeleteWithTransferModal()
+    toast.success('Conta eliminada')
   } catch {
     // Error shown in store
   } finally {
@@ -288,6 +336,7 @@ async function handleArchiveConfirm(targetAccountId: string | undefined) {
     await accountsStore.archiveAccount(archiveAccount.value.id, targetAccountId)
     await Promise.all([subscriptionStore.fetchSubscription(), accountsStore.fetchAccounts()])
     closeArchiveModal()
+    toast.success('Conta arquivada')
   } catch {
     // Error shown in store
   } finally {
@@ -300,6 +349,7 @@ async function handleReactivate(account: Account) {
   try {
     await accountsStore.reactivateAccount(account.id)
     await subscriptionStore.fetchSubscription()
+    toast.success('Conta reativada')
   } catch {
     // Error shown in store
   } finally {
@@ -308,7 +358,7 @@ async function handleReactivate(account: Account) {
 }
 
 function formatBalance(balance: number, currency: string): string {
-  return new Intl.NumberFormat('pt-PT', {
+  return new Intl.NumberFormat('pt-PT', { ...PT_GROUPING,
     style: 'currency',
     currency: currency || 'EUR'
   }).format(balance)
@@ -329,265 +379,206 @@ function accountIcon(type: AccountType): string {
 <template>
   <div class="accounts-page">
     <!-- Loading -->
-    <div v-if="!householdStore.household && householdStore.loading" class="loading-state">
-      <div class="spinner"></div>
-      <p>A carregar...</p>
-    </div>
+    <PageSkeleton v-if="!householdStore.household && householdStore.loading" variant="cards" :rows="3" />
 
     <!-- No household -->
-    <div v-else-if="!householdStore.household && !householdStore.loading" class="empty-state">
-      <p>Configure primeiro o seu household.</p>
-      <router-link to="/household" class="link">Ir para Household</router-link>
-    </div>
+    <EmptyState
+      v-else-if="!householdStore.household && !householdStore.loading"
+      title="Ainda não tem um agregado"
+      description="Configure primeiro o seu agregado para começar a adicionar contas."
+    >
+      <router-link to="/household" class="link">Configurar agregado</router-link>
+    </EmptyState>
 
     <!-- Error -->
-    <div v-else-if="householdStore.error && !householdStore.household" class="error-state">
-      <p>{{ householdStore.error }}</p>
+    <div v-else-if="householdStore.error && !householdStore.household" class="notice notice--danger">
+      {{ householdStore.error }}
     </div>
 
     <!-- Main content -->
     <template v-else>
-      <!-- Page header -->
-      <div class="page-header">
-        <div class="page-header-text">
-          <h1 class="page-title">Contas</h1>
-          <p class="page-subtitle">Faça a gestão das suas contas financeiras</p>
-        </div>
-        <button
-          v-if="accountsStore.activeAccounts.length > 0"
-          type="button"
-          class="btn-add"
-          @click="openCreateModal"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="5" y2="19"/><line x1="5" x2="19" y1="12" y2="12"/></svg>
-          Adicionar
-        </button>
-      </div>
+      <PageHeader title="Contas">
+        <template v-if="accountsStore.activeAccounts.length > 0" #actions>
+          <UiButton variant="primary" @click="openCreateModal">
+            <template #icon>
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="5" y2="19"/><line x1="5" x2="19" y1="12" y2="12"/></svg>
+            </template>
+            Adicionar
+          </UiButton>
+        </template>
+      </PageHeader>
 
       <!-- Global error -->
-      <div v-if="accountsStore.error" class="global-error">
+      <div v-if="accountsStore.error" class="notice notice--danger">
         {{ accountsStore.error }}
       </div>
+
+      <!-- Resumo -->
+      <section v-if="accountsStore.activeAccounts.length > 0" class="summary">
+        <div class="summary-item">
+          <span class="ui-label">Saldo total</span>
+          <span class="summary-value">{{ formatBalance(totalActiveBalance, 'EUR') }}</span>
+        </div>
+        <div class="summary-item summary-item--side">
+          <span class="ui-label">Contas ativas</span>
+          <span class="summary-count">{{ accountsStore.activeAccounts.length }}</span>
+        </div>
+        <div v-if="accountsStore.archivedAccounts.length > 0" class="summary-item summary-item--side">
+          <span class="ui-label">Arquivadas</span>
+          <span class="summary-count">{{ accountsStore.archivedAccounts.length }}</span>
+        </div>
+      </section>
 
       <!-- Filtro Ativas / Arquivadas -->
       <div
         v-if="accountsStore.activeAccounts.length > 0 || accountsStore.archivedAccounts.length > 0"
-        class="filter-chips"
-        role="tablist"
+        class="ui-toolbar"
       >
-        <button
-          type="button"
-          class="filter-chip"
-          :class="{ active: sectionFilter === 'all' }"
-          role="tab"
-          :aria-selected="sectionFilter === 'all'"
-          @click="sectionFilter = 'all'"
-        >
-          Todas
-        </button>
-        <button
-          type="button"
-          class="filter-chip"
-          :class="{ active: sectionFilter === 'active' }"
-          role="tab"
-          :aria-selected="sectionFilter === 'active'"
-          @click="sectionFilter = 'active'"
-        >
-          Ativas
-        </button>
-        <button
-          type="button"
-          class="filter-chip"
-          :class="{ active: sectionFilter === 'archived' }"
-          role="tab"
-          :aria-selected="sectionFilter === 'archived'"
-          @click="sectionFilter = 'archived'"
-        >
-          Arquivadas
-        </button>
+        <FilterChips v-model="sectionFilter" :options="filterOptions" aria-label="Filtrar contas" />
       </div>
 
       <!-- Primary selection banner -->
       <div
         v-if="showActiveSection && needsPrimarySelection && accountsStore.activeAccounts.length > 1"
-        class="banner banner--warning"
+        class="banner"
       >
-        <div class="banner-content">
-          <p class="banner-title">Escolha a conta principal</p>
-          <p class="banner-text">
-            No plano Free só uma conta pode estar ativa para movimentos e edições.
-          </p>
-          <div class="primary-radio-list">
-            <label v-for="a in accountsStore.activeAccounts" :key="a.id" class="primary-radio">
-              <input v-model="selectedPrimaryId" type="radio" name="primary" :value="a.id" />
-              <span>{{ a.name }}</span>
-            </label>
-          </div>
-          <p v-if="primaryError" class="banner-error">{{ primaryError }}</p>
-          <button
-            type="button"
-            class="btn-confirm"
-            :disabled="primarySelectionLoading || !selectedPrimaryId"
+        <p class="banner-title">Escolha a conta principal</p>
+        <p class="banner-text">
+          No plano Free só uma conta pode estar ativa para movimentos e edições.
+        </p>
+        <div class="primary-radio-list">
+          <label v-for="a in accountsStore.activeAccounts" :key="a.id" class="primary-radio">
+            <input v-model="selectedPrimaryId" type="radio" name="primary" :value="a.id" />
+            <span>{{ a.name }}</span>
+          </label>
+        </div>
+        <p v-if="primaryError" class="banner-error">{{ primaryError }}</p>
+        <div>
+          <UiButton
+            variant="primary"
+            size="sm"
+            :loading="primarySelectionLoading"
+            :disabled="!selectedPrimaryId"
             @click="setPrimaryAccount"
           >
-            {{ primarySelectionLoading ? 'A guardar...' : 'Confirmar' }}
-          </button>
+            Confirmar
+          </UiButton>
         </div>
       </div>
 
       <!-- Unlock banner -->
-      <div v-if="showActiveSection && showUnlockAccountsBanner" class="banner banner--warning">
-        <div class="banner-content banner-row">
-          <div>
-            <p class="banner-title">Contas bloqueadas</p>
-            <p class="banner-text">Atualize para Pro ou Couple para desbloquear todas as contas.</p>
-          </div>
-          <router-link :to="{ name: 'subscricao' }" class="btn-confirm">
-            Ver planos
-          </router-link>
+      <div v-if="showActiveSection && showUnlockAccountsBanner" class="banner banner--row">
+        <div>
+          <p class="banner-title">Contas bloqueadas</p>
+          <p class="banner-text">Atualize para Pro ou Couple para desbloquear todas as contas.</p>
         </div>
+        <router-link :to="{ name: 'subscricao' }" class="banner-link">Ver planos</router-link>
       </div>
 
       <!-- Loading accounts -->
-      <div v-if="accountsStore.loading && accountsStore.accounts.length === 0" class="loading-state">
-        <div class="spinner"></div>
-        <p>A carregar contas...</p>
-      </div>
+      <PageSkeleton v-if="accountsStore.loading && accountsStore.accounts.length === 0" variant="cards" :rows="3" />
 
       <!-- Empty state -->
-      <div v-else-if="accountsStore.activeAccounts.length === 0 && accountsStore.archivedAccounts.length === 0" class="empty-card">
-        <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="empty-icon"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 10h20"/><circle cx="17" cy="15" r="1.5"/></svg>
-        <p class="empty-text">Ainda não tem contas</p>
-        <p class="empty-hint">Adicione a sua primeira conta para começar a controlar as finanças.</p>
-        <button type="button" class="btn-confirm" @click="openCreateModal">
-          Adicionar conta
-        </button>
+      <div
+        v-else-if="accountsStore.activeAccounts.length === 0 && accountsStore.archivedAccounts.length === 0"
+        class="empty-card"
+      >
+        <EmptyState
+          title="Ainda não tem contas"
+          description="Adicione a sua primeira conta para começar a controlar as finanças."
+        >
+          <template #icon>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 10h20"/><circle cx="17" cy="15" r="1.5"/></svg>
+          </template>
+          <UiButton variant="secondary" @click="openCreateModal">Adicionar conta</UiButton>
+        </EmptyState>
       </div>
 
       <!-- Active accounts -->
-      <template v-if="showActiveSection && accountsStore.activeAccounts.length > 0">
-        <h2 v-if="sectionFilter === 'all'" class="section-heading">Ativas</h2>
-        <div class="accounts-grid">
-          <div
+      <section v-if="showActiveSection && accountsStore.activeAccounts.length > 0" class="section">
+        <h2 v-if="sectionFilter === 'all'" class="ui-label section-heading">Ativas</h2>
+        <div class="ui-grid-3">
+          <article
             v-for="account in accountsStore.activeAccounts"
             :key="account.id"
             class="account-card"
-            :class="{
-              'account-card--locked': account.isActiveForPlan === false,
-            }"
+            :class="{ 'account-card--locked': account.isActiveForPlan === false }"
           >
-            <!-- Icon: logo do banco se reconhecido, senão ícone por tipo (default) -->
-            <BrandLogo :name="account.name" :domain="account.logoDomain" :size="40" class="card-brand-logo">
-              <template #fallback>
-                <span class="card-icon-wrap">
-                  <svg v-if="isCreditCard(account.type)" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
-                  <svg v-else xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path :d="accountIcon(account.type)"/></svg>
-                </span>
-              </template>
-            </BrandLogo>
-
-            <!-- Info -->
-            <div class="card-body">
-              <div class="card-name-row">
-                <h3 class="card-name">{{ account.name }}</h3>
-                <span v-if="isPrimaryBadge(account)" class="badge badge--primary">Principal</span>
+            <div class="card-top">
+              <BrandLogo :name="account.name" :domain="account.logoDomain" :size="40" class="card-logo">
+                <template #fallback>
+                  <span class="card-icon">
+                    <svg v-if="isCreditCard(account.type)" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
+                    <svg v-else xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path :d="accountIcon(account.type)"/></svg>
+                  </span>
+                </template>
+              </BrandLogo>
+              <div class="card-heading">
+                <h3 class="card-name" :title="account.name">{{ account.name }}</h3>
+                <div class="card-badges">
+                  <span class="ui-badge">{{ ACCOUNT_TYPE_LABELS[account.type] }}</span>
+                  <span v-if="isPrimaryBadge(account)" class="ui-badge ui-badge--brand">Principal</span>
+                </div>
               </div>
-              <p class="card-balance" :class="{ negative: account.balance < 0 }">
-                {{ formatBalance(account.balance, account.currency) }}
-              </p>
-              <span class="card-type">{{ ACCOUNT_TYPE_LABELS[account.type] }}</span>
-              <p v-if="account.isActiveForPlan === false" class="card-locked-hint">
-                Só consulta no plano Free
-              </p>
+              <ActionMenu :items="activeAccountActions(account)" :aria-label="`Ações de ${account.name}`" />
             </div>
-
-            <!-- Actions -->
-            <div class="card-actions">
-              <button
-                type="button"
-                class="action-btn"
-                title="Editar"
-                :disabled="needsPrimarySelection || account.isActiveForPlan === false"
-                @click="openEditModal(account)"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
-              </button>
-              <button
-                type="button"
-                class="action-btn"
-                title="Arquivar"
-                @click="openArchiveModal(account)"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></svg>
-              </button>
-              <button
-                type="button"
-                class="action-btn action-btn--danger"
-                title="Eliminar"
-                @click="openDeleteModal(account)"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
-              </button>
-            </div>
-          </div>
+            <p class="card-balance" :class="{ 'card-balance--neg': account.balance < 0 }">
+              {{ formatBalance(account.balance, account.currency) }}
+            </p>
+            <p v-if="account.isActiveForPlan === false" class="card-hint">
+              Só consulta no plano Free
+            </p>
+          </article>
         </div>
-      </template>
+      </section>
 
       <!-- Archived empty state -->
       <div
         v-if="sectionFilter === 'archived' && accountsStore.archivedAccounts.length === 0"
         class="empty-card"
       >
-        <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="empty-icon"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></svg>
-        <p class="empty-text">Sem contas arquivadas</p>
-        <p class="empty-hint">As contas que arquivar aparecem aqui, sem perder o histórico.</p>
+        <EmptyState
+          title="Sem contas arquivadas"
+          description="As contas que arquivar aparecem aqui, sem perder o histórico."
+        >
+          <template #icon>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></svg>
+          </template>
+        </EmptyState>
       </div>
 
       <!-- Archived accounts -->
-      <div v-if="showArchivedSection && accountsStore.archivedAccounts.length > 0" class="archived-section">
-        <h2 v-if="sectionFilter === 'all'" class="section-heading">Arquivadas</h2>
-        <div class="accounts-grid">
-          <div
+      <section v-if="showArchivedSection && accountsStore.archivedAccounts.length > 0" class="section">
+        <h2 v-if="sectionFilter === 'all'" class="ui-label section-heading">Arquivadas</h2>
+        <div class="ui-grid-3">
+          <article
             v-for="account in accountsStore.archivedAccounts"
             :key="account.id"
             class="account-card account-card--archived"
           >
-            <div class="card-icon-wrap card-icon-wrap--muted">
-              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></svg>
-            </div>
-
-            <div class="card-body">
-              <div class="card-name-row">
-                <h3 class="card-name">{{ account.name }}</h3>
-                <span class="badge badge--archived">Arquivada</span>
+            <div class="card-top">
+              <BrandLogo :name="account.name" :domain="account.logoDomain" :size="40" class="card-logo">
+                <template #fallback>
+                  <span class="card-icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></svg>
+                  </span>
+                </template>
+              </BrandLogo>
+              <div class="card-heading">
+                <h3 class="card-name" :title="account.name">{{ account.name }}</h3>
+                <div class="card-badges">
+                  <span class="ui-badge">{{ ACCOUNT_TYPE_LABELS[account.type] }}</span>
+                  <span class="ui-badge ui-badge--warning">Arquivada</span>
+                </div>
               </div>
-              <p class="card-balance card-balance--muted">
-                {{ formatBalance(account.balance, account.currency) }}
-              </p>
-              <span class="card-type">{{ ACCOUNT_TYPE_LABELS[account.type] }}</span>
+              <ActionMenu :items="archivedAccountActions(account)" :aria-label="`Ações de ${account.name}`" />
             </div>
-
-            <div class="card-actions">
-              <button
-                type="button"
-                class="action-btn action-btn--reactivate"
-                title="Reativar"
-                @click="handleReactivate(account)"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.22-8.56"/><polyline points="21 3 21 9 15 9"/></svg>
-              </button>
-              <button
-                type="button"
-                class="action-btn action-btn--danger"
-                title="Eliminar"
-                @click="openDeleteArchivedModal(account)"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
-              </button>
-            </div>
-          </div>
+            <p class="card-balance">
+              {{ formatBalance(account.balance, account.currency) }}
+            </p>
+          </article>
         </div>
-      </div>
+      </section>
     </template>
 
     <!-- Modals -->
@@ -625,29 +616,29 @@ function accountIcon(type: AccountType): string {
     >
       <div class="blocked-body">
         <p class="blocked-msg">{{ accountDeleteBlockedMessage }}</p>
-        <p class="blocked-question">O que quer fazer?</p>
+        <p class="blocked-question">O que pretende fazer?</p>
         <div class="blocked-options">
           <button type="button" class="blocked-option" @click="handleArchiveFromBlocked" :disabled="actionLoading">
-            <div class="blocked-option-icon">
+            <span class="blocked-option-icon">
               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></svg>
-            </div>
-            <div>
+            </span>
+            <span>
               <span class="blocked-option-label">Arquivar conta</span>
               <span class="blocked-option-desc">Remove do património sem perder dados</span>
-            </div>
+            </span>
           </button>
           <button type="button" class="blocked-option" @click="handleDeleteWithTransferFromBlocked" :disabled="actionLoading">
-            <div class="blocked-option-icon">
+            <span class="blocked-option-icon">
               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="7 7 17 7"/><polyline points="4 12 20 12"/><polyline points="7 17 17 17"/><polyline points="3 7 5 5 3 3"/><polyline points="21 17 19 19 21 21"/></svg>
-            </div>
-            <div>
+            </span>
+            <span>
               <span class="blocked-option-label">Eliminar com transferência</span>
               <span class="blocked-option-desc">Move saldo e movimentos para outra conta</span>
-            </div>
+            </span>
           </button>
         </div>
         <div class="blocked-footer">
-          <button type="button" class="btn-cancel" @click="closeDeleteBlockedModal">Cancelar</button>
+          <UiButton variant="secondary" @click="closeDeleteBlockedModal">Cancelar</UiButton>
         </div>
       </div>
     </BaseModal>
@@ -686,621 +677,338 @@ function accountIcon(type: AccountType): string {
 
 <style scoped>
 .accounts-page {
-  max-width: min(860px, 100%);
+  max-width: var(--page-max);
   margin: 0 auto;
-  padding: 0 0 3rem;
+  padding: 0 0 var(--space-12);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+/* O espaçamento entre secções vem do gap da página */
+.accounts-page > .page-head {
+  margin-bottom: 0;
 }
 
-/* ── Page header ── */
-.page-header {
+/* ── Resumo ── */
+.summary {
   display: flex;
   align-items: flex-end;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 1.5rem;
+  gap: var(--space-8);
+  flex-wrap: wrap;
+  padding: var(--space-6);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
 }
-
-.page-header-text {
+.summary-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
   min-width: 0;
 }
-
-.page-title {
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: var(--color-text);
-  margin: 0;
-  letter-spacing: -0.02em;
+.summary-item--side {
+  padding-left: var(--space-8);
+  border-left: 1px solid var(--color-border);
+}
+.summary-value {
+  font-size: var(--text-2xl);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-tight);
+  color: var(--color-text-strong);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+}
+.summary-count {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-strong);
+  font-variant-numeric: tabular-nums;
 }
 
-.page-subtitle {
-  font-size: 0.8125rem;
-  color: var(--color-text-muted);
-  margin: 0.25rem 0 0;
+.ui-toolbar {
+  margin-bottom: 0;
 }
 
-.btn-add {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
-  padding: 0.5rem 1rem;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: #fff;
-  background: #166534;
-  border: none;
-  border-radius: 10px;
-  cursor: pointer;
-  transition: background 0.15s, transform 0.15s;
-  white-space: nowrap;
-  flex-shrink: 0;
+/* ── Secções ── */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
 }
-
-.btn-add:hover {
-  background: #15803d;
-  transform: translateY(-1px);
-}
-
-/* ── Section heading (vista "Todas") ── */
 .section-heading {
-  font-size: 0.9375rem;
-  font-weight: 700;
-  color: var(--color-text);
-  margin: 0 0 0.875rem;
-  letter-spacing: -0.01em;
+  margin: 0;
 }
 
-.archived-section {
-  margin-top: 1.75rem;
-}
-
-/* ── Accounts grid ── */
-.accounts-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 0.875rem;
-}
-
+/* ── Cartões de conta ── */
 .account-card {
   display: flex;
-  align-items: flex-start;
-  gap: 0.875rem;
-  background: var(--color-bg-card);
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-5);
+  background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: 14px;
-  padding: 1.125rem 1.25rem;
-  transition: box-shadow 0.2s, transform 0.2s;
-  box-shadow: var(--app-shadow-card, 0 1px 3px rgba(0, 0, 0, 0.06));
+  border-radius: var(--radius-lg);
+  transition: border-color var(--transition-fast);
+  min-width: 0;
 }
-
 .account-card:hover {
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
-  transform: translateY(-1px);
+  border-color: var(--color-border-strong);
 }
-
-.account-card--locked {
-  opacity: 0.65;
-  border-style: dashed;
-}
-
+.account-card--locked,
 .account-card--archived {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+}
+.account-card--locked .card-logo,
+.account-card--locked .card-balance,
+.account-card--archived .card-logo,
+.account-card--archived .card-name,
+.account-card--archived .card-balance {
   opacity: 0.6;
-  border-style: dashed;
 }
 
-/* ── Card icon ── */
-.card-icon-wrap {
+.card-top {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+.card-logo {
+  flex-shrink: 0;
+  border-radius: 10px;
+  border: 1px solid var(--color-border-subtle);
+  overflow: hidden;
+}
+.card-icon {
+  width: 40px;
+  height: 40px;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
-  flex-shrink: 0;
-  border-radius: 10px;
-  background: #ecfdf5;
-  color: #166534;
-}
-
-html.dark .card-icon-wrap {
-  background: rgba(22, 101, 52, 0.2);
-  color: #4ade80;
-}
-
-.card-brand-logo {
-  border-radius: 10px;
-}
-
-.card-icon-wrap--muted {
-  background: var(--color-table-row-hover);
+  background: var(--color-surface-muted);
   color: var(--color-text-muted);
 }
-
-html.dark .card-icon-wrap--muted {
-  background: rgba(100, 116, 139, 0.15);
-  color: var(--color-text-muted);
-}
-
-/* ── Card body ── */
-.card-body {
+.card-heading {
   flex: 1;
   min-width: 0;
-}
-
-.card-name-row {
   display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-bottom: 0.25rem;
+  flex-direction: column;
+  gap: 6px;
 }
-
 .card-name {
-  font-size: 0.9375rem;
-  font-weight: 600;
-  color: var(--color-text);
   margin: 0;
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-strong);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-
-.card-balance {
-  font-size: 1.25rem;
-  font-weight: 700;
-  color: var(--color-text);
-  margin: 0 0 0.375rem;
-  letter-spacing: -0.02em;
+.card-badges {
+  display: flex;
+  gap: var(--space-1);
+  flex-wrap: wrap;
 }
-
-.card-balance.negative {
+.card-balance {
+  margin: 0;
+  font-size: var(--text-xl);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-tight);
+  color: var(--color-text-strong);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.card-balance--neg {
   color: var(--color-expense);
 }
-
-.card-balance--muted {
-  color: var(--color-text-muted);
-}
-
-.card-type {
-  display: inline-block;
-  font-size: 0.6875rem;
-  font-weight: 500;
-  color: var(--color-text-muted);
-  background: var(--color-table-row-hover);
-  padding: 0.15rem 0.5rem;
-  border-radius: 999px;
-}
-
-.card-locked-hint {
-  font-size: 0.6875rem;
-  color: var(--color-text-muted);
-  margin: 0.375rem 0 0;
-  line-height: 1.35;
-}
-
-/* ── Badges ── */
-.badge {
-  font-size: 0.5625rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  padding: 0.15rem 0.4rem;
-  border-radius: 999px;
-  flex-shrink: 0;
-}
-
-.badge--primary {
-  color: #fff;
-  background: #166534;
-}
-
-.badge--archived {
-  color: #fff;
-  background: #64748b;
-}
-
-/* ── Card actions ── */
-.card-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 0.375rem;
-  flex-shrink: 0;
-}
-
-.action-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  padding: 0;
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  background: transparent;
-  color: var(--color-text-muted);
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.action-btn:hover {
-  background: var(--color-table-row-hover);
-  color: var(--color-text);
-  border-color: var(--color-text-muted);
-}
-
-.action-btn:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-}
-
-.action-btn--danger:hover {
-  color: #dc2626;
-  border-color: #fecaca;
-  background: #fef2f2;
-}
-
-html.dark .action-btn--danger:hover {
-  color: #f87171;
-  border-color: rgba(248, 113, 113, 0.3);
-  background: rgba(248, 113, 113, 0.1);
-}
-
-.action-btn--reactivate:hover {
-  color: #166534;
-  border-color: #bbf7d0;
-  background: #f0fdf4;
-}
-
-html.dark .action-btn--reactivate:hover {
-  color: #4ade80;
-  border-color: rgba(74, 222, 128, 0.3);
-  background: rgba(74, 222, 128, 0.1);
-}
-
-/* ── Filtro Ativas / Arquivadas ── */
-.filter-chips {
-  display: flex;
-  gap: 0.5rem;
-  margin-bottom: 1.25rem;
-}
-
-.filter-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.4rem 0.875rem;
-  border-radius: 999px;
-  border: 1px solid var(--color-border);
-  background: var(--color-bg-card);
-  color: var(--color-text-muted);
-  font-size: 0.8125rem;
-  font-weight: 600;
-  cursor: pointer;
-  font-family: inherit;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
-}
-
-.filter-chip:hover {
-  color: var(--color-text);
-  border-color: var(--color-text-muted);
-}
-
-.filter-chip.active {
-  background: #166534;
-  border-color: #166534;
-  color: #ffffff;
-}
-
-html.dark .filter-chip.active {
-  background: #15803d;
-  border-color: #15803d;
+.card-hint {
+  margin: calc(-1 * var(--space-2)) 0 0;
+  font-size: var(--text-xs);
+  color: var(--color-warning);
+  font-weight: var(--weight-medium);
 }
 
 /* ── Banners ── */
 .banner {
-  border-radius: 12px;
-  padding: 1rem 1.25rem;
-  margin-bottom: 1rem;
-}
-
-.banner--warning {
-  border: 1px solid #fde68a;
-  background: #fffbeb;
-}
-
-html.dark .banner--warning {
-  border-color: rgba(250, 204, 21, 0.3);
-  background: rgba(120, 53, 15, 0.2);
-}
-
-.banner-content {
   display: flex;
   flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-5);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-warning-border);
+  background: var(--color-warning-soft);
 }
-
-.banner-row {
+.banner--row {
   flex-direction: row;
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
+  gap: var(--space-4);
+  flex-wrap: wrap;
 }
-
 .banner-title {
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: #92400e;
-  margin: 0 0 0.25rem;
+  margin: 0;
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-strong);
 }
-
-html.dark .banner-title {
-  color: #fcd34d;
-}
-
 .banner-text {
-  font-size: 0.8125rem;
-  color: #78350f;
-  margin: 0 0 0.75rem;
-  line-height: 1.45;
+  margin: 2px 0 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
 }
-
-html.dark .banner-text {
-  color: #fde68a;
-}
-
 .banner-error {
-  font-size: 0.8125rem;
-  color: #dc2626;
-  margin: 0 0 0.5rem;
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-danger);
 }
-
+.banner-link {
+  display: inline-flex;
+  align-items: center;
+  height: var(--control-h-sm);
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  text-decoration: none;
+  transition: background var(--transition-fast);
+}
+.banner-link:hover {
+  background: var(--color-primary-hover);
+}
 .primary-radio-list {
   display: flex;
   flex-direction: column;
-  gap: 0.375rem;
-  margin-bottom: 0.75rem;
+  gap: var(--space-2);
+  margin: var(--space-1) 0;
 }
-
 .primary-radio {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  font-size: 0.875rem;
+  gap: var(--space-2);
+  font-size: var(--text-base);
   color: var(--color-text);
   cursor: pointer;
 }
-
-/* ── Buttons ── */
-.btn-confirm {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0.5rem 1rem;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: #fff;
-  background: #166534;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  text-decoration: none;
-  transition: background 0.15s;
-  white-space: nowrap;
+.primary-radio input {
+  accent-color: var(--color-primary);
 }
 
-.btn-confirm:hover {
-  background: #15803d;
+/* ── Avisos / vazio ── */
+.notice {
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
 }
-
-.btn-confirm:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+.notice--danger {
+  background: var(--color-danger-soft);
+  border: 1px solid var(--color-danger-border);
+  color: var(--color-danger);
 }
-
-.btn-cancel {
-  padding: 0.5rem 0.85rem;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: var(--color-text);
-  background: transparent;
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-
-.btn-cancel:hover {
-  background: var(--color-table-row-hover);
-}
-
-/* ── Empty state ── */
 .empty-card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 3rem 1.5rem;
-  background: var(--color-bg-card);
-  border: 1px dashed var(--color-border);
-  border-radius: 14px;
-  text-align: center;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
 }
-
-.empty-icon {
-  color: var(--color-text-muted);
-  margin-bottom: 1rem;
-  opacity: 0.5;
-}
-
-.empty-text {
-  font-size: 1rem;
-  font-weight: 600;
-  color: var(--color-text);
-  margin: 0 0 0.25rem;
-}
-
-.empty-hint {
-  font-size: 0.8125rem;
-  color: var(--color-text-muted);
-  margin: 0 0 1.25rem;
-}
-
-/* ── Loading / Error ── */
-.loading-state,
-.error-state,
-.empty-state {
-  text-align: center;
-  padding: 3rem;
-  color: var(--color-text-muted);
-}
-
-.spinner {
-  width: 36px;
-  height: 36px;
-  border: 3px solid var(--color-border);
-  border-top-color: #166534;
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-  margin: 0 auto 1rem;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-.error-state p {
-  color: var(--color-error);
-}
-
 .link {
-  color: var(--color-link-hover);
-  border-bottom: 1px solid transparent;
+  color: var(--color-primary-text);
+  font-weight: var(--weight-semibold);
+  text-decoration: none;
 }
-
 .link:hover {
-  border-bottom-color: var(--color-link-hover);
+  text-decoration: underline;
 }
 
-.global-error {
-  padding: 0.625rem 1rem;
-  background: #fef2f2;
-  color: #dc2626;
-  border-radius: 10px;
-  font-size: 0.8125rem;
-  margin-bottom: 1rem;
-}
-
-html.dark .global-error {
-  background: rgba(220, 38, 38, 0.1);
-  color: #f87171;
-}
-
-/* ── Blocked modal ── */
+/* ── Modal "não é possível eliminar" ── */
 .blocked-body {
   display: flex;
   flex-direction: column;
+  gap: var(--space-3);
 }
-
 .blocked-msg {
-  font-size: 0.875rem;
-  color: var(--color-text-muted);
-  line-height: 1.5;
   margin: 0;
+  font-size: var(--text-base);
+  color: var(--color-text-secondary);
+  line-height: 1.5;
 }
-
 .blocked-question {
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: var(--color-text);
-  margin: 1rem 0 0.625rem;
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-strong);
 }
-
 .blocked-options {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: var(--space-2);
 }
-
 .blocked-option {
   display: flex;
   align-items: center;
-  gap: 0.875rem;
-  padding: 0.875rem 1rem;
-  border: 1.5px solid var(--color-border);
-  border-radius: 12px;
-  background: var(--color-bg-card);
-  cursor: pointer;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
   text-align: left;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  font: inherit;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: border-color var(--transition-fast), background var(--transition-fast);
 }
-
 .blocked-option:hover:not(:disabled) {
-  border-color: #166534;
-  box-shadow: 0 2px 8px rgba(22, 101, 52, 0.08);
+  border-color: var(--color-border-strong);
+  background: var(--color-selected);
 }
-
 .blocked-option:disabled {
-  opacity: 0.4;
+  opacity: 0.5;
   cursor: not-allowed;
 }
-
 .blocked-option-icon {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
-  flex-shrink: 0;
-  border-radius: 8px;
-  background: #ecfdf5;
-  color: #166534;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-muted);
+  color: var(--color-text-secondary);
 }
-
-html.dark .blocked-option-icon {
-  background: rgba(22, 101, 52, 0.2);
-  color: #4ade80;
-}
-
 .blocked-option-label {
   display: block;
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: var(--color-text);
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-strong);
 }
-
 .blocked-option-desc {
   display: block;
-  font-size: 0.75rem;
-  font-weight: 400;
+  margin-top: 2px;
+  font-size: var(--text-sm);
   color: var(--color-text-muted);
-  margin-top: 0.125rem;
 }
-
 .blocked-footer {
   display: flex;
   justify-content: flex-end;
-  gap: 0.5rem;
-  margin-top: 1.25rem;
+  margin-top: var(--space-2);
 }
 
-/* ── Responsive ── */
 @media (max-width: 600px) {
-  .page-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0.75rem;
+  .summary {
+    gap: var(--space-4) var(--space-6);
+    padding: var(--space-4);
   }
-
-  .accounts-grid {
-    grid-template-columns: 1fr;
+  .summary-item:first-child {
+    flex-basis: 100%;
   }
-
-  .patrimonio-hero {
-    padding: 1.25rem;
+  .summary-item--side {
+    padding-left: 0;
+    border-left: none;
   }
-
-  .patrimonio-value {
-    font-size: 1.5rem;
-  }
-
-  .banner-row {
-    flex-direction: column;
-    align-items: flex-start;
+  .summary-value {
+    font-size: var(--text-xl);
   }
 }
 </style>
