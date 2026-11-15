@@ -69,11 +69,23 @@ export function recurringAmountForMonth(
 
 /** Descrição curta da frequência para listas (ex.: "Trimestral · Mar" ou "Anual"). */
 export function recurringFrequencyDescription(
-  r: { frequency: RecurringFrequency; annualMonth?: number | null }
+  r: { frequency: RecurringFrequency; annualMonth?: number | null; dayOfMonth?: number | null }
 ): string {
   const label = RECURRING_FREQUENCY_LABELS[r.frequency]
-  if (r.frequency === RecurringFrequency.Monthly || r.annualMonth == null) return label
-  return `${label} · ${shortMonthLabel(r.annualMonth)}`
+  const day = r.dayOfMonth != null ? ` · dia ${r.dayOfMonth}` : ''
+  if (r.frequency === RecurringFrequency.Monthly || r.annualMonth == null) return label + day
+  return `${label} · ${shortMonthLabel(r.annualMonth)}${day}`
+}
+
+/**
+ * Dia efetivo da recorrente num (ano, mês 1-12): o dia escolhido, limitado ao último dia do mês
+ * (31 → 30 em abril, 28/29 em fevereiro). Sem dia (recorrentes antigas) → dia 1.
+ * ⚠️ Espelho de `RecurringTransaction.DayInMonth` no backend — manter em sincronia.
+ */
+export function recurringDayInMonth(r: { dayOfMonth?: number | null }, year: number, month: number): number {
+  const day = r.dayOfMonth != null && r.dayOfMonth >= 1 && r.dayOfMonth <= 31 ? r.dayOfMonth : 1
+  const lastDay = new Date(year, month, 0).getDate()
+  return Math.min(day, lastDay)
 }
 
 export interface RecurringTransaction {
@@ -90,6 +102,8 @@ export interface RecurringTransaction {
   responsibleUserId?: string | null
   frequency: RecurringFrequency
   annualMonth?: number
+  /** Dia do mês (1-31); nos meses mais curtos, o último dia. Null = dia 1 (antigas). */
+  dayOfMonth?: number | null
   startMonth: number
   startYear: number
   endMonth?: number
@@ -108,6 +122,7 @@ export interface CreateRecurringTransactionRequest {
   responsibleUserId?: string | null
   frequency: RecurringFrequency
   annualMonth?: number
+  dayOfMonth?: number
 }
 
 export interface UpdateRecurringTransactionRequest {
@@ -122,4 +137,5 @@ export interface UpdateRecurringTransactionRequest {
   responsibleUserId?: string | null
   frequency: RecurringFrequency
   annualMonth?: number
+  dayOfMonth?: number
 }

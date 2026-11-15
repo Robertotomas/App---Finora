@@ -1,8 +1,52 @@
 <script setup lang="ts">
 // Painel direito das páginas de autenticação (split-screen).
-// Cartão único com o gráfico real de Património Total (NetWorthChart).
-// Decorativo: escondido em mobile e ignorado por leitores de ecrã.
+// Alterna entre dois cartões: Individual (Património Total, gráfico real NetWorthChart) e
+// Casal (despesas do mês por membro + responsável em cada movimento — o diferencial do produto).
+// Os dois cartões ocupam a mesma célula de grelha (sem saltos de altura). Roda a cada 7 s,
+// pausa com o rato por cima. Decorativo: escondido em mobile e ignorado por leitores de ecrã.
+import { ref, onMounted, onUnmounted } from 'vue'
 import NetWorthChart, { type DailyBalancePoint } from '@/components/charts/NetWorthChart.vue'
+import UserAvatar from '@/components/ui/UserAvatar.vue'
+
+type Slide = 'solo' | 'couple'
+const SLIDES: Slide[] = ['solo', 'couple']
+const SUBTITLES: Record<Slide, string> = {
+  solo: 'Acompanhe o seu património, movimentos e objetivos num só lugar.',
+  couple: 'Partilhe as finanças com quem vive consigo e saiba sempre quem pagou o quê.',
+}
+const ROTATE_MS = 7000
+
+const active = ref<Slide>('solo')
+const paused = ref(false)
+let timer: ReturnType<typeof setInterval> | null = null
+
+function next() {
+  if (paused.value) return
+  active.value = SLIDES[(SLIDES.indexOf(active.value) + 1) % SLIDES.length]
+}
+function go(slide: Slide) {
+  active.value = slide
+  restart()
+}
+function restart() {
+  if (timer) clearInterval(timer)
+  timer = setInterval(next, ROTATE_MS)
+}
+onMounted(restart)
+onUnmounted(() => {
+  if (timer) clearInterval(timer)
+})
+
+// Cartão Casal: despesas de junho por membro + últimos movimentos com o responsável.
+const members = [
+  { first: 'Ana', last: 'Silva', amount: '1 184,40 €', percent: 58 },
+  { first: 'Rui', last: 'Costa', amount: '857,60 €', percent: 42 },
+]
+const coupleMovements = [
+  { name: 'Continente', category: 'Supermercado', amount: '−84,20 €', who: members[0] },
+  { name: 'EDP', category: 'Eletricidade', amount: '−62,35 €', who: members[1] },
+  { name: 'Restaurante', category: 'Restauração', amount: '−46,00 €', who: members[1] },
+]
 
 // Série de exemplo (~6 meses, tendência de subida) que alimenta o gráfico real.
 const points: DailyBalancePoint[] = [
@@ -44,12 +88,17 @@ const categories = [
   <aside class="auth-right" aria-hidden="true">
     <div class="auth-showcase">
       <div class="auth-showcase-copy">
-        <p class="auth-showcase-title">As suas finanças, sob controlo.</p>
-        <p class="auth-showcase-sub">Acompanhe o seu património, movimentos e objetivos num só lugar.</p>
+        <p class="auth-showcase-title">As suas finanças, sozinho ou a dois.</p>
+        <div class="auth-showcase-sub-wrap">
+          <p v-for="sl in SLIDES" :key="sl" class="auth-showcase-sub" :class="{ 'is-active': active === sl }">
+            {{ SUBTITLES[sl] }}
+          </p>
+        </div>
       </div>
 
-      <!-- Cartão único: Património Total -->
-      <div class="dash-mock">
+      <div class="slides" @mouseenter="paused = true" @mouseleave="paused = false">
+      <!-- Slide Individual: Património Total -->
+      <div class="dash-mock slide" :class="{ 'is-active': active === 'solo' }">
         <div class="dash-mock-chrome">
           <span class="dot"></span><span class="dot"></span><span class="dot"></span>
           <span class="dash-mock-periods">
@@ -75,6 +124,64 @@ const categories = [
             </div>
           </div>
         </div>
+      </div>
+
+      <!-- Slide Casal: despesas por membro + responsável -->
+      <div class="dash-mock slide" :class="{ 'is-active': active === 'couple' }">
+        <div class="dash-mock-chrome">
+          <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+          <span class="dm-plan">Plano Casal</span>
+        </div>
+        <div class="dash-mock-body">
+          <div class="dm-hero">
+            <p class="dm-label">Despesas de junho</p>
+            <p class="dm-value">2 042,00 €</p>
+            <p class="dm-sub">Repartidas por membro</p>
+          </div>
+
+          <div class="dm-split">
+            <span class="dm-split-a" :style="{ width: members[0].percent + '%' }"></span>
+            <span class="dm-split-b" :style="{ width: members[1].percent + '%' }"></span>
+          </div>
+          <div class="dm-members">
+            <div v-for="(m, i) in members" :key="m.first" class="dm-member">
+              <span class="dm-member-dot" :class="i === 0 ? 'dm-split-a' : 'dm-split-b'"></span>
+              <UserAvatar :first-name="m.first" :last-name="m.last" :size="26" />
+              <span class="dm-member-name">{{ m.first }}</span>
+              <span class="dm-member-values">
+                <span class="dm-row-value">{{ m.amount }}</span>
+                <span class="dm-row-percent">{{ m.percent }}%</span>
+              </span>
+            </div>
+          </div>
+
+          <p class="dm-section">Últimos movimentos</p>
+          <div class="dm-rows">
+            <div v-for="mv in coupleMovements" :key="mv.name" class="dm-row">
+              <span class="dm-mv">
+                <span class="dm-row-name">{{ mv.name }}</span>
+                <span class="dm-row-percent">{{ mv.category }}</span>
+              </span>
+              <span class="dm-mv-right">
+                <span class="dm-row-value">{{ mv.amount }}</span>
+                <UserAvatar :first-name="mv.who.first" :last-name="mv.who.last" :size="22" />
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+      </div>
+
+      <div class="slide-dots">
+        <button
+          v-for="sl in SLIDES"
+          :key="sl"
+          type="button"
+          tabindex="-1"
+          class="slide-dot"
+          :class="{ 'is-active': active === sl }"
+          @click="go(sl)"
+        ></button>
       </div>
     </div>
   </aside>
@@ -120,6 +227,7 @@ const categories = [
   font-weight: 800;
   letter-spacing: -0.03em;
   line-height: 1.2;
+  text-wrap: balance;
 }
 
 .auth-showcase-sub {
@@ -127,6 +235,139 @@ const categories = [
   font-size: 0.9375rem;
   line-height: 1.5;
   color: rgba(255, 255, 255, 0.82);
+}
+
+/* ── Rotação: subtítulos e cartões empilhados na mesma célula (altura = o maior) ── */
+.auth-showcase-sub-wrap {
+  display: grid;
+}
+.auth-showcase-sub-wrap > .auth-showcase-sub {
+  grid-area: 1 / 1;
+  opacity: 0;
+  transition: opacity 600ms ease;
+}
+.auth-showcase-sub-wrap > .auth-showcase-sub.is-active {
+  opacity: 1;
+}
+.slides {
+  display: grid;
+}
+.slide {
+  grid-area: 1 / 1;
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 600ms ease, transform 600ms ease;
+  pointer-events: none;
+}
+.slide.is-active {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+.slide-dots {
+  display: flex;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-top: -0.75rem;
+}
+.slide-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.4);
+  cursor: pointer;
+  transition: width 300ms ease, background 300ms ease;
+}
+.slide-dot.is-active {
+  width: 1.25rem;
+  background: #ffffff;
+}
+@media (prefers-reduced-motion: reduce) {
+  .slide,
+  .auth-showcase-sub-wrap > .auth-showcase-sub,
+  .slide-dot {
+    transition: none;
+    transform: none;
+  }
+}
+
+/* ── Cartão Casal ── */
+.dm-plan {
+  margin-left: auto;
+  font-size: 0.625rem;
+  font-weight: 700;
+  color: var(--color-primary-text);
+  border: 1px solid var(--color-primary-text);
+  border-radius: 999px;
+  padding: 0.0625rem 0.5rem;
+}
+.dm-sub {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+}
+.dm-split {
+  display: flex;
+  height: 0.5rem;
+  border-radius: 999px;
+  overflow: hidden;
+  margin: 0.75rem 0 0.875rem;
+  gap: 2px;
+}
+.dm-split-a {
+  background: var(--color-primary);
+}
+.dm-split-b {
+  background: var(--color-income);
+  opacity: 0.55;
+}
+.dm-members {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+.dm-member {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+}
+.dm-member-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 999px;
+  flex: none;
+}
+.dm-member-name {
+  color: var(--color-text-secondary);
+  font-weight: 600;
+}
+.dm-member-values {
+  margin-left: auto;
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+.dm-section {
+  margin: 0 0 0.5rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-subtle);
+}
+.dm-mv {
+  display: flex;
+  flex-direction: column;
+  gap: 0.0625rem;
+}
+.dm-mv-right {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
 }
 
 /* ── Cartão Património ── */

@@ -42,6 +42,7 @@ function mapRecurring(d: {
   responsibleUserId?: string | null
   frequency?: number
   annualMonth?: number
+  dayOfMonth?: number | null
   startMonth: number
   startYear: number
   endMonth?: number
@@ -61,6 +62,7 @@ function mapRecurring(d: {
     responsibleUserId: d.responsibleUserId ?? null,
     frequency: d.frequency ?? 0,
     annualMonth: d.annualMonth,
+    dayOfMonth: d.dayOfMonth ?? null,
     startMonth: d.startMonth,
     startYear: d.startYear,
     endMonth: d.endMonth,
