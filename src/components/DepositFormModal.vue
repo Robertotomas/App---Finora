@@ -125,7 +125,7 @@ function handleClose() {
         <span v-if="selectedAccount" class="hint">
           O saldo de "{{ selectedAccount.name }}" desce
           {{ amount ? amount.toLocaleString('pt-PT', { ...PT_GROUPING, style: 'currency', currency: 'EUR' }) : 'o montante' }}.
-          O Património não muda: o valor passa a dinheiro por investir.
+          O Património não muda: o valor passa para os fundos livres da corretora.
         </span>
         <span v-else class="hint hint--warn">
           Sem conta: o valor conta como dinheiro novo no Património. Se saiu de uma conta registada,

@@ -183,7 +183,7 @@ onUnmounted(() => {
       <div v-show="open && suggestions.length > 0" class="brand-ac-menu" role="listbox" :style="menuStyle">
         <button
           v-for="(b, i) in suggestions"
-          :key="b.domain"
+          :key="b.name"
           type="button"
           class="brand-ac-option"
           :class="{ 'is-active': i === activeIndex }"

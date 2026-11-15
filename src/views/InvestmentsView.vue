@@ -10,6 +10,10 @@ import { useAccountsStore } from '@/stores/accounts'
 import InvestmentFormModal from '@/components/InvestmentFormModal.vue'
 import ImportStatementModal from '@/components/ImportStatementModal.vue'
 import DepositFormModal from '@/components/DepositFormModal.vue'
+import InvestmentAddChooser from '@/components/InvestmentAddChooser.vue'
+import type { InvestmentAddKind } from '@/components/InvestmentAddChooser.vue'
+import DividendFormModal from '@/components/DividendFormModal.vue'
+import BrokerFxFeeModal from '@/components/BrokerFxFeeModal.vue'
 import ConfirmDeleteModal from '@/components/ConfirmDeleteModal.vue'
 import InstrumentLogo from '@/components/InstrumentLogo.vue'
 import PlanUpsellCard from '@/components/PlanUpsellCard.vue'
@@ -24,10 +28,23 @@ import type { ActionMenuItem } from '@/components/ui/ActionMenu.vue'
 import { useToast } from '@/composables/useToast'
 import ValueHeroCard from '@/components/charts/ValueHeroCard.vue'
 import HeroStat from '@/components/charts/HeroStat.vue'
+import CategoryDoughnut from '@/components/charts/CategoryDoughnut.vue'
+import type { DoughnutItem } from '@/components/charts/CategoryDoughnut.vue'
+import { allocationSlices, holdingWeight } from '@/utils/portfolioAllocation'
+import type { AllocationGrouping } from '@/utils/portfolioAllocation'
+import { sortHoldings } from '@/utils/holdingSort'
+import type { HoldingSortKey, SortDir } from '@/utils/holdingSort'
 import type { AssetChartPoint } from '@/components/charts/AssetsChart.vue'
 import { investmentsApi } from '@/api/investments'
 import { INSTRUMENT_TYPE_LABELS } from '@/types/investment'
-import type { InvestmentHolding, AddTransactionRequest, AddDepositRequest, InvestmentDepositItem } from '@/types/investment'
+import type {
+  InvestmentHolding,
+  AddTransactionRequest,
+  AddDepositRequest,
+  InvestmentDepositItem,
+  InvestmentDividendItem,
+  SaveDividendRequest,
+} from '@/types/investment'
 
 const route = useRoute()
 const router = useRouter()
@@ -95,6 +112,8 @@ onMounted(async () => {
     if (householdStore.household && subscriptionStore.canAccessInvestments) {
       await investmentsStore.fetchHoldings().catch(() => {})
       investmentsStore.fetchDeposits()
+      investmentsStore.fetchDividends() // tolerante: falha → "sem dividendos", sem banner
+      investmentsStore.fetchSettings() // tolerante: falha → taxa 0
       accountsStore.fetchAccounts().catch(() => {}) // para o dropdown de débito do depósito
       if (investmentsStore.holdings.length > 0) fetchHistory()
       if (route.query.action === 'new') openAdd()
@@ -206,18 +225,103 @@ const lastUpdate = computed(() => {
   return dates.sort().at(-1) ?? null
 })
 
-const sortedHoldings = computed(() =>
-  [...investmentsStore.activeHoldings].sort((a, b) => (b.currentValueEur ?? b.investedEur) - (a.currentValueEur ?? a.investedEur)),
-)
+/* ── Ordenação da tabela (clique no cabeçalho; por defeito Valor desc) ── */
+const sortKey = ref<HoldingSortKey>('value')
+const sortDir = ref<SortDir>('desc')
+function toggleSort(key: HoldingSortKey) {
+  if (sortKey.value === key) {
+    sortDir.value = sortDir.value === 'desc' ? 'asc' : 'desc'
+  } else {
+    sortKey.value = key
+    sortDir.value = key === 'name' ? 'asc' : 'desc'
+  }
+}
+function ariaSort(key: HoldingSortKey): 'ascending' | 'descending' | 'none' {
+  if (sortKey.value !== key) return 'none'
+  return sortDir.value === 'asc' ? 'ascending' : 'descending'
+}
+
+interface PositionColumn {
+  key: HoldingSortKey | null
+  label: string
+  cls: string
+  title?: string
+}
+/**
+ * Rótulo da coluna de variação diária: "Hoje" só se as cotações forem de hoje; senão a data do
+ * último dia de negociação (ex.: "06/11" ao fim de semana). Data local da cotação mais recente.
+ */
+function localYmd(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+const dayColumnLabel = computed(() => {
+  const iso = lastUpdate.value
+  if (!iso) return 'Dia'
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return 'Dia'
+  if (localYmd(d) === localYmd(new Date())) return 'Hoje'
+  return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`
+})
+
+const positionColumns = computed<PositionColumn[]>(() => [
+  { key: 'name', label: 'Ativo', cls: '' },
+  { key: 'quantity', label: 'Qtd.', cls: 'num col-qty' },
+  { key: null, label: 'Preço', cls: 'num col-price' },
+  { key: 'value', label: 'Valor', cls: 'num' },
+  { key: 'return', label: 'Retorno', cls: 'num', title: 'Retorno total: não realizado + ganhos realizados + dividendos' },
+  { key: 'returnPct', label: '% Retorno', cls: 'num', title: 'Retorno total em % do total investido em compras' },
+  { key: 'weight', label: 'Peso', cls: 'num col-weight', title: 'Peso na carteira (valor de mercado)' },
+  {
+    key: 'day',
+    label: dayColumnLabel.value,
+    cls: 'num col-day',
+    title: dayColumnLabel.value === 'Hoje'
+      ? 'Variação de hoje face ao fecho anterior'
+      : `Variação no último dia de negociação (${dayColumnLabel.value}) face ao fecho anterior`,
+  },
+])
+const COLSPAN = 8 + 2 // colunas + seleção + chevron
+
+const sortedHoldings = computed(() => sortHoldings(investmentsStore.activeHoldings, sortKey.value, sortDir.value))
 // Posições fechadas/negativas (quantidade ≤ 0) — mostradas numa secção esbatida, para gerir/apagar.
-const closedHoldings = computed(() =>
-  investmentsStore.holdings.filter((h) => h.quantity <= 1e-9).sort((a, b) => a.name.localeCompare(b.name)),
+// Só o nome e o retorno fazem sentido nas fechadas (sem valor/peso/variação); nos outros casos, por nome.
+const closedHoldings = computed(() => {
+  const closed = investmentsStore.holdings.filter((h) => h.quantity <= 1e-9)
+  const byReturn = sortKey.value === 'name' || sortKey.value === 'return' || sortKey.value === 'returnPct'
+  return sortHoldings(closed, byReturn ? sortKey.value : 'name', byReturn ? sortDir.value : 'asc')
+})
+
+/** Peso (%) de uma posição ativa na carteira — mesma fórmula da página de detalhe. */
+function weightOf(h: InvestmentHolding): number | null {
+  return holdingWeight(h, totalValue.value)
+}
+
+/* ── Distribuição da carteira ── */
+const allocationGrouping = ref<AllocationGrouping>('asset')
+const allocationOptions: { value: AllocationGrouping; label: string }[] = [
+  { value: 'asset', label: 'Ativo' },
+  { value: 'type', label: 'Tipo' },
+  { value: 'currency', label: 'Moeda' },
+]
+const allocationItems = computed<DoughnutItem[]>(() =>
+  allocationSlices(investmentsStore.holdings, allocationGrouping.value).map((sl, i) => ({
+    category: i,
+    categoryName: sl.label,
+    amount: sl.value,
+    percentage: sl.percentage,
+  })),
 )
+
+/* ── Retorno: realizados + dividendos ── */
+const hasSales = computed(() => investmentsStore.holdings.some((h) => h.realizedCostEur > 0))
+const showTotalReturn = computed(() => hasSales.value || investmentsStore.dividendsTotalNetEur > 0)
 const displayedHoldings = computed(() => [...sortedHoldings.value, ...closedHoldings.value])
 
 /* ── Chips de vista: Todos / Ativos / Fechadas / Depósitos (como nos objetivos) ── */
-type InvTab = 'all' | 'active' | 'closed' | 'deposits'
-const tab = ref<InvTab>((['active', 'closed', 'deposits'].includes(String(route.query.tab)) ? route.query.tab : 'all') as InvTab)
+type InvTab = 'all' | 'active' | 'closed' | 'deposits' | 'dividends'
+const tab = ref<InvTab>(
+  (['active', 'closed', 'deposits', 'dividends'].includes(String(route.query.tab)) ? route.query.tab : 'all') as InvTab,
+)
 function selectTab(t: InvTab) {
   tab.value = t
   router.replace({ query: { ...route.query, tab: t === 'all' ? undefined : t } })
@@ -227,7 +331,9 @@ const tabOptions = computed(() => [
   { value: 'active' as InvTab, label: 'Ativos', count: sortedHoldings.value.length },
   { value: 'closed' as InvTab, label: 'Fechadas', count: closedHoldings.value.length },
   { value: 'deposits' as InvTab, label: 'Depósitos', count: investmentsStore.deposits.length },
+  { value: 'dividends' as InvTab, label: 'Dividendos', count: investmentsStore.dividends.length },
 ])
+const isListTab = computed(() => tab.value !== 'deposits' && tab.value !== 'dividends')
 const visibleActive = computed(() => (tab.value === 'all' || tab.value === 'active' ? sortedHoldings.value : []))
 const visibleClosed = computed(() => (tab.value === 'all' || tab.value === 'closed' ? closedHoldings.value : []))
 
@@ -268,6 +374,104 @@ function depositMenu(d: InvestmentDepositItem): ActionMenuItem[] {
   ]
 }
 
+/* ── Dividendos (gestão) ── */
+const dividends = computed(() => investmentsStore.dividends)
+const dividendModalOpen = ref(false)
+const dividendLoading = ref(false)
+const editingDividend = ref<InvestmentDividendItem | null>(null)
+const dividendDeleteId = ref<string | null>(null)
+const dividendActionLoading = ref(false)
+
+function holdingOf(d: InvestmentDividendItem): InvestmentHolding | null {
+  return investmentsStore.holdings.find((h) => h.id === d.holdingId) ?? null
+}
+
+/* ── Taxa de conversão da corretora ── */
+const fxFeeModalOpen = ref(false)
+const fxFeeSaving = ref(false)
+
+const heroMenu = computed<ActionMenuItem[]>(() => [
+  { label: 'Taxa de conversão da corretora…', onSelect: () => (fxFeeModalOpen.value = true) },
+])
+
+// Só se mostra a taxa no rodapé quando se aplica (> 0 e há posições ativas noutra moeda).
+const showFxFee = computed(
+  () =>
+    investmentsStore.brokerFxFeePercent > 0 &&
+    investmentsStore.activeHoldings.some((h) => (h.currency || 'EUR').toUpperCase() !== 'EUR'),
+)
+const fxFeeLabel = computed(
+  () => `${investmentsStore.brokerFxFeePercent.toLocaleString('pt-PT', { maximumFractionDigits: 4 })}%`,
+)
+
+async function handleFxFeeSubmit(percent: number) {
+  fxFeeSaving.value = true
+  try {
+    await investmentsStore.saveSettings(percent)
+    fxFeeModalOpen.value = false
+    toast.success('Taxa atualizada')
+    reloadHistory()
+  } catch (e) {
+    toast.error(errorMessage(e, 'Não foi possível guardar a taxa. Tente novamente.'))
+  } finally {
+    fxFeeSaving.value = false
+  }
+}
+
+function errorMessage(e: unknown, fallback: string): string {
+  const msg = (e as { response?: { data?: { message?: string } } }).response?.data?.message
+  return msg || fallback
+}
+
+function openAddDividend() {
+  editingDividend.value = null
+  dividendModalOpen.value = true
+}
+function openEditDividend(d: InvestmentDividendItem) {
+  editingDividend.value = d
+  dividendModalOpen.value = true
+}
+function closeDividendModal() {
+  dividendModalOpen.value = false
+  editingDividend.value = null
+}
+
+async function handleDividendSubmit(payload: SaveDividendRequest) {
+  dividendLoading.value = true
+  try {
+    const editing = !!editingDividend.value
+    if (editingDividend.value) await investmentsStore.updateDividend(editingDividend.value.id, payload)
+    else await investmentsStore.addDividend(payload)
+    toast.success(editing ? 'Dividendo atualizado' : 'Dividendo adicionado')
+    closeDividendModal()
+  } catch (e) {
+    toast.error(errorMessage(e, 'Não foi possível guardar o dividendo. Tente novamente.'))
+  } finally {
+    dividendLoading.value = false
+  }
+}
+
+async function confirmDeleteDividend() {
+  if (!dividendDeleteId.value) return
+  dividendActionLoading.value = true
+  try {
+    await investmentsStore.deleteDividend(dividendDeleteId.value)
+    dividendDeleteId.value = null
+    toast.success('Dividendo eliminado')
+  } catch (e) {
+    toast.error(errorMessage(e, 'Não foi possível eliminar o dividendo. Tente novamente.'))
+  } finally {
+    dividendActionLoading.value = false
+  }
+}
+
+function dividendMenu(d: InvestmentDividendItem): ActionMenuItem[] {
+  return [
+    { label: 'Editar', onSelect: () => openEditDividend(d) },
+    { label: 'Eliminar', danger: true, onSelect: () => (dividendDeleteId.value = d.id) },
+  ]
+}
+
 function formatEur(v: number): string {
   return new Intl.NumberFormat('pt-PT', { ...PT_GROUPING, style: 'currency', currency: 'EUR' }).format(v)
 }
@@ -283,15 +487,42 @@ function formatSignedEur(v: number): string {
 function formatPct(pct: number): string {
   return `${pct >= 0 ? '+' : ''}${pct.toFixed(2).replace('.', ',')}%`
 }
+function formatWeight(pct: number | null): string {
+  return pct === null ? '—' : `${pct.toFixed(2).replace('.', ',')}%`
+}
+function signClass(v: number): string {
+  return v >= 0 ? 'ui-amount--pos' : 'ui-amount--neg'
+}
+/** Dica do retorno total de uma posição (decomposição). */
+function returnHint(h: InvestmentHolding): string {
+  const parts: string[] = []
+  if (h.returnEur !== null && h.quantity > 1e-9) parts.push(`Não realizado ${formatSignedEur(h.returnEur)}`)
+  if (h.realizedCostEur > 0) parts.push(`Realizado ${formatSignedEur(h.realizedGainEur)}`)
+  if (h.dividendsEur > 0) parts.push(`Dividendos ${formatSignedEur(h.dividendsEur)}`)
+  return parts.join(' · ')
+}
 function formatDate(iso: string): string {
   const d = new Date(iso)
   return isNaN(d.getTime()) ? '—' : d.toLocaleDateString('pt-PT', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
 /* ── Fluxo ── */
+/** "Adicionar" abre primeiro a escolha (compra/venda, depósito, dividendo ou importar). */
+const addChooserOpen = ref(false)
 function openAdd() {
   investmentsStore.clearError()
+  addChooserOpen.value = true
+}
+function openAddTrade() {
+  investmentsStore.clearError()
   formModalOpen.value = true
+}
+function onAddChoose(kind: InvestmentAddKind) {
+  addChooserOpen.value = false
+  if (kind === 'trade') openAddTrade()
+  else if (kind === 'deposit') openAddDeposit()
+  else if (kind === 'dividend') openAddDividend()
+  else openImport()
 }
 
 function openPosition(h: InvestmentHolding) {
@@ -361,6 +592,7 @@ async function handleImportDone() {
   toast.success('Extrato importado')
   await investmentsStore.fetchHoldings()
   investmentsStore.fetchDeposits()
+  investmentsStore.fetchDividends()
   reloadHistory()
 }
 
@@ -471,39 +703,70 @@ async function handleDepositSubmit(payload: AddDepositRequest) {
                 </template>
                 {{ refreshing ? 'A atualizar...' : 'Atualizar' }}
               </UiButton>
+              <ActionMenu :items="heroMenu" aria-label="Definições da carteira" />
             </template>
 
             <template #footer>
               <HeroStat label="Investido" :value="formatEur(totalInvested)" />
               <HeroStat label="Depósitos">
                 <span>{{ investmentsStore.depositsTotalEur > 0 ? formatEur(investmentsStore.depositsTotalEur) : '—' }}</span>
-                <UiButton
-                  size="sm"
-                  variant="ghost"
-                  icon-only
-                  class="deposit-add"
-                  aria-label="Adicionar depósito"
-                  title="Adicionar depósito"
-                  @click="openAddDeposit"
-                >
-                  <template #icon>
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="5" y2="19"/><line x1="5" x2="19" y1="12" y2="12"/></svg>
-                  </template>
-                </UiButton>
               </HeroStat>
               <HeroStat
                 v-if="investmentsStore.uninvestedCashEur > 0"
-                label="Por investir"
+                label="Fundos livres"
                 :value="formatEur(investmentsStore.uninvestedCashEur)"
-                hint="Depositado na corretora e ainda não investido. Conta para o Património Total."
+                hint="Dinheiro parado na corretora: depósitos − compras + vendas + dividendos + juros e taxas importados. Conta para o Património Total."
+              />
+              <HeroStat
+                v-if="hasSales"
+                label="Ganhos realizados"
+                hint="Resultado das vendas: receita líquida menos o custo médio das unidades vendidas."
+              >
+                <span class="ui-amount" :class="signClass(investmentsStore.totalRealizedGainEur)">
+                  {{ formatSignedEur(investmentsStore.totalRealizedGainEur) }}
+                </span>
+              </HeroStat>
+              <HeroStat
+                v-if="investmentsStore.dividendsTotalNetEur > 0"
+                label="Dividendos recebidos"
+                hint="Dividendos líquidos de retenção na fonte, em EUR."
+                :value="formatEur(investmentsStore.dividendsTotalNetEur)"
+              />
+              <HeroStat
+                v-if="showTotalReturn"
+                label="Retorno total"
+                hint="Não realizado (valor − custo) + ganhos realizados + dividendos."
+              >
+                <span class="ui-amount" :class="signClass(investmentsStore.totalReturnEur)">
+                  {{ formatSignedEur(investmentsStore.totalReturnEur) }}
+                </span>
+              </HeroStat>
+              <HeroStat
+                v-if="showFxFee"
+                label="Conversão"
+                :value="fxFeeLabel"
+                :hint="`Valores em moeda estrangeira líquidos de ${fxFeeLabel} de conversão da corretora (o que receberia em euros ao vender).`"
               />
               <HeroStat v-if="lastUpdate" label="Cotações de" :value="formatDate(lastUpdate)" />
             </template>
           </ValueHeroCard>
 
+          <!-- Distribuição da carteira -->
+          <UiCard v-if="allocationItems.length > 0" class="alloc-card" title="Distribuição da carteira">
+            <template #actions>
+              <SegmentedControl
+                v-model="allocationGrouping"
+                :options="allocationOptions"
+                size="sm"
+                aria-label="Agrupar distribuição por"
+              />
+            </template>
+            <CategoryDoughnut :items="allocationItems" color-mode="series" full-legend />
+          </UiCard>
+
           <div class="ui-toolbar">
             <FilterChips :model-value="tab" :options="tabOptions" aria-label="Filtrar investimentos" @update:model-value="selectTab" />
-            <div v-if="tab !== 'deposits' && selectedIds.length > 0" class="ui-toolbar-group">
+            <div v-if="isListTab && selectedIds.length > 0" class="ui-toolbar-group">
               <span class="bulk-count">{{ selectedIds.length }} {{ selectedIds.length === 1 ? 'selecionada' : 'selecionadas' }}</span>
               <UiButton variant="ghost" size="sm" @click="clearSelection">Limpar</UiButton>
               <UiButton variant="danger-ghost" size="sm" @click="bulkDeleteOpen = true">
@@ -574,6 +837,83 @@ async function handleDepositSubmit(payload: AddDepositRequest) {
             </div>
           </UiCard>
 
+          <!-- Vista de Dividendos -->
+          <UiCard
+            v-else-if="tab === 'dividends'"
+            flush
+            title="Dividendos"
+            :subtitle="`Líquido: ${formatEur(investmentsStore.dividendsTotalNetEur)} · Retido: ${formatEur(investmentsStore.dividendsTotalTaxEur)}`"
+          >
+            <template #actions>
+              <UiButton variant="secondary" size="sm" @click="openAddDividend">
+                <template #icon>
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="5" y2="19"/><line x1="5" x2="19" y1="12" y2="12"/></svg>
+                </template>
+                Adicionar
+              </UiButton>
+            </template>
+
+            <EmptyState
+              v-if="dividends.length === 0"
+              compact
+              title="Ainda não há dividendos"
+              description="Adicione um dividendo recebido ou importe o extrato da sua corretora."
+            >
+              <template #icon>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M14.5 9.5c-.4-1-1.4-1.5-2.5-1.5-1.5 0-2.5.8-2.5 2s1 1.7 2.5 2 2.5.8 2.5 2-1 2-2.5 2c-1.1 0-2.1-.5-2.5-1.5"/><path d="M12 6.5V8m0 8v1.5"/></svg>
+              </template>
+            </EmptyState>
+
+            <div v-else class="ui-table-wrap">
+              <table class="ui-table">
+                <thead>
+                  <tr>
+                    <th>Data</th>
+                    <th>Ativo</th>
+                    <th class="num col-qty">Bruto</th>
+                    <th class="num col-qty">Imposto</th>
+                    <th class="num">Líquido</th>
+                    <th class="col-price">Origem</th>
+                    <th class="col-act"><span class="sr-only">Ações</span></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="d in dividends" :key="d.id">
+                    <td class="nowrap">{{ formatDate(d.date) }}</td>
+                    <td>
+                      <div class="asset-cell">
+                        <InstrumentLogo
+                          :symbol="holdingOf(d)?.symbol ?? d.symbol"
+                          :name="holdingOf(d)?.name ?? d.symbol"
+                          :type="holdingOf(d)?.type"
+                          :domain="holdingOf(d)?.logoDomain"
+                          :size="28"
+                        />
+                        <div class="asset-text">
+                          <span class="asset-symbol">{{ holdingOf(d)?.providerSymbol || d.symbol || '—' }}</span>
+                          <span v-if="holdingOf(d)" class="asset-name">{{ holdingOf(d)?.name }}</span>
+                        </div>
+                      </div>
+                    </td>
+                    <td class="num col-qty">{{ formatPrice(d.amountGross, d.currency) }}</td>
+                    <td class="num col-qty" :class="{ muted: !d.withholdingTax }">
+                      {{ d.withholdingTax ? formatPrice(d.withholdingTax, d.currency) : '—' }}
+                    </td>
+                    <td class="num"><span class="ui-amount ui-amount--pos">{{ formatEur(d.netEur) }}</span></td>
+                    <td class="col-price">
+                      <span class="ui-badge" :class="{ 'ui-badge--brand': d.source === 'import' }">
+                        {{ d.source === 'import' ? 'Importado' : 'Manual' }}
+                      </span>
+                    </td>
+                    <td class="col-act">
+                      <ActionMenu :items="dividendMenu(d)" aria-label="Ações do dividendo" />
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </UiCard>
+
           <!-- Posições -->
           <UiCard v-else flush>
             <EmptyState
@@ -597,12 +937,38 @@ async function handleDepositSubmit(payload: AddDepositRequest) {
                         @change="toggleSelectAll"
                       />
                     </th>
-                    <th>Ativo</th>
-                    <th class="num col-qty">Qtd.</th>
-                    <th class="num col-price">Preço</th>
-                    <th class="num">Valor</th>
-                    <th class="num">Retorno</th>
-                    <th class="num">% Retorno</th>
+                    <th
+                      v-for="col in positionColumns"
+                      :key="col.label"
+                      :class="col.cls"
+                      :title="col.title"
+                      :aria-sort="col.key ? ariaSort(col.key) : undefined"
+                    >
+                      <button
+                        v-if="col.key"
+                        type="button"
+                        class="th-sort"
+                        :class="{ active: sortKey === col.key }"
+                        @click="toggleSort(col.key)"
+                      >
+                        {{ col.label }}
+                        <svg
+                          class="th-sort-icon"
+                          :class="{ asc: sortKey === col.key && sortDir === 'asc' }"
+                          xmlns="http://www.w3.org/2000/svg"
+                          width="12"
+                          height="12"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="2.5"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          aria-hidden="true"
+                        ><polyline points="6 9 12 15 18 9"/></svg>
+                      </button>
+                      <template v-else>{{ col.label }}</template>
+                    </th>
                     <th class="col-chev"><span class="sr-only">Abrir</span></th>
                   </tr>
                 </thead>
@@ -644,16 +1010,24 @@ async function handleDepositSubmit(payload: AddDepositRequest) {
                       <span v-if="h.currentValueEur !== null" class="ui-amount">{{ formatEur(h.currentValueEur) }}</span>
                       <span v-else class="ui-amount muted">{{ formatEur(h.investedEur) }}</span>
                     </td>
-                    <td class="num">
-                      <span v-if="h.returnEur !== null" class="ui-amount" :class="h.returnEur >= 0 ? 'ui-amount--pos' : 'ui-amount--neg'">
-                        {{ formatSignedEur(h.returnEur) }}
+                    <td class="num" :title="returnHint(h) || undefined">
+                      <span v-if="h.totalReturnEur !== null" class="ui-amount" :class="signClass(h.totalReturnEur)">
+                        {{ formatSignedEur(h.totalReturnEur) }}
                       </span>
                       <span v-else class="muted">—</span>
                     </td>
                     <td class="num">
-                      <span v-if="h.returnPct !== null" class="ui-badge" :class="h.returnPct < 0 ? 'ui-badge--danger' : 'ui-badge--success'">
-                        {{ formatPct(h.returnPct) }}
+                      <span v-if="h.totalReturnPct !== null" class="ui-badge" :class="h.totalReturnPct < 0 ? 'ui-badge--danger' : 'ui-badge--success'">
+                        {{ formatPct(h.totalReturnPct) }}
                       </span>
+                      <span v-else class="muted">—</span>
+                    </td>
+                    <td class="num col-weight">{{ formatWeight(weightOf(h)) }}</td>
+                    <td class="num col-day">
+                      <div v-if="h.dayChangeEur !== null" class="num-stack">
+                        <span class="ui-amount" :class="signClass(h.dayChangeEur)">{{ formatSignedEur(h.dayChangeEur) }}</span>
+                        <span v-if="h.dayChangePct !== null" class="num-sub">{{ formatPct(h.dayChangePct) }}</span>
+                      </div>
                       <span v-else class="muted">—</span>
                     </td>
                     <td class="col-chev">
@@ -665,7 +1039,7 @@ async function handleDepositSubmit(payload: AddDepositRequest) {
                 <!-- Posições fechadas (quantidade ≤ 0) -->
                 <tbody v-if="visibleClosed.length > 0">
                   <tr v-if="tab === 'all'" class="closed-sep">
-                    <td :colspan="8">Fechadas</td>
+                    <td :colspan="COLSPAN">Fechadas</td>
                   </tr>
                   <tr
                     v-for="h in visibleClosed"
@@ -698,8 +1072,24 @@ async function handleDepositSubmit(payload: AddDepositRequest) {
                     <td class="num col-qty">{{ formatQty(h.quantity) }}</td>
                     <td class="num col-price"><span class="muted">—</span></td>
                     <td class="num"><span class="ui-badge">Fechada</span></td>
-                    <td class="num"><span class="muted">—</span></td>
-                    <td class="num"><span class="muted">—</span></td>
+                    <td class="num" :title="returnHint(h) || undefined">
+                      <span v-if="h.totalReturnEur !== null && (h.realizedCostEur > 0 || h.dividendsEur > 0)" class="ui-amount" :class="signClass(h.totalReturnEur)">
+                        {{ formatSignedEur(h.totalReturnEur) }}
+                      </span>
+                      <span v-else class="muted">—</span>
+                    </td>
+                    <td class="num">
+                      <span
+                        v-if="h.totalReturnPct !== null && (h.realizedCostEur > 0 || h.dividendsEur > 0)"
+                        class="ui-badge"
+                        :class="h.totalReturnPct < 0 ? 'ui-badge--danger' : 'ui-badge--success'"
+                      >
+                        {{ formatPct(h.totalReturnPct) }}
+                      </span>
+                      <span v-else class="muted">—</span>
+                    </td>
+                    <td class="num col-weight"><span class="muted">—</span></td>
+                    <td class="num col-day"><span class="muted">—</span></td>
                     <td class="col-chev">
                       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
                     </td>
@@ -717,7 +1107,13 @@ async function handleDepositSubmit(payload: AddDepositRequest) {
       :loading="actionLoading"
       @close="formModalOpen = false"
       @submit="handleFormSubmit"
-      @import="openImport"
+    />
+
+    <InvestmentAddChooser
+      :open="addChooserOpen"
+      :can-add-dividend="investmentsStore.holdings.length > 0"
+      @close="addChooserOpen = false"
+      @choose="onAddChoose"
     />
 
     <ImportStatementModal
@@ -733,6 +1129,32 @@ async function handleDepositSubmit(payload: AddDepositRequest) {
       :loading="depositLoading"
       @close="depositModalOpen = false; editingDeposit = null"
       @submit="handleDepositSubmit"
+    />
+
+    <BrokerFxFeeModal
+      :open="fxFeeModalOpen"
+      :percent="investmentsStore.brokerFxFeePercent"
+      :loading="fxFeeSaving"
+      @close="fxFeeModalOpen = false"
+      @submit="handleFxFeeSubmit"
+    />
+
+    <DividendFormModal
+      :open="dividendModalOpen"
+      :holdings="investmentsStore.holdings"
+      :dividend="editingDividend"
+      :loading="dividendLoading"
+      @close="closeDividendModal"
+      @submit="handleDividendSubmit"
+    />
+
+    <ConfirmDeleteModal
+      :open="dividendDeleteId !== null"
+      title="Eliminar dividendo"
+      message="Tem a certeza que deseja eliminar este dividendo? Deixa de contar para o retorno total."
+      :loading="dividendActionLoading"
+      @close="dividendDeleteId = null"
+      @confirm="confirmDeleteDividend"
     />
 
     <ConfirmDeleteModal
@@ -777,10 +1199,9 @@ async function handleDepositSubmit(payload: AddDepositRequest) {
   margin-bottom: var(--space-6);
 }
 
-.deposit-add {
-  width: 22px;
-  height: 22px;
-  color: var(--color-primary-text);
+/* ── Distribuição ── */
+.alloc-card {
+  margin-bottom: var(--space-6);
 }
 
 /* ── Toolbar ── */
@@ -902,6 +1323,66 @@ async function handleDepositSubmit(payload: AddDepositRequest) {
   color: var(--color-text-muted);
 }
 
+.th-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.th-sort:hover,
+.th-sort.active {
+  color: var(--color-text-strong);
+}
+
+.th-sort:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: 4px;
+}
+
+.th-sort-icon {
+  opacity: 0;
+  transition: transform var(--transition-fast), opacity var(--transition-fast);
+}
+
+.th-sort:hover .th-sort-icon {
+  opacity: 0.5;
+}
+
+.th-sort.active .th-sort-icon {
+  opacity: 1;
+}
+
+.th-sort-icon.asc {
+  transform: rotate(180deg);
+}
+
+.num .th-sort {
+  flex-direction: row-reverse;
+}
+
+.num-stack {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+}
+
+.num-sub {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
 .col-chev {
   width: 36px;
   color: var(--color-text-subtle);
@@ -948,9 +1429,18 @@ async function handleDepositSubmit(payload: AddDepositRequest) {
   }
 }
 
+/* Variação do dia: separada do resto da tabela (bloco próprio à direita, como uma mini-tabela ao lado) */
+.ui-table th.col-day,
+.ui-table td.col-day {
+  border-left: 1px solid var(--color-border);
+  padding-left: var(--space-6);
+}
+
 @media (max-width: 640px) {
   .col-qty,
-  .col-price {
+  .col-price,
+  .col-day,
+  .col-weight {
     display: none;
   }
 

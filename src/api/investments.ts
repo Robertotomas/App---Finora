@@ -7,11 +7,17 @@ import type {
   InvestmentDeposits,
   BrokerTrade,
   BrokerDeposit,
+  BrokerDividend,
+  BrokerCashMovement,
+  InvestmentDividends,
+  SaveDividendRequest,
+  InvestmentSettings,
   InstrumentSearchResult,
   AddTransactionRequest,
   UpdateTransactionRequest,
   AddDepositRequest,
 } from '@/types/investment'
+import type { BrokerFxSample } from '@/utils/brokerImport'
 
 /** Intervalo opcional para as séries (yyyy-MM-dd). Vazio = desde a 1ª compra / até hoje. */
 export interface HistoryRange {
@@ -52,8 +58,39 @@ export const investmentsApi = {
     }),
 
   // Importa transações já parseadas no cliente (Excel/CSV). dryRun=true → só pré-visualização.
-  import: (items: BrokerTrade[], hasUnparsedRows: boolean, dryRun: boolean, deposits: BrokerDeposit[] = []) =>
-    api.post<InvestmentImportResult>('/api/investments/import', { items, deposits, hasUnparsedRows }, { params: { dryRun } }),
+  import: (
+    items: BrokerTrade[],
+    hasUnparsedRows: boolean,
+    dryRun: boolean,
+    deposits: BrokerDeposit[] = [],
+    dividends: BrokerDividend[] = [],
+    fxSamples: BrokerFxSample[] = [],
+    cashMovements: BrokerCashMovement[] = [],
+  ) =>
+    api.post<InvestmentImportResult>(
+      '/api/investments/import',
+      // fxSamples só interessam ao dry-run (estimativa da taxa de conversão).
+      { items, deposits, dividends, cashMovements, hasUnparsedRows, fxSamples: dryRun ? fxSamples : [] },
+      { params: { dryRun } },
+    ),
+
+  // Definições do agregado (taxa de conversão da corretora).
+  settings: () => api.get<InvestmentSettings>('/api/investments/settings'),
+
+  saveSettings: (data: InvestmentSettings) =>
+    api.put<InvestmentSettings>('/api/investments/settings', data),
+
+  // Dividendos (lista + totais em EUR).
+  dividends: () => api.get<InvestmentDividends>('/api/investments/dividends'),
+
+  addDividend: (data: SaveDividendRequest) =>
+    api.post<InvestmentDividends>('/api/investments/dividends', data),
+
+  updateDividend: (id: string, data: SaveDividendRequest) =>
+    api.put<InvestmentDividends>(`/api/investments/dividends/${id}`, data),
+
+  deleteDividend: (id: string) =>
+    api.delete<InvestmentDividends>(`/api/investments/dividends/${id}`),
 
   // Total líquido depositado na corretora (EUR) — métrica "Depósitos".
   deposits: () => api.get<InvestmentDeposits>('/api/investments/deposits'),

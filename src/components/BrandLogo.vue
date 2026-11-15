@@ -18,22 +18,34 @@ const props = withDefaults(
 const slots = useSlots()
 const hasFallbackSlot = computed(() => !!slots.fallback)
 
-/* ── Cache de falhas (por domínio+fonte) em localStorage, para não repetir pedidos mortos ── */
-const FAIL_KEY = 'brandLogoFailed_v3'
+/*
+ * Cache de falhas (por domínio+fonte) em localStorage, para não repetir pedidos mortos.
+ * As falhas EXPIRAM (FAIL_TTL): um erro temporário (rede, limite de pedidos do Logo.dev) não pode
+ * esconder o logo para sempre. v4 = limpa as falhas "eternas" guardadas pelas versões antigas.
+ */
+const FAIL_KEY = 'brandLogoFailed_v4'
+const FAIL_TTL = 3 * 24 * 60 * 60 * 1000 // 3 dias
 const failed = loadFailed()
 
-function loadFailed(): Set<string> {
+function loadFailed(): Map<string, number> {
   try {
     const raw = localStorage.getItem(FAIL_KEY)
-    return new Set(raw ? (JSON.parse(raw) as string[]) : [])
+    const entries = raw ? (JSON.parse(raw) as [string, number][]) : []
+    const now = Date.now()
+    return new Map(entries.filter(([, ts]) => typeof ts === 'number' && now - ts < FAIL_TTL))
   } catch {
-    return new Set()
+    return new Map()
   }
 }
+function hasFailed(key: string): boolean {
+  const ts = failed.get(key)
+  return ts !== undefined && Date.now() - ts < FAIL_TTL
+}
 function rememberFail(key: string) {
-  failed.add(key)
+  failed.set(key, Date.now())
   try {
     localStorage.setItem(FAIL_KEY, JSON.stringify([...failed]))
+    localStorage.removeItem('brandLogoFailed_v3')
   } catch {
     /* quota/privado — ignora */
   }
@@ -60,7 +72,7 @@ const sourceIndex = ref(0)
 
 function firstViableIndex(domain: string): number {
   for (let i = 0; i < SOURCES.length; i++) {
-    if (!failed.has(`${domain}|${SOURCES[i]}`)) return i
+    if (!hasFailed(`${domain}|${SOURCES[i]}`)) return i
   }
   return SOURCES.length
 }

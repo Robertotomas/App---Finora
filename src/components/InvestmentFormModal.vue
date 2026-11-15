@@ -32,7 +32,6 @@ const props = defineProps<{
 const emit = defineEmits<{
   close: []
   submit: [payload: AddTransactionRequest]
-  import: []
 }>()
 
 const isEdit = computed(() => !!props.transaction)
@@ -144,14 +143,6 @@ function handleClose() {
         <label>Produto</label>
         <InstrumentAutocomplete :error="!!errors.instrument" @select="onSelect" />
         <span v-if="errors.instrument" class="error-text">{{ errors.instrument }}</span>
-
-        <div class="import-divider"><span>ou</span></div>
-        <UiButton variant="secondary" block @click="emit('import')">
-          <template #icon>
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
-          </template>
-          Importar de corretora (Excel/CSV)
-        </UiButton>
       </div>
 
       <!-- Instrumento escolhido -->
@@ -315,22 +306,6 @@ function handleClose() {
   white-space: nowrap;
 }
 
-.import-divider {
-  display: flex;
-  align-items: center;
-  margin: var(--space-3) 0 var(--space-1);
-  font-size: var(--text-xs);
-  color: var(--color-text-subtle);
-}
-.import-divider::before,
-.import-divider::after {
-  content: '';
-  flex: 1;
-  border-top: 1px solid var(--color-border-subtle);
-}
-.import-divider span {
-  padding: 0 10px;
-}
 
 .fx-wrap {
   max-width: 140px;

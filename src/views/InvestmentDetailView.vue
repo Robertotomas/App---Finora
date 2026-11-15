@@ -18,6 +18,7 @@ import ValueHeroCard from '@/components/charts/ValueHeroCard.vue'
 import HeroStat from '@/components/charts/HeroStat.vue'
 import type { AssetChartPoint } from '@/components/charts/AssetsChart.vue'
 import { investmentsApi } from '@/api/investments'
+import { holdingWeight } from '@/utils/portfolioAllocation'
 import {
   INSTRUMENT_TYPE_LABELS,
   InvestmentOperation,
@@ -99,10 +100,15 @@ const fixedInstrument = computed(() => {
 
 /* ── Métricas ── */
 const currentValue = computed(() => holding.value?.currentValueEur ?? holding.value?.investedEur ?? 0)
-const weight = computed(() => {
-  const total = investmentsStore.totalCurrentValueEur
-  return total !== 0 ? (currentValue.value / total) * 100 : null
+const weight = computed(() =>
+  holding.value && holding.value.quantity > 1e-9 ? holdingWeight(holding.value, investmentsStore.totalCurrentValueEur) : null,
+)
+const hasRealized = computed(() => (holding.value?.realizedCostEur ?? 0) > 0)
+const realizedPct = computed(() => {
+  const h = holding.value
+  return h && h.realizedCostEur > 0 ? (h.realizedGainEur / h.realizedCostEur) * 100 : null
 })
+const hasDividends = computed(() => (holding.value?.dividendsEur ?? 0) > 0)
 
 const rows = computed(() =>
   [...(holding.value?.transactions ?? [])].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
@@ -111,6 +117,15 @@ const rows = computed(() =>
 /* ── Formatação ── */
 function fmtEur(v: number): string {
   return new Intl.NumberFormat('pt-PT', { ...PT_GROUPING, style: 'currency', currency: 'EUR' }).format(v)
+}
+function fmtSignedEur(v: number): string {
+  return `${v >= 0 ? '+' : '−'}${fmtEur(Math.abs(v))}`
+}
+function fmtPct(v: number): string {
+  return `${v >= 0 ? '+' : ''}${v.toFixed(2).replace('.', ',')}%`
+}
+function signClass(v: number): string {
+  return v >= 0 ? 'ui-amount--pos' : 'ui-amount--neg'
 }
 function fmtPrice(v: number): string {
   return new Intl.NumberFormat('pt-PT', { ...PT_GROUPING, style: 'currency', currency: holding.value?.currency || 'EUR' }).format(v)
@@ -296,6 +311,28 @@ async function confirmDeletePosition() {
               <div class="dl-row">
                 <dt>Peso na carteira</dt>
                 <dd>{{ weight !== null ? weight.toFixed(2).replace('.', ',') + '%' : '—' }}</dd>
+              </div>
+              <div v-if="holding.returnEur !== null && holding.quantity > 1e-9" class="dl-row">
+                <dt>Não realizado</dt>
+                <dd><span class="ui-amount" :class="signClass(holding.returnEur)">{{ fmtSignedEur(holding.returnEur) }}</span></dd>
+              </div>
+              <div v-if="hasRealized" class="dl-row" title="Receita líquida das vendas menos o custo médio das unidades vendidas">
+                <dt>Ganho realizado</dt>
+                <dd>
+                  <span class="ui-amount" :class="signClass(holding.realizedGainEur)">{{ fmtSignedEur(holding.realizedGainEur) }}</span>
+                  <span v-if="realizedPct !== null" class="dd-sub">{{ fmtPct(realizedPct) }}</span>
+                </dd>
+              </div>
+              <div v-if="hasDividends" class="dl-row" title="Dividendos líquidos de retenção na fonte">
+                <dt>Dividendos recebidos</dt>
+                <dd><span class="ui-amount ui-amount--pos">{{ fmtEur(holding.dividendsEur) }}</span></dd>
+              </div>
+              <div v-if="(hasRealized || hasDividends) && holding.totalReturnEur !== null" class="dl-row" title="Não realizado + ganho realizado + dividendos">
+                <dt>Retorno total</dt>
+                <dd>
+                  <span class="ui-amount" :class="signClass(holding.totalReturnEur)">{{ fmtSignedEur(holding.totalReturnEur) }}</span>
+                  <span v-if="holding.totalReturnPct !== null" class="dd-sub">{{ fmtPct(holding.totalReturnPct) }}</span>
+                </dd>
               </div>
             </dl>
           </UiCard>
@@ -483,6 +520,13 @@ async function confirmDeletePosition() {
   color: var(--color-text-strong);
   font-variant-numeric: tabular-nums;
   text-align: right;
+}
+
+.dd-sub {
+  margin-left: var(--space-2);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  color: var(--color-text-muted);
 }
 
 /* ── Transações ── */

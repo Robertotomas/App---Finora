@@ -1,11 +1,16 @@
-import { InstrumentType, InvestmentOperation } from '@/types/investment'
+import { InvestmentOperation } from '@/types/investment'
 import type { BrokerTrade } from '@/types/investment'
+import { normalize, parseNumber, parseDate, guessType, applyExchangeSuffix } from './shared'
+import type { NormalizedImport, TableData } from './types'
+
+export { parseNumber, parseDate } from './shared'
 
 /**
  * Importador genérico de CSV/Excel de corretoras.
  * Lê uma tabela plana (qualquer corretora), auto-mapeia as colunas por sinónimos multilíngua
  * (cobre Trading 212, DEGIRO, IBKR, Trade Republic/pytr…) e deixa o utilizador corrigir o mapeamento.
- * O parser específico da XTB (multi-folha) vive em xtbExcel.ts.
+ * Os adaptadores dedicados (XTB, Trading 212, DEGIRO…) vivem nos outros ficheiros desta pasta;
+ * os de tabela plana reutilizam buildTrades + o mesmo profileKey para manter os externalIds.
  */
 
 export type FieldKey =
@@ -60,33 +65,6 @@ const SELL_RE = /(sell|sold|sale|venda|vender|verkauf|verkoop|verkopen|vente|ven
 // Termos de movimentos que NÃO são compras/vendas (ignorados).
 const NON_TRADE_RE = /(dividend|deposit|withdraw|interest|fee|tax|transfer|cash|topup|top up|funding|reward|conversion|juro|imposto|deposito|levantamento)/i
 
-const EXCHANGE_SUFFIX: { match: RegExp; suffix: string }[] = [
-  { match: /xetra|xetr|frankfurt|\bfra\b|gettex|tradegate|\bde\b|deutsche|german/i, suffix: '.DE' },
-  { match: /amsterdam|xams|\baex\b|euronext a/i, suffix: '.AS' },
-  { match: /paris|xpar|euronext p/i, suffix: '.PA' },
-  { match: /milan|xmil|borsa ital|\bmil\b/i, suffix: '.MI' },
-  { match: /london|xlon|\blse\b/i, suffix: '.L' },
-  { match: /madrid|xmad|\bbme\b|spain/i, suffix: '.MC' },
-  { match: /swiss|\bsix\b|xswx|zurich/i, suffix: '.SW' },
-  { match: /lisbon|lisboa|xlis|euronext l/i, suffix: '.LS' },
-  { match: /brussels|xbru/i, suffix: '.BR' },
-  // EUA → sem sufixo
-  { match: /nasdaq|nyse|arca|\bbats\b|\bus\b|united states|amex/i, suffix: '' },
-]
-
-// Marcas diacríticas combinantes (acentos) — escapes unicode para não corromper o ficheiro ao gravar.
-const COMBINING_MARKS = new RegExp('[\\u0300-\\u036f]', 'g')
-
-function normalize(s: string): string {
-  return s
-    .normalize('NFD')
-    .replace(COMBINING_MARKS, '')
-    .toLowerCase()
-    .replace(/[-_]+/g, ' ') // "Order-ID" → "order id"
-    .replace(/\s+/g, ' ')
-    .trim()
-}
-
 /** Auto-mapeia cabeçalhos → campos. Cada coluna é usada no máximo uma vez. */
 export function autoMap(headers: string[]): ColumnMapping {
   const norm = headers.map(normalize)
@@ -130,62 +108,6 @@ export function detectSideMode(rows: string[][], mapping: ColumnMapping): SideIn
     if (hasWords) return { mode: 'text' }
   }
   return { mode: 'sign' }
-}
-
-export function parseNumber(value: unknown): number | null {
-  if (typeof value === 'number') return value
-  let s = String(value ?? '').trim()
-  if (!s) return null
-  const neg = /^\(.*\)$/.test(s) || s.includes('-')
-  s = s.replace(/[^0-9.,]/g, '')
-  if (!s) return null
-  const lastComma = s.lastIndexOf(',')
-  const lastDot = s.lastIndexOf('.')
-  if (lastComma > -1 && lastDot > -1) {
-    if (lastComma > lastDot) s = s.replace(/\./g, '').replace(',', '.') // 1.234,56 (EU)
-    else s = s.replace(/,/g, '') // 1,234.56 (US)
-  } else if (lastComma > -1) {
-    // Só vírgulas (sem ponto): uma vírgula = decimal (EU, ex.: "10,799"); várias = milhares.
-    const commaCount = (s.match(/,/g) || []).length
-    s = commaCount === 1 ? s.replace(',', '.') : s.replace(/,/g, '')
-  }
-  const n = parseFloat(s)
-  if (isNaN(n)) return null
-  return neg ? -Math.abs(n) : n
-}
-
-function pad(n: number): string {
-  return String(n).padStart(2, '0')
-}
-
-export function parseDate(value: unknown): string {
-  if (value instanceof Date) return `${value.getUTCFullYear()}-${pad(value.getUTCMonth() + 1)}-${pad(value.getUTCDate())}`
-  const s = String(value ?? '').trim()
-  let m = s.match(/(\d{4})-(\d{2})-(\d{2})/)
-  if (m) return `${m[1]}-${m[2]}-${m[3]}`
-  m = s.match(/^(\d{4})(\d{2})(\d{2})/) // IBKR yyyymmdd
-  if (m) return `${m[1]}-${m[2]}-${m[3]}`
-  m = s.match(/(\d{1,2})[/.\-](\d{1,2})[/.\-](\d{4})/)
-  if (m) {
-    let d = Number(m[1])
-    let mo = Number(m[2])
-    if (mo > 12 && d <= 12) [d, mo] = [mo, d] // mm/dd → dd/mm
-    return `${m[3]}-${pad(mo)}-${pad(d)}`
-  }
-  return s.slice(0, 10)
-}
-
-function guessType(name: string, symbol: string): InstrumentType {
-  const s = `${name} ${symbol}`.toLowerCase()
-  return /\betf\b|ucits|index|ishares|vanguard|amundi|xtrackers|lyxor/.test(s) ? InstrumentType.Etf : InstrumentType.Stock
-}
-
-function applyExchangeSuffix(symbol: string, exchange: string): string {
-  if (!exchange || symbol.includes('.')) return symbol
-  for (const e of EXCHANGE_SUFFIX) {
-    if (e.match.test(exchange)) return symbol + e.suffix
-  }
-  return symbol
 }
 
 export interface BuildResult {
@@ -309,61 +231,32 @@ export function saveMapping(headers: string[], mapping: ColumnMapping) {
   }
 }
 
-/* ── Leitura de ficheiro (CSV/Excel) → tabela plana ── */
-export interface TableResult {
-  headers: string[]
-  rows: string[][]
-  sheetNames: string[]
-  error?: string
+/** Uma tabela tem o mínimo para extrair negócios com este mapeamento. */
+export function isMappingValid(m: ColumnMapping): boolean {
+  return m.date != null && m.quantity != null && (m.price != null || m.amount != null) && (m.ticker != null || m.isin != null)
 }
 
-function detectDelimiter(text: string): string {
-  const line = text.split(/\r?\n/).find((l) => l.trim()) || ''
-  const counts: Record<string, number> = { ';': 0, ',': 0, '\t': 0 }
-  for (const ch of line) if (ch in counts) counts[ch]++
-  return (Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0]) || ','
+/** Mapeamento a usar para uma tabela: o memorizado (corrigido pelo utilizador) ou o automático. */
+export function resolveMapping(headers: string[]): ColumnMapping {
+  return loadSavedMapping(headers) ?? autoMap(headers)
 }
 
-export async function readTable(file: File): Promise<TableResult> {
-  const XLSX = await import('xlsx')
-  const isCsv = /\.csv$/i.test(file.name)
-  let wb
-  try {
-    if (isCsv) {
-      // raw:true → mantém o texto original; senão o SheetJS reformata datas ("2023-12-18" → "12/18/23").
-      const text = await file.text()
-      wb = XLSX.read(text, { type: 'string', FS: detectDelimiter(text), raw: true })
-    } else {
-      wb = XLSX.read(await file.arrayBuffer(), { cellDates: true })
-    }
-  } catch {
-    return { headers: [], rows: [], sheetNames: [], error: 'Não foi possível ler o ficheiro.' }
+/**
+ * Importação genérica (só negócios). O externalId é `{profileKey}:{id}` ou a chave composta —
+ * NÃO alterar: é o que já está gravado para quem importou por este caminho.
+ */
+export function buildGenericImport(table: TableData, mapping: ColumnMapping, label = 'Outra corretora'): NormalizedImport {
+  const built = buildTrades(table.rows, mapping, profileKeyFor(table.headers))
+  const warnings: string[] = []
+  if (built.failed > 0) warnings.push(`${built.failed} ${built.failed === 1 ? 'linha não foi reconhecida' : 'linhas não foram reconhecidas'}.`)
+  return {
+    broker: 'generic',
+    brokerLabel: label,
+    trades: built.items,
+    deposits: [],
+    dividends: [],
+    fxSamples: [],
+    warnings,
+    hasUnparsedRows: built.failed > 0,
   }
-
-  // Converte cada célula para texto sem perder a data (Date → ISO).
-  const cellToStr = (c: unknown): string => {
-    if (c == null) return ''
-    if (c instanceof Date) return c.toISOString()
-    return String(c).trim()
-  }
-
-  const sheetNames = wb.SheetNames
-  // Escolhe a folha com mais linhas (mais provável de ser a de transações).
-  let best = sheetNames[0]
-  let bestRows = -1
-  for (const name of sheetNames) {
-    const aoa = XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets[name], { header: 1, raw: true, defval: '' })
-    if (aoa.length > bestRows) { bestRows = aoa.length; best = name }
-  }
-
-  const aoa = XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets[best], { header: 1, raw: true, defval: '' })
-  const headerIdx = aoa.findIndex((r) => r.filter((c) => cellToStr(c)).length >= 3)
-  if (headerIdx < 0) return { headers: [], rows: [], sheetNames, error: 'Não foram encontradas colunas reconhecíveis.' }
-
-  const headers = (aoa[headerIdx] as unknown[]).map((c) => cellToStr(c))
-  const rows = aoa
-    .slice(headerIdx + 1)
-    .map((r) => (r as unknown[]).map((c) => cellToStr(c)))
-    .filter((r) => r.some((c) => c))
-  return { headers, rows, sheetNames }
 }

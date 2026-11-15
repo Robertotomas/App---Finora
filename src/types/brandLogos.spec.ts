@@ -108,3 +108,15 @@ describe('flagEmoji', () => {
     expect(flagEmoji('GB')).toBe('🇬🇧')
   })
 })
+
+describe('marcas "strict" e falsos positivos', () => {
+  it('a loja Normal só é reconhecida pelo nome exato', () => {
+    expect(findBrand('Normal')?.name).toBe('Normal')
+    expect(findBrand('Gasolina normal')).toBeNull()
+  })
+  it('palavras geográficas comuns não dão o logo de universidades', () => {
+    expect(findBrand('Restaurante Minho')).toBeNull()
+    expect(findBrand('Conta nova')).toBeNull()
+    expect(findBrand('Propinas UMinho')?.name).toBe('Universidade do Minho')
+  })
+})

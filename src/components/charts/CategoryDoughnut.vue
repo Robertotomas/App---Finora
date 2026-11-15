@@ -23,6 +23,8 @@ const props = defineProps<{
   items: DoughnutItem[]
   /** 'category' = cor da categoria (igual aos ícones das listas); 'series' = paleta categórica. */
   colorMode: 'category' | 'series'
+  /** Mostra a legenda inteira (sem scroll); com muitas linhas usa 2 colunas. */
+  fullLegend?: boolean
 }>()
 
 const { isDark } = useChartTheme()
@@ -33,11 +35,21 @@ const chartKey = computed(() => `${isDark.value}-${props.items.length}-${props.c
 
 const total = computed(() => props.items.reduce((s, d) => s + d.amount, 0))
 
+/**
+ * Cor da fatia i no modo 'series': a paleta da app para as primeiras; a partir daí cores geradas
+ * (ângulo de ouro no círculo de matiz) para nunca repetir — carteiras com muitas posições.
+ */
+function seriesColorAt(i: number, palette: string[]): string {
+  if (i < palette.length) return palette[i]
+  const hue = Math.round(((i - palette.length) * 137.508 + 20) % 360)
+  return isDark.value ? `hsl(${hue}, 65%, 62%)` : `hsl(${hue}, 55%, 46%)`
+}
+
 // Cores: por categoria; se duas fatias partilham a cor (mesmo grupo), a repetida usa a próxima da paleta.
 const colors = computed<string[]>(() => {
   void isDark.value
   const palette = seriesColors()
-  if (props.colorMode === 'series') return props.items.map((_, i) => palette[i % palette.length])
+  if (props.colorMode === 'series') return props.items.map((_, i) => seriesColorAt(i, palette))
   const used = new Set<string>()
   let p = 0
   return props.items.map((d) => {
@@ -119,7 +131,7 @@ function highlight(i: number | null) {
         <span class="donut-center-value">{{ formatCurrency(total) }}</span>
       </div>
     </div>
-    <ul class="donut-legend">
+    <ul class="donut-legend" :class="{ 'donut-legend--full': fullLegend, 'donut-legend--cols': fullLegend && items.length > 8 }">
       <li
         v-for="(d, i) in items"
         :key="`${d.category}-${i}`"
@@ -244,6 +256,28 @@ function highlight(i: number | null) {
   font-size: var(--text-xs);
   font-variant-numeric: tabular-nums;
   text-align: right;
+}
+
+/* Legenda completa (sem scroll); com muitas linhas, em 2 colunas */
+.donut-legend--full {
+  max-height: none;
+  overflow: visible;
+}
+/* Colunas CSS (não grelha): enchem de cima para baixo, coluna a coluna — a ordem (por valor) lê-se
+   descendo a 1.ª coluna e depois a 2.ª, em vez de alternar esquerda/direita. */
+.donut-legend--cols {
+  display: block;
+  columns: 2;
+  column-gap: var(--space-5);
+}
+.donut-legend--cols .donut-legend-row {
+  break-inside: avoid;
+  margin-bottom: 2px;
+}
+@container (max-width: 640px) {
+  .donut-legend--cols {
+    columns: 1;
+  }
 }
 
 @container (max-width: 420px) {

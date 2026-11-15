@@ -179,7 +179,7 @@ function handleClose() {
 
         <template v-if="popularBanks.length">
           <p class="inst-section">Mais populares</p>
-          <button v-for="b in popularBanks" :key="b.domain" type="button" class="inst-row" @click="pickInstitution(b)">
+          <button v-for="b in popularBanks" :key="b.name" type="button" class="inst-row" @click="pickInstitution(b)">
             <BrandLogo :name="b.name" :size="32">
               <template #fallback>
                 <span class="bank-default-icon">
@@ -194,7 +194,7 @@ function handleClose() {
 
         <template v-if="otherBanks.length">
           <p class="inst-section">Outras instituições</p>
-          <button v-for="b in otherBanks" :key="b.domain" type="button" class="inst-row" @click="pickInstitution(b)">
+          <button v-for="b in otherBanks" :key="b.name" type="button" class="inst-row" @click="pickInstitution(b)">
             <BrandLogo :name="b.name" :size="32">
               <template #fallback>
                 <span class="bank-default-icon">

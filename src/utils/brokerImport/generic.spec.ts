@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { autoMap, buildTrades, parseNumber, parseDate } from './brokerImport'
+import { autoMap, buildTrades, parseNumber, parseDate } from './generic'
 import { InvestmentOperation } from '@/types/investment'
 
 function run(headers: string[], rows: string[][]) {
