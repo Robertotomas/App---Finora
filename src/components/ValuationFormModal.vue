@@ -67,7 +67,7 @@ function handleClose() {
     <form id="valuation-form" class="modal-form" @submit.prevent="handleSubmit">
       <div class="form-group">
         <label>Data</label>
-        <DatePicker
+        <DatePicker max="today"
           :model-value="date"
           :error="!!errors.date"
           placeholder="Selecione uma data"

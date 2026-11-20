@@ -180,7 +180,8 @@ const totalNote = computed(() => {
             <span class="vh-title-text">{{ title }}</span>
             <slot name="title-extra" />
           </div>
-          <div v-else ref="root" class="vh-mode">
+          <div v-else class="vh-mode-row">
+          <div ref="root" class="vh-mode">
             <button
               type="button"
               class="vh-mode-btn"
@@ -209,6 +210,8 @@ const totalNote = computed(() => {
                 </button>
               </div>
             </Transition>
+          </div>
+          <slot name="title-extra" />
           </div>
 
           <div class="vh-value">{{ bigValue }}</div>
@@ -292,6 +295,11 @@ const totalNote = computed(() => {
 }
 
 /* ── Seletor de modo ── */
+.vh-mode-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
 .vh-mode {
   position: relative;
   margin-left: calc(-1 * var(--space-2));

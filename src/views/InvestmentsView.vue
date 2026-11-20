@@ -20,6 +20,7 @@ import PlanUpsellCard from '@/components/PlanUpsellCard.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 import UiCard from '@/components/ui/UiCard.vue'
+import InfoTip from '@/components/ui/InfoTip.vue'
 import SegmentedControl from '@/components/ui/SegmentedControl.vue'
 import FilterChips from '@/components/ui/FilterChips.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
@@ -747,7 +748,14 @@ async function handleDepositSubmit(payload: AddDepositRequest) {
                 :value="fxFeeLabel"
                 :hint="`Valores em moeda estrangeira líquidos de ${fxFeeLabel} de conversão da corretora (o que receberia em euros ao vender).`"
               />
-              <HeroStat v-if="lastUpdate" label="Cotações de" :value="formatDate(lastUpdate)" />
+            </template>
+
+            <!-- (i) ao lado de "Valor de mercado": quando são atualizadas as cotações -->
+            <template #title-extra>
+              <InfoTip label="Quando são atualizados os valores?">
+                Os valores são atualizados uma vez por dia, após o fecho dos mercados.
+                <span v-if="lastUpdate" class="quote-date">Última atualização: {{ formatDate(lastUpdate) }}</span>
+              </InfoTip>
             </template>
           </ValueHeroCard>
 
@@ -941,9 +949,10 @@ async function handleDepositSubmit(payload: AddDepositRequest) {
                       v-for="col in positionColumns"
                       :key="col.label"
                       :class="col.cls"
-                      :title="col.title"
+                      :title="col.key === 'day' ? undefined : col.title"
                       :aria-sort="col.key ? ariaSort(col.key) : undefined"
                     >
+                      <span class="th-inner">
                       <button
                         v-if="col.key"
                         type="button"
@@ -968,6 +977,12 @@ async function handleDepositSubmit(payload: AddDepositRequest) {
                         ><polyline points="6 9 12 15 18 9"/></svg>
                       </button>
                       <template v-else>{{ col.label }}</template>
+                      <!-- (i) na coluna da variação do dia: quando são atualizados os valores -->
+                      <InfoTip v-if="col.key === 'day'" placement="bottom-end" label="Quando são atualizados os valores?">
+                        Os valores são atualizados uma vez por dia, após o fecho dos mercados.
+                        <span v-if="lastUpdate" class="quote-date">Última atualização: {{ formatDate(lastUpdate) }}</span>
+                      </InfoTip>
+                      </span>
                     </th>
                     <th class="col-chev"><span class="sr-only">Abrir</span></th>
                   </tr>
@@ -1197,6 +1212,25 @@ async function handleDepositSubmit(payload: AddDepositRequest) {
 /* ── Hero ── */
 .hero-card {
   margin-bottom: var(--space-6);
+}
+
+/* Cabeçalho da tabela: botão de ordenação + (i) lado a lado (alinhados à direita nas colunas numéricas) */
+.th-inner {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+th.num .th-inner {
+  justify-content: flex-end;
+}
+
+/* Data da última atualização das cotações, dentro do (i): letra monoespaçada, discreta */
+.quote-date {
+  display: block;
+  margin-top: var(--space-1);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  color: var(--color-text-muted);
 }
 
 /* ── Distribuição ── */

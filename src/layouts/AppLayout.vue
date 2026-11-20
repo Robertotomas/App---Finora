@@ -361,7 +361,7 @@ function isActive(path: string) {
       >
         <!-- Cabeçalho da gaveta (só mobile) -->
         <div class="drawer-head">
-          <AppLogo :size="28" class="header-brand-img" />
+          <AppLogo :size="28" :inverse="!themeStore.isDark" class="header-brand-img" />
           <button type="button" class="shell-icon-btn" aria-label="Fechar menu" @click="closeDrawer">
             <ShellIcon name="x" :size="20" />
           </button>

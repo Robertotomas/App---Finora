@@ -73,6 +73,8 @@
 
   /* ── Tipografia ────────────────────────────────────────── */
   --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  /* Notas de dados/fonte (ex.: atualização das cotações) — letra monoespaçada do sistema */
+  --font-mono: ui-monospace, 'SF Mono', 'Cascadia Mono', Consolas, 'Liberation Mono', monospace;
   --text-2xs: 0.6875rem; /* 11px — rótulos em maiúsculas, badges */
   --text-xs: 0.75rem;    /* 12px — legendas */
   --text-sm: 0.8125rem;  /* 13px — texto secundário, tabelas */

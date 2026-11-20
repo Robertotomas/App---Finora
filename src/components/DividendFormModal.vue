@@ -133,7 +133,7 @@ function handleClose() {
       <div class="form-row">
         <div class="form-group">
           <label>Data</label>
-          <DatePicker
+          <DatePicker max="today"
             :model-value="date"
             :error="!!errors.date"
             placeholder="Selecione uma data"
