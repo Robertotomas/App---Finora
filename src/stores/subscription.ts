@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { subscriptionApi } from '@/api/subscription'
 import type {
   BillingInterval,
@@ -10,12 +10,54 @@ import type {
   SubscriptionPlan,
 } from '@/types/subscription'
 import { useNotificationStore } from '@/stores/notifications'
+import { useAuthStore } from '@/stores/auth'
+
+/*
+ * Último plano conhecido, por utilizador, em localStorage. Ao entrar na app a resposta da API demora
+ * ~1 s; sem isto o plano caía no "Free" por omissão e o selo/avisos de upgrade piscavam.
+ */
+const PLAN_CACHE_PREFIX = 'finora_plan:'
+const KNOWN_PLANS: SubscriptionPlan[] = ['Free', 'Pro', 'Couple']
+
+function readCachedPlan(userId: string | undefined): SubscriptionPlan | null {
+  if (!userId) return null
+  try {
+    const v = localStorage.getItem(PLAN_CACHE_PREFIX + userId) as SubscriptionPlan | null
+    return v && KNOWN_PLANS.includes(v) ? v : null
+  } catch {
+    return null
+  }
+}
+function writeCachedPlan(userId: string | undefined, plan: SubscriptionPlan) {
+  if (!userId) return
+  try {
+    localStorage.setItem(PLAN_CACHE_PREFIX + userId, plan)
+  } catch {
+    /* privado/quota — ignora */
+  }
+}
 
 export const useSubscriptionStore = defineStore('subscription', () => {
   const subscription = ref<SubscriptionMe | null>(null)
   const plans = ref<PlansResponse | null>(null)
   const loading = ref(false)
   const error = ref<string | null>(null)
+
+  const authStore = useAuthStore()
+  const userId = computed(() => authStore.user?.id)
+  const cachedPlan = ref<SubscriptionPlan | null>(readCachedPlan(userId.value))
+  // Outro utilizador (logout → login noutra conta): esquece a subscrição em memória e usa a cache dele.
+  watch(userId, (id, old) => {
+    if (id === old) return
+    subscription.value = null
+    cachedPlan.value = readCachedPlan(id)
+  })
+  // Sempre que a subscrição real chega/muda, memoriza o plano.
+  watch(subscription, (s) => {
+    if (!s?.plan) return
+    cachedPlan.value = s.plan as SubscriptionPlan
+    writeCachedPlan(userId.value, s.plan as SubscriptionPlan)
+  })
 
   // Deduplica pedidos concorrentes (várias views montam e pedem a subscrição ao mesmo tempo).
   // Não altera quando é refrescada: cada chamada nova (após a anterior terminar) volta a ir à API.
@@ -108,21 +150,31 @@ export const useSubscriptionStore = defineStore('subscription', () => {
     }
   }
 
-  const limits = computed<SubscriptionLimits>(() => subscription.value?.limits ?? {
-    accountsRemaining: null,
-    incomeRemainingThisMonth: null,
-    expensesRemainingThisMonth: null,
-    objectivesEnabled: false,
-    monthlyReportsEnabled: false,
-    recurringEnabled: false,
-    assetsEnabled: false,
-    investmentsEnabled: false,
-    canInvite: false,
-    needsPrimaryAccountSelection: false,
-    primaryAccountId: null,
+  // Antes de a API responder, as permissões seguem o plano memorizado (Pro/Couple → funcionalidades
+  // pagas visíveis), para não piscar o "Ver planos". O servidor continua a ser quem autoriza.
+  const limits = computed<SubscriptionLimits>(() => {
+    if (subscription.value?.limits) return subscription.value.limits
+    const paid = cachedPlan.value === 'Pro' || cachedPlan.value === 'Couple'
+    return {
+      accountsRemaining: null,
+      incomeRemainingThisMonth: null,
+      expensesRemainingThisMonth: null,
+      objectivesEnabled: paid,
+      monthlyReportsEnabled: paid,
+      recurringEnabled: paid,
+      assetsEnabled: paid,
+      investmentsEnabled: paid,
+      canInvite: cachedPlan.value === 'Couple',
+      needsPrimaryAccountSelection: false,
+      primaryAccountId: null,
+    }
   })
 
-  const plan = computed<SubscriptionPlan>(() => (subscription.value?.plan ?? 'Free') as SubscriptionPlan)
+  const plan = computed<SubscriptionPlan>(
+    () => (subscription.value?.plan ?? cachedPlan.value ?? 'Free') as SubscriptionPlan,
+  )
+  /** true quando já se sabe o plano (resposta da API ou plano memorizado deste utilizador). */
+  const planKnown = computed(() => !!subscription.value?.plan || !!cachedPlan.value)
 
   const isFree = computed(() => plan.value === 'Free')
 
@@ -162,6 +214,7 @@ export const useSubscriptionStore = defineStore('subscription', () => {
     loading,
     error,
     plan,
+    planKnown,
     limits,
     isFree,
     canAddAccount,

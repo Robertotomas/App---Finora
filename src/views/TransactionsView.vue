@@ -38,7 +38,7 @@ import { useToast } from '@/composables/useToast'
 import { useThemeStore } from '@/stores/theme'
 import type { Transaction, CreateTransactionRequest } from '@/types/transaction'
 import type { RecurringTransaction, CreateRecurringTransactionRequest } from '@/types/recurringTransaction'
-import { recurringAmountForMonth, recurringFrequencyDescription } from '@/types/recurringTransaction'
+import { recurringAmountForMonth, recurringDayInMonth, recurringFrequencyDescription } from '@/types/recurringTransaction'
 import {
   TRANSACTION_TYPE_LABELS,
   TRANSACTION_CATEGORY_LABELS,
@@ -639,7 +639,7 @@ async function fetchSummaryTransactions() {
               category: r.category,
               amount: amt,
               description: r.description ?? '',
-              date: `${y}-${String(m).padStart(2, '0')}-01`,
+              date: `${y}-${String(m).padStart(2, '0')}-${String(recurringDayInMonth(r, y, m)).padStart(2, '0')}`,
               splits: r.responsibleUserId ? [{ userId: r.responsibleUserId, percentage: 100 }] : []
             })
           }

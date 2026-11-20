@@ -61,6 +61,10 @@ const showResponsible = computed(
 
 const errors = ref<Record<string, string>>({})
 
+/** Dia do mês em que acontece (1-31); nos meses com menos dias, o último dia. */
+const dayOfMonth = ref(1)
+const dayOptions = Array.from({ length: 31 }, (_, i) => ({ value: i + 1, label: `Dia ${i + 1}` }))
+
 const isEdit = computed(() => !!props.recurring)
 const isPeriodic = computed(() => frequency.value !== RecurringFrequency.Monthly)
 
@@ -106,6 +110,7 @@ watch(
         spread.value = props.recurring.annualMonth == null
         referenceMonth.value =
           props.recurring.annualMonth ?? props.recurring.startMonth ?? new Date().getMonth() + 1
+        dayOfMonth.value = props.recurring.dayOfMonth ?? 1
         responsibleUserId.value = props.recurring.responsibleUserId ?? props.currentUserId ?? ''
       } else {
         accountId.value = props.accounts[0]?.id ?? ''
@@ -119,6 +124,7 @@ watch(
         frequency.value = RecurringFrequency.Monthly
         spread.value = true
         referenceMonth.value = new Date().getMonth() + 1
+        dayOfMonth.value = new Date().getDate()
         responsibleUserId.value = props.currentUserId ?? ''
       }
     }
@@ -160,6 +166,7 @@ function handleSubmit() {
     destinationAccountId: transfer ? destinationAccountId.value : undefined,
     frequency: frequency.value,
     annualMonth: isPeriodic.value && !spread.value ? referenceMonth.value : undefined,
+    dayOfMonth: dayOfMonth.value,
     responsibleUserId: showResponsible.value ? responsibleUserId.value : undefined
   })
 }
@@ -253,6 +260,19 @@ const modalTitle = computed(() => {
             Anual
           </button>
         </div>
+      </div>
+
+      <!-- Dia do mês -->
+      <div class="form-group">
+        <label>Dia do mês</label>
+        <BaseSelect
+          :model-value="dayOfMonth"
+          :options="dayOptions"
+          @update:model-value="(v) => (dayOfMonth = Number(v))"
+        />
+        <span v-if="dayOfMonth > 28" class="field-hint">
+          Nos meses com menos dias, acontece no último dia do mês.
+        </span>
       </div>
 
       <!-- Opções de periodicidade (trimestral/semestral/anual) -->

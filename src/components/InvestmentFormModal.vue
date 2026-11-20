@@ -191,7 +191,7 @@ function handleClose() {
 
         <div class="form-group">
           <label>Data</label>
-          <DatePicker editable :model-value="date" placeholder="dd/mm/aaaa" @update:model-value="(v) => (date = v)" />
+          <DatePicker max="today" editable :model-value="date" placeholder="dd/mm/aaaa" @update:model-value="(v) => (date = v)" />
         </div>
 
         <div class="form-row form-row--3">

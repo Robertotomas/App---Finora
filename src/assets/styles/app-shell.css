@@ -173,16 +173,57 @@ body {
 }
 
 
-/* Sidebar (modo claro): branca com um brilho verde-acinzentado suave no topo que desvanece para
-   branco + verde da marca nos pormenores (barra indicadora do item ativo, badge do plano). Escolha do utilizador. */
+/* Sidebar (modo claro): verde sólido da marca (--brand-600, o mesmo dos botões) com texto e ícones
+   brancos; item ativo em branco translúcido. Escolha do utilizador (nov/2026). O modo escuro mantém-se. */
 html:not(.dark) .sidebar {
-  background: linear-gradient(180deg, #dcebe3 0%, #eef5f1 160px, #ffffff 420px);
+  background: var(--brand-600);
+  border-right-color: var(--brand-600);
+  color: rgba(255, 255, 255, 0.86);
+}
+html:not(.dark) .sidebar-link {
+  color: rgba(255, 255, 255, 0.86);
+}
+html:not(.dark) .sidebar-icon,
+html:not(.dark) .sidebar-collapse-btn {
+  color: rgba(255, 255, 255, 0.72);
+}
+html:not(.dark) .sidebar-link:hover,
+html:not(.dark) .sidebar-collapse-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+}
+html:not(.dark) .sidebar-link:hover .sidebar-icon {
+  color: #ffffff;
+}
+html:not(.dark) .sidebar-link.active {
+  background: rgba(255, 255, 255, 0.16);
+  color: #ffffff;
 }
 html:not(.dark) .sidebar-link.active .sidebar-icon {
-  color: inherit; /* ícone igual ao texto (escuro); o verde fica só na barra indicadora */
+  color: #ffffff;
+}
+html:not(.dark) .sidebar-link::before {
+  background: #ffffff;
+}
+html:not(.dark) .sidebar-section-title,
+html:not(.dark) .sidebar-household-name {
+  color: rgba(255, 255, 255, 0.6);
 }
 html:not(.dark) .sidebar-plan-badge {
-  border-color: var(--brand-600);
+  border-color: rgba(255, 255, 255, 0.55);
   background: transparent;
-  color: var(--brand-600);
+  color: #ffffff;
+}
+html:not(.dark) .sidebar-plan-badge:hover {
+  border-color: #ffffff;
+}
+html:not(.dark) .sidebar-plan-badge--loading {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: transparent;
+}
+html:not(.dark) .sidebar-foot {
+  border-top-color: rgba(255, 255, 255, 0.14);
+}
+html:not(.dark) .sidebar .drawer-head .shell-icon-btn {
+  color: #ffffff;
 }

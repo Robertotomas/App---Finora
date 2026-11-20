@@ -9,11 +9,17 @@ const props = defineProps<{
   disabled?: boolean
   /** Permite escrever a data à mão (dd/mm/aaaa); o calendário só abre pelo ícone. */
   editable?: boolean
+  /**
+   * Data máxima permitida (yyyy-MM-dd) ou 'today' (hoje, local). Para datas de coisas que já
+   * aconteceram (avaliações, compras, depósitos…): sem anos/meses/dias futuros no calendário e
+   * datas escritas depois do máximo são recusadas.
+   */
+  max?: string
 }>()
 
 const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
 
-const MONTHS_ABBR = ['jan.', 'fev.', 'mar.', 'abr.', 'mai.', 'jun.', 'jul.', 'ago.', 'set.', 'out.', 'nov.', 'dez.']
+const MONTHS = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
 const WEEKDAYS = ['seg', 'ter', 'qua', 'qui', 'sex', 'sáb', 'dom']
 
 const open = ref(false)
@@ -24,16 +30,44 @@ const today = new Date()
 const viewYear = ref(today.getFullYear())
 const viewMonth = ref(today.getMonth())
 
-const monthOptions = MONTHS_ABBR.map((m, i) => ({ value: i, label: m }))
-const yearOptions = (() => {
-  const cy = today.getFullYear()
-  const arr: { value: number; label: string }[] = []
-  for (let y = cy + 5; y >= 1950; y--) arr.push({ value: y, label: String(y) })
-  return arr
-})()
-
 function pad(n: number): string {
   return String(n).padStart(2, '0')
+}
+
+/** Data máxima já resolvida (yyyy-MM-dd) ou null. */
+const maxIso = computed<string | null>(() => {
+  if (!props.max) return null
+  if (props.max === 'today') return localStr(today)
+  return /^\d{4}-\d{2}-\d{2}$/.test(props.max) ? props.max : null
+})
+const maxYear = computed(() => (maxIso.value ? Number(maxIso.value.slice(0, 4)) : null))
+const maxMonth = computed(() => (maxIso.value ? Number(maxIso.value.slice(5, 7)) - 1 : null)) // 0-11
+
+const monthOptions = computed(() =>
+  MONTHS.map((m, i) => ({ value: i, label: m })).filter(
+    (o) => maxYear.value === null || viewYear.value < maxYear.value || o.value <= (maxMonth.value ?? 11),
+  ),
+)
+const yearOptions = computed(() => {
+  const top = maxYear.value ?? today.getFullYear() + 5
+  const arr: { value: number; label: string }[] = []
+  for (let y = top; y >= 1950; y--) arr.push({ value: y, label: String(y) })
+  return arr
+})
+
+/** O dia (do mês em vista) passa o máximo? */
+function isAfterMax(d: number): boolean {
+  return !!maxIso.value && toStr(viewYear.value, viewMonth.value, d) > maxIso.value
+}
+/** Já estamos no mês do máximo (a seta "seguinte" fica desativada)? */
+const atMaxMonth = computed(
+  () => maxYear.value !== null && (viewYear.value > maxYear.value || (viewYear.value === maxYear.value && viewMonth.value >= (maxMonth.value ?? 11))),
+)
+/** Ao mudar para o ano do máximo, o mês em vista não pode ficar depois dele. */
+function clampView() {
+  if (maxYear.value === null || maxMonth.value === null) return
+  if (viewYear.value > maxYear.value) viewYear.value = maxYear.value
+  if (viewYear.value === maxYear.value && viewMonth.value > maxMonth.value) viewMonth.value = maxMonth.value
 }
 function toStr(y: number, m: number, d: number): string {
   return `${y}-${pad(m + 1)}-${pad(d)}`
@@ -67,7 +101,9 @@ function parseTyped(text: string): string | null {
   let y = Number(m[3])
   if (y < 100) y += 2000
   if (!isValidDate(y, mo, d)) return null
-  return `${y}-${pad(mo)}-${pad(d)}`
+  const iso = `${y}-${pad(mo)}-${pad(d)}`
+  if (maxIso.value && iso > maxIso.value) return null // data futura → recusada
+  return iso
 }
 
 /** Formata os dígitos como dd/mm/aaaa, inserindo as barras automaticamente. */
@@ -128,6 +164,7 @@ function isToday(d: number): boolean {
 }
 
 function pick(d: number) {
+  if (isAfterMax(d)) return
   emit('update:modelValue', toStr(viewYear.value, viewMonth.value, d))
   close()
 }
@@ -137,6 +174,7 @@ function prevMonth() {
   else viewMonth.value--
 }
 function nextMonth() {
+  if (atMaxMonth.value) return
   if (viewMonth.value === 11) { viewMonth.value = 0; viewYear.value++ }
   else viewMonth.value++
 }
@@ -145,7 +183,7 @@ function updatePosition() {
   const trigger = (root.value?.querySelector('.dp-trigger') ?? root.value?.querySelector('.dp-input-wrap')) as HTMLElement | undefined
   if (!trigger) return
   const r = trigger.getBoundingClientRect()
-  const width = 330
+  const width = 360 // cabe o mês por extenso ("Fevereiro ✓") e o ano
   const desired = 340
   const spaceBelow = window.innerHeight - r.bottom
   const spaceAbove = r.top
@@ -167,6 +205,7 @@ async function openMenu() {
     viewYear.value = base.getFullYear()
     viewMonth.value = base.getMonth()
   }
+  clampView()
   open.value = true
   await nextTick()
   updatePosition()
@@ -245,11 +284,11 @@ onUnmounted(() => {
               <BaseSelect
                 :model-value="viewYear"
                 :options="yearOptions"
-                @update:model-value="(v) => (viewYear = Number(v))"
+                @update:model-value="(v) => { viewYear = Number(v); clampView() }"
               />
             </div>
           </div>
-          <button type="button" class="dp-nav" @click="nextMonth">
+          <button type="button" class="dp-nav" :disabled="atMaxMonth" @click="nextMonth">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
           </button>
         </div>
@@ -263,8 +302,8 @@ onUnmounted(() => {
             :key="i"
             type="button"
             class="dp-day"
-            :class="{ empty: d === null, selected: d !== null && isSelected(d), today: d !== null && isToday(d) }"
-            :disabled="d === null"
+            :class="{ empty: d === null, selected: d !== null && isSelected(d), today: d !== null && isToday(d), future: d !== null && isAfterMax(d) }"
+            :disabled="d === null || isAfterMax(d)"
             @click="d !== null && pick(d)"
           >
             {{ d ?? '' }}
@@ -406,7 +445,7 @@ onUnmounted(() => {
   flex: 1;
 }
 .dp-select--year {
-  width: 96px;
+  width: 110px; /* o ano + o visto ✓ da opção selecionada cabem sem reticências */
   flex-shrink: 0;
 }
 /* Dropdowns de mês/ano mais compactos para o ano caber sem reticências. */
@@ -431,9 +470,13 @@ onUnmounted(() => {
   border-radius: var(--radius-sm);
   transition: background var(--transition-fast), color var(--transition-fast);
 }
-.dp-nav:hover {
+.dp-nav:hover:not(:disabled) {
   background: var(--color-surface-muted);
   color: var(--color-text-strong);
+}
+.dp-nav:disabled {
+  opacity: 0.35;
+  cursor: default;
 }
 
 .dp-weekdays {
@@ -475,7 +518,12 @@ onUnmounted(() => {
 .dp-day.empty {
   cursor: default;
 }
-.dp-day:not(.empty):not(.selected):hover {
+.dp-day.future {
+  color: var(--color-text-subtle);
+  opacity: 0.45;
+  cursor: default;
+}
+.dp-day:not(.empty):not(.selected):not(.future):hover {
   background: var(--color-surface-muted);
 }
 .dp-day.today:not(.selected) {

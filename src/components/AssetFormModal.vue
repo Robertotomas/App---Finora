@@ -124,7 +124,7 @@ function handleClose() {
         </div>
         <div class="form-group">
           <label>Data de aquisição</label>
-          <DatePicker
+          <DatePicker max="today"
             :model-value="acquisitionDate"
             :error="!!errors.acquisitionDate"
             placeholder="Selecione uma data"

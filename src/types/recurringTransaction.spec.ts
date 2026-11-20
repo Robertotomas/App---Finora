@@ -4,7 +4,8 @@ import {
   recurringOccurrencesPerYear,
   recurringPaymentMonths,
   recurringAmountForMonth,
-  recurringFrequencyDescription
+  recurringFrequencyDescription,
+  recurringDayInMonth
 } from './recurringTransaction'
 
 // Espelho dos testes de RecurringTransaction.AmountForMonth no backend
@@ -100,5 +101,34 @@ describe('recurringFrequencyDescription', () => {
     expect(
       recurringFrequencyDescription({ frequency: RecurringFrequency.Quarterly, annualMonth: 3 })
     ).toBe('Trimestral · Mar')
+  })
+})
+
+// Espelho de RecurringDayOfMonthTests (backend): mesma regra do último dia do mês.
+describe('recurringDayInMonth', () => {
+  it.each([
+    [31, 2026, 1, 31],
+    [31, 2026, 4, 30],
+    [31, 2026, 2, 28],
+    [31, 2028, 2, 29],
+    [30, 2026, 2, 28],
+    [29, 2026, 2, 28],
+    [29, 2028, 2, 29],
+    [30, 2026, 11, 30],
+    [15, 2026, 2, 15],
+    [1, 2026, 6, 1],
+  ])('dia %i em %i-%i → %i', (day, year, month, expected) => {
+    expect(recurringDayInMonth({ dayOfMonth: day }, year, month)).toBe(expected)
+  })
+
+  it('sem dia ou inválido → dia 1', () => {
+    expect(recurringDayInMonth({ dayOfMonth: null }, 2026, 5)).toBe(1)
+    expect(recurringDayInMonth({}, 2026, 5)).toBe(1)
+    expect(recurringDayInMonth({ dayOfMonth: 40 }, 2026, 5)).toBe(1)
+  })
+
+  it('a descrição mostra o dia quando definido', () => {
+    expect(recurringFrequencyDescription({ frequency: RecurringFrequency.Monthly, dayOfMonth: 25 })).toBe('Mensal · dia 25')
+    expect(recurringFrequencyDescription({ frequency: RecurringFrequency.Monthly })).toBe('Mensal')
   })
 })

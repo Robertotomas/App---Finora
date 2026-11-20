@@ -361,16 +361,23 @@ function isActive(path: string) {
       >
         <!-- Cabeçalho da gaveta (só mobile) -->
         <div class="drawer-head">
-          <AppLogo :size="28" class="header-brand-img" />
+          <AppLogo :size="28" :inverse="!themeStore.isDark" class="header-brand-img" />
           <button type="button" class="shell-icon-btn" aria-label="Fechar menu" @click="closeDrawer">
             <ShellIcon name="x" :size="20" />
           </button>
         </div>
 
         <div v-if="authStore.isAuthenticated" class="sidebar-plan">
-          <RouterLink :to="{ name: 'subscricao' }" class="sidebar-plan-badge" aria-label="Ver planos e subscrição">
+          <RouterLink
+            v-if="subscriptionStore.planKnown"
+            :to="{ name: 'subscricao' }"
+            class="sidebar-plan-badge"
+            aria-label="Ver planos e subscrição"
+          >
             {{ planLabel }}
           </RouterLink>
+          <!-- Plano ainda por saber (1.º login neste browser): marcador neutro em vez de "Free" -->
+          <span v-else class="sidebar-plan-badge sidebar-plan-badge--loading" aria-hidden="true"></span>
           <span
             v-if="!collapsed && subscriptionStore.plan === 'Couple' && householdStore.household?.name"
             class="sidebar-household-name"
@@ -635,6 +642,12 @@ function isActive(path: string) {
   gap: var(--space-2);
   min-height: 52px;
   padding: var(--space-4) var(--space-4) var(--space-2);
+}
+
+.sidebar-plan-badge--loading {
+  width: 52px;
+  border-color: transparent;
+  background: var(--color-surface-muted);
 }
 
 .sidebar-plan-badge {
